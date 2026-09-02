@@ -452,10 +452,10 @@ function defaultSocial(){
   return { jointRequests: [], messages: [] };
 }
 function defaultState(){
+  const now = new Date();
   return {
-    selectedMonth: '2026-08',
-    selectedYear: 2026,
-    compteJointVirement: 0,
+    selectedMonth: `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`,
+    selectedYear: now.getFullYear(),
     revenusRecurrents: [],
     revenusExceptionnels: [],
     abonnements: [],
@@ -585,11 +585,12 @@ function toast(msg){
 }
 
 /* ============================== COMPUTATIONS ============================== */
-function revenusDuMois(key){
+function revenusDuMois(key){ return revenusDuMoisForOwner(currentUser().id, key); }
+function revenusDuMoisForOwner(ownerId, key){
   let total = 0;
-  mine(state.revenusRecurrents).forEach(r=>{ if(inRangeMonth(key, r.dateDebut, r.dateFin)) total += Number(r.montant)||0; });
+  forOwner(state.revenusRecurrents, ownerId).forEach(r=>{ if(inRangeMonth(key, r.dateDebut, r.dateFin)) total += Number(r.montant)||0; });
   const {start,end} = monthBounds(key);
-  mine(state.revenusExceptionnels).forEach(r=>{
+  forOwner(state.revenusExceptionnels, ownerId).forEach(r=>{
     const d = r.date ? new Date(r.date+'T00:00:00') : null;
     if(d && d>=start && d<=end) total += Number(r.montant)||0;
   });
@@ -620,7 +621,7 @@ function echeanceMensualiteDuMois(ech, key){
 function echeanceResteAPayer(ech){
   return echeanceInstallments(ech).filter(i=>!i.paid).reduce((s,i)=>s+i.amount,0);
 }
-function echeancesTotalMoisTous(key){ return mine(state.echeances).reduce((s,e)=>s+echeanceMensualiteDuMois(e,key),0); }
+function echeancesTotalMoisTous(key, excludeCompte){ return mine(state.echeances).filter(e=> excludeCompte ? e.compte!==excludeCompte : true).reduce((s,e)=>s+echeanceMensualiteDuMois(e,key),0); }
 function echeancesResteAPayerTotal(){ return mine(state.echeances).reduce((s,e)=>s+echeanceResteAPayer(e),0); }
 
 function chargesActivesMois(key, excludeCompte){
@@ -665,18 +666,55 @@ function jointAboTotalFor(ownerId){
 function jointChargesTotalFor(ownerId, key){
   return forOwner(state.charges, ownerId).filter(c=>c.compte==='Compte Joint' && inRangeMonth(key, c.dateDebut, c.dateFin)).reduce((s,c)=>s+(Number(c.budget)||0),0);
 }
+function jointEcheancesTotalFor(ownerId, key){
+  return forOwner(state.echeances, ownerId).filter(e=>e.compte==='Compte Joint').reduce((s,e)=>s+echeanceMensualiteDuMois(e,key),0);
+}
 function jointDetailFor(ownerId, key){
   const abo = forOwner(state.abonnements, ownerId).filter(a=>a.statut==='Actif' && a.compte==='Compte Joint').map(a=>({nom:a.nom, montant:monthlyCost(a), cat:a.categorie}));
   const ch = forOwner(state.charges, ownerId).filter(c=>c.compte==='Compte Joint' && inRangeMonth(key, c.dateDebut, c.dateFin)).map(c=>({nom:c.categorie, montant:Number(c.budget), cat:c.description||c.type}));
-  return [...abo, ...ch];
+  const ech = forOwner(state.echeances, ownerId).filter(e=>e.compte==='Compte Joint' && echeanceMensualiteDuMois(e,key)>0).map(e=>({nom:e.achat, montant:echeanceMensualiteDuMois(e,key), cat:'Échéance'}));
+  return [...abo, ...ch, ...ech];
+}
+/* Répartition du compte joint au prorata des revenus de chacun.
+   Si personne n'a de revenu déclaré ce mois-là, on retombe sur un 50/50.
+   Un revenu peut être explicitement exclu de ce calcul (excludeFromJoint). */
+function jointTotalChargesFor(meId, partnerId, key){
+  return jointAboTotalFor(meId) + jointChargesTotalFor(meId, key) + jointEcheancesTotalFor(meId, key)
+       + jointAboTotalFor(partnerId) + jointChargesTotalFor(partnerId, key) + jointEcheancesTotalFor(partnerId, key);
+}
+function revenusDuMoisPourPartage(ownerId, key){
+  let total = 0;
+  forOwner(state.revenusRecurrents, ownerId).filter(r=>!r.excludeFromJoint).forEach(r=>{ if(inRangeMonth(key, r.dateDebut, r.dateFin)) total += Number(r.montant)||0; });
+  const {start,end} = monthBounds(key);
+  forOwner(state.revenusExceptionnels, ownerId).filter(r=>!r.excludeFromJoint).forEach(r=>{
+    const d = r.date ? new Date(r.date+'T00:00:00') : null;
+    if(d && d>=start && d<=end) total += Number(r.montant)||0;
+  });
+  return total;
+}
+function jointIncomeShares(key){
+  const me = currentUser(); const partner = jointPartner();
+  if(!partner) return null;
+  const myInc = revenusDuMoisPourPartage(me.id, key);
+  const partnerInc = revenusDuMoisPourPartage(partner.id, key);
+  const total = myInc + partnerInc;
+  const myShare = total>0 ? myInc/total : 0.5;
+  return { myInc, partnerInc, myShare, partnerShare: 1-myShare, totalCharges: jointTotalChargesFor(me.id, partner.id, key) };
+}
+function myJointContribution(key){
+  const shares = jointIncomeShares(key);
+  return shares ? shares.totalCharges * shares.myShare : 0;
 }
 
 function dashboardData(key){
+  const partner = jointPartner();
   const revenu = revenusDuMois(key);
-  const aboHorsCJ = abonnementsTotalMensuel('Compte Joint');
-  const chargesHorsCJ = chargesTotalMois(key,'Compte Joint');
-  const echeancesMois = echeancesTotalMoisTous(key);
-  const virementCJ = Number(state.compteJointVirement)||0;
+  // Sans compte joint actif, les saisies taguées "Compte Joint" restent des
+  // dépenses perso classiques (rien ni personne avec qui les partager).
+  const aboHorsCJ = partner ? abonnementsTotalMensuel('Compte Joint') : abonnementsTotalMensuel();
+  const chargesHorsCJ = partner ? chargesTotalMois(key,'Compte Joint') : chargesTotalMois(key);
+  const echeancesMois = partner ? echeancesTotalMoisTous(key,'Compte Joint') : echeancesTotalMoisTous(key);
+  const virementCJ = partner ? myJointContribution(key) : 0;
   const epargneObj = objectifsEpargneMensuelleMois(key);
   const totalDepenses = aboHorsCJ + chargesHorsCJ + echeancesMois + virementCJ + epargneObj;
   const solde = revenu - totalDepenses;
@@ -763,7 +801,7 @@ function openModal(title, fields, values, onSave, extraHtml){
     fields.forEach(f=>{
       const el = document.getElementById('f_'+f.key);
       if(!el) return;
-      let v = el.value;
+      let v = f.type==='checkbox' ? el.checked : el.value;
       if(f.type==='number') v = v===''? 0 : parseFloat(v);
       if(f.type==='date' && v==='') v = null;
       data[f.key] = v;
@@ -778,6 +816,9 @@ function fieldHTML(f, values){
   if(f.type==='select'){
     const opts = f.options.map(o=> typeof o==='object' ? o : {value:o, label:o});
     return `<div class="field"><label>${f.label}</label><select id="f_${f.key}">${opts.map(o=>`<option value="${o.value}" ${String(o.value)===String(val)?'selected':''}>${o.label}</option>`).join('')}</select></div>`;
+  }
+  if(f.type==='checkbox'){
+    return `<div class="field" style="display:flex;align-items:center;gap:9px;"><input id="f_${f.key}" type="checkbox" ${val?'checked':''} style="width:16px;height:16px;accent-color:#FFFFFF;"><label style="margin:0;font-size:13px;color:var(--text);">${f.label}</label></div>`;
   }
   return `<div class="field"><label>${f.label}</label><input id="f_${f.key}" type="${f.type||'text'}" ${f.step?`step="${f.step}"`:''} value="${val===0?0:(val||'')}" placeholder="${f.placeholder||''}"></div>`;
 }
@@ -1033,19 +1074,27 @@ function emptyState(iconName, title, desc, action, btnLabel){
     ${action ? `<button class="btn btn-primary btn-sm" data-action="${action}" style="margin:0 auto;">${icon('plus')}${btnLabel}</button>` : ''}</div>`;
 }
 
-const REVREC_FIELDS = [
-  {key:'libelle', label:'Libellé', placeholder:'Salaire'},
-  {key:'categorie', label:'Catégorie', type:'select', options:CATS_REV},
-  {key:'montant', label:'Montant mensuel (€)', type:'number', step:'0.01'},
-  {key:'dateDebut', label:'Date de début', type:'date'},
-  {key:'dateFin', label:'Date de fin (vide = illimité)', type:'date'},
-];
-const REVEXC_FIELDS = [
-  {key:'date', label:'Date', type:'date'},
-  {key:'libelle', label:'Libellé', placeholder:'Prime annuelle'},
-  {key:'categorie', label:'Catégorie', type:'select', options:CATS_REV},
-  {key:'montant', label:'Montant (€, négatif si dépense exceptionnelle)', type:'number', step:'0.01'},
-];
+function revrecFields(){
+  const fields = [
+    {key:'libelle', label:'Libellé', placeholder:'Salaire'},
+    {key:'categorie', label:'Catégorie', type:'select', options:CATS_REV},
+    {key:'montant', label:'Montant mensuel (€)', type:'number', step:'0.01'},
+    {key:'dateDebut', label:'Date de début', type:'date'},
+    {key:'dateFin', label:'Date de fin (vide = illimité)', type:'date'},
+  ];
+  if(jointPartner()) fields.push({key:'excludeFromJoint', label:'Ne pas compter ce revenu dans le calcul du compte joint', type:'checkbox'});
+  return fields;
+}
+function revexcFields(){
+  const fields = [
+    {key:'date', label:'Date', type:'date'},
+    {key:'libelle', label:'Libellé', placeholder:'Prime annuelle'},
+    {key:'categorie', label:'Catégorie', type:'select', options:CATS_REV},
+    {key:'montant', label:'Montant (€, négatif si dépense exceptionnelle)', type:'number', step:'0.01'},
+  ];
+  if(jointPartner()) fields.push({key:'excludeFromJoint', label:'Ne pas compter ce revenu dans le calcul du compte joint', type:'checkbox'});
+  return fields;
+}
 
 /* ============================== ABONNEMENTS ============================== */
 function renderAbonnements(){
@@ -1070,15 +1119,18 @@ function renderAbonnements(){
     </div>
   `;
 }
-const ABO_FIELDS = [
-  {key:'nom', label:'Nom', placeholder:'Netflix'},
-  {key:'categorie', label:'Catégorie', type:'select', options:CATS_ABO},
-  {key:'montant', label:'Montant (€)', type:'number', step:'0.01'},
-  {key:'frequence', label:'Fréquence', type:'select', options:['Mensuel','Trimestriel','Annuel','Hebdomadaire']},
-  {key:'prochain', label:'Prochain prélèvement', type:'date'},
-  {key:'compte', label:'Compte / moyen de paiement', type:'select', options:COMPTES},
-  {key:'statut', label:'Statut', type:'select', options:['Actif','Inactif']},
-];
+function compteOptions(){ return jointPartner() ? COMPTES : ['Compte Perso']; }
+function abo_fields(){
+  return [
+    {key:'nom', label:'Nom', placeholder:'Netflix'},
+    {key:'categorie', label:'Catégorie', type:'select', options:CATS_ABO},
+    {key:'montant', label:'Montant (€)', type:'number', step:'0.01'},
+    {key:'frequence', label:'Fréquence', type:'select', options:['Mensuel','Trimestriel','Annuel','Hebdomadaire']},
+    {key:'prochain', label:'Prochain prélèvement', type:'date'},
+    {key:'compte', label:'Compte / moyen de paiement', type:'select', options:compteOptions()},
+    {key:'statut', label:'Statut', type:'select', options:['Actif','Inactif']},
+  ];
+}
 
 /* ============================== ÉCHÉANCES ============================== */
 function renderEcheances(){
@@ -1090,7 +1142,7 @@ function renderEcheances(){
     <div class="card">
       ${list.length===0 ? emptyState('calendar','Aucune échéance','Suivez vos paiements échelonnés ici.','add-ech','Ajouter une échéance') : `
       <div class="table-wrap"><table>
-        <thead><tr><th>Achat</th><th>Montant total</th><th>Mensualité</th><th>Progression</th><th>Ce mois</th><th>Reste à payer</th><th>Statut</th><th></th></tr></thead>
+        <thead><tr><th>Achat</th><th>Compte</th><th>Montant total</th><th>Mensualité</th><th>Progression</th><th>Ce mois</th><th>Reste à payer</th><th>Statut</th><th></th></tr></thead>
         <tbody>${list.map(e=>{
           const inst = echeanceInstallments(e);
           const payees = inst.filter(i=>i.paid).length;
@@ -1098,7 +1150,7 @@ function renderEcheances(){
           const done = reste<=0.01;
           const pct = e.nbMensualites ? payees/e.nbMensualites : 0;
           return `<tr>
-          <td>${e.achat}</td><td class="num">${fmtEUR(e.montantTotal)}</td>
+          <td>${e.achat}</td><td>${e.compte||'Compte Perso'}</td><td class="num">${fmtEUR(e.montantTotal)}</td>
           <td class="num">${fmtEURPrecise(e.montantTotal/e.nbMensualites)}</td>
           <td><div style="display:flex;align-items:center;gap:8px;"><div class="progress"><div style="width:${pct*100}%"></div></div><span style="font-size:11.5px;color:var(--text-dim);">${payees}/${e.nbMensualites}</span></div></td>
           <td class="num">${fmtEUR(echeanceMensualiteDuMois(e,key))}</td>
@@ -1106,17 +1158,20 @@ function renderEcheances(){
           <td><span class="pill ${done?'pill-teal':'pill-amber'}">${done?'Soldé':'En cours'}</span></td>
           <td class="row-actions"><button class="icon-btn" data-action="edit-ech" data-id="${e.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-ech" data-id="${e.id}">${icon('trash')}</button></td>
         </tr>`;}).join('')}</tbody>
-        <tfoot><tr><td colspan="4">Total ${monthLabel(key)} / Reste à payer</td><td class="num">${fmtEUR(echeancesTotalMoisTous(key))}</td><td class="num">${fmtEUR(echeancesResteAPayerTotal())}</td><td colspan="2"></td></tr></tfoot>
+        <tfoot><tr><td colspan="5">Total ${monthLabel(key)} / Reste à payer</td><td class="num">${fmtEUR(echeancesTotalMoisTous(key))}</td><td class="num">${fmtEUR(echeancesResteAPayerTotal())}</td><td colspan="2"></td></tr></tfoot>
       </table></div>`}
     </div>
   `;
 }
-const ECH_FIELDS = [
-  {key:'achat', label:'Achat', placeholder:'Nouveau canapé'},
-  {key:'montantTotal', label:'Montant total (€)', type:'number', step:'0.01'},
-  {key:'nbMensualites', label:'Nombre de mensualités', type:'number', step:'1'},
-  {key:'premierPaiement', label:'Date du 1er paiement', type:'date'},
-];
+function ech_fields(){
+  return [
+    {key:'achat', label:'Achat', placeholder:'Nouveau canapé'},
+    {key:'compte', label:'Compte', type:'select', options:compteOptions()},
+    {key:'montantTotal', label:'Montant total (€)', type:'number', step:'0.01'},
+    {key:'nbMensualites', label:'Nombre de mensualités', type:'number', step:'1'},
+    {key:'premierPaiement', label:'Date du 1er paiement', type:'date'},
+  ];
+}
 
 /* ============================== OBJECTIFS ============================== */
 function renderObjectifs(){
@@ -1205,22 +1260,23 @@ function renderCharges(){
     </div>
   `;
 }
-const CHARGE_FIELDS = [
-  {key:'categorie', label:'Catégorie', placeholder:'Loyer'},
-  {key:'type', label:'Type', type:'select', options:['Fixe','Temporaire']},
-  {key:'description', label:'Description', placeholder:'Appartement'},
-  {key:'budget', label:'Budget mensuel (€)', type:'number', step:'0.01'},
-  {key:'compte', label:'Compte', type:'select', options:COMPTES},
-  {key:'dateDebut', label:'Date de début (si temporaire)', type:'date'},
-  {key:'dateFin', label:'Date de fin (si temporaire)', type:'date'},
-];
+function charge_fields(){
+  return [
+    {key:'categorie', label:'Catégorie', placeholder:'Loyer'},
+    {key:'type', label:'Type', type:'select', options:['Fixe','Temporaire']},
+    {key:'description', label:'Description', placeholder:'Appartement'},
+    {key:'budget', label:'Budget mensuel (€)', type:'number', step:'0.01'},
+    {key:'compte', label:'Compte', type:'select', options:compteOptions()},
+    {key:'dateDebut', label:'Date de début (si temporaire)', type:'date'},
+    {key:'dateFin', label:'Date de fin (si temporaire)', type:'date'},
+  ];
+}
 
 /* ============================== COMPTE JOINT ============================== */
 function renderCompteJoint(){
   const me = currentUser();
   const key = state.selectedMonth;
   const partner = jointPartner();
-  const virement = Number(state.compteJointVirement)||0;
 
   if(!partner){
     return `
@@ -1229,16 +1285,16 @@ function renderCompteJoint(){
     `;
   }
 
-  const myTotal = jointAboTotalFor(me.id) + jointChargesTotalFor(me.id, key);
-  const partnerTotal = jointAboTotalFor(partner.id) + jointChargesTotalFor(partner.id, key);
+  const myTotal = jointAboTotalFor(me.id) + jointChargesTotalFor(me.id, key) + jointEcheancesTotalFor(me.id, key);
+  const partnerTotal = jointAboTotalFor(partner.id) + jointChargesTotalFor(partner.id, key) + jointEcheancesTotalFor(partner.id, key);
   const total = myTotal + partnerTotal;
-  const ecart = virement - total;
+  const shares = jointIncomeShares(key);
   const myDetail = jointDetailFor(me.id, key);
   const partnerDetail = jointDetailFor(partner.id, key);
 
   return `
     <div class="page-head"><div><div class="page-title">Compte joint</div><div class="page-sub">Comparatif avec ${partner.displayName} — ${monthLabel(key)}</div></div>
-      <button class="btn btn-ghost" data-action="edit-cj">${icon('edit')}Modifier le virement</button></div>
+      <button class="btn btn-ghost" data-action="refresh-joint">${icon('refresh')}Actualiser</button></div>
 
     <div class="grid g3" style="margin-bottom:16px;">
       <div class="card stat-card"><div class="k"><span class="avatar" style="width:18px;height:18px;font-size:9px;display:inline-flex;background:${avatarColor(me)};margin-right:4px;">${initials(me)}</span> Mes dépenses compte joint</div><div class="v">${fmtEUR(myTotal)}</div></div>
@@ -1251,11 +1307,21 @@ function renderCompteJoint(){
       <canvas id="chartJointCompare"></canvas>
     </div>
 
-    <div class="grid g3" style="margin-bottom:16px;">
-      <div class="card stat-card"><div class="k">${icon('arrowUp')} Virement mensuel</div><div class="v">${fmtEUR(virement)}</div></div>
-      <div class="card stat-card"><div class="k">${icon('arrowDown')} Dépenses couvertes</div><div class="v" style="color:var(--coral)">${fmtEUR(total)}</div></div>
-      <div class="card stat-card"><div class="k">${icon('wallet')} Écart</div><div class="v" style="color:${ecart>=0?'var(--teal)':'var(--coral)'}">${fmtEUR(ecart)}</div>
-        ${ecart<0?'<div class="d" style="color:var(--coral);">Le compte joint dépasse le virement.</div>':'<div class="d">Le virement couvre les dépenses.</div>'}</div>
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="font-size:14px;font-weight:600;margin-bottom:4px;">Part de chacun, au prorata des revenus</h3>
+      <div class="field-note" style="margin-bottom:16px;">Calculé automatiquement chaque mois : plus tu gagnes par rapport à ${partner.displayName}, plus ta part du compte joint est élevée — et inversement.${shares.myInc+shares.partnerInc<=0?' Aucun revenu déclaré ce mois-ci des deux côtés : répartition 50/50 par défaut.':''}</div>
+      <div class="grid g2">
+        <div class="stat-mini">
+          <div class="k">${me.displayName} — revenu ${fmtEUR(shares.myInc)} (${Math.round(shares.myShare*100)}%)</div>
+          <div class="v" style="color:var(--teal)">${fmtEUR(shares.totalCharges*shares.myShare)}</div>
+          <div class="progress" style="width:100%;margin-top:8px;"><div style="width:${shares.myShare*100}%"></div></div>
+        </div>
+        <div class="stat-mini">
+          <div class="k">${partner.displayName} — revenu ${fmtEUR(shares.partnerInc)} (${Math.round(shares.partnerShare*100)}%)</div>
+          <div class="v" style="color:var(--teal)">${fmtEUR(shares.totalCharges*shares.partnerShare)}</div>
+          <div class="progress" style="width:100%;margin-top:8px;"><div style="width:${shares.partnerShare*100}%"></div></div>
+        </div>
+      </div>
     </div>
 
     <div class="grid g2">
@@ -1367,31 +1433,31 @@ async function handleAction(action, id, el){
   const find = (arr)=> arr.find(x=>x.id===id);
   switch(action){
     /* Revenus récurrents */
-    case 'add-revrec': openModal('Ajouter un revenu récurrent', REVREC_FIELDS, {categorie:'Salaire', dateDebut: new Date().toISOString().slice(0,10)}, async (data)=>{
+    case 'add-revrec': openModal('Ajouter un revenu récurrent', revrecFields(), {categorie:'Salaire', dateDebut: new Date().toISOString().slice(0,10)}, async (data)=>{
       state.revenusRecurrents.push({id:uid(), ownerId:currentUser().id, ...data}); await persist(); await render(); toast('Revenu ajouté'); }); break;
-    case 'edit-revrec': openModal('Modifier le revenu', REVREC_FIELDS, find(mine(state.revenusRecurrents)), async (data)=>{
+    case 'edit-revrec': openModal('Modifier le revenu', revrecFields(), find(mine(state.revenusRecurrents)), async (data)=>{
       Object.assign(find(mine(state.revenusRecurrents)), data); await persist(); await render(); toast('Revenu mis à jour'); }); break;
     case 'del-revrec': { const item=find(mine(state.revenusRecurrents)); confirmDelete(item.libelle, async ()=>{ state.revenusRecurrents = state.revenusRecurrents.filter(x=>x.id!==id); await persist(); await render(); toast('Revenu supprimé'); }); break; }
 
     /* Revenus exceptionnels */
-    case 'add-revexc': openModal('Ajouter une rentrée exceptionnelle', REVEXC_FIELDS, {date:new Date().toISOString().slice(0,10), categorie:'Autre'}, async (data)=>{
+    case 'add-revexc': openModal('Ajouter une rentrée exceptionnelle', revexcFields(), {date:new Date().toISOString().slice(0,10), categorie:'Autre'}, async (data)=>{
       state.revenusExceptionnels.push({id:uid(), ownerId:currentUser().id, ...data}); await persist(); await render(); toast('Rentrée ajoutée'); }); break;
-    case 'edit-revexc': openModal('Modifier la rentrée', REVEXC_FIELDS, find(mine(state.revenusExceptionnels)), async (data)=>{
+    case 'edit-revexc': openModal('Modifier la rentrée', revexcFields(), find(mine(state.revenusExceptionnels)), async (data)=>{
       Object.assign(find(mine(state.revenusExceptionnels)), data); await persist(); await render(); toast('Rentrée mise à jour'); }); break;
     case 'del-revexc': { const item=find(mine(state.revenusExceptionnels)); confirmDelete(item.libelle, async ()=>{ state.revenusExceptionnels = state.revenusExceptionnels.filter(x=>x.id!==id); await persist(); await render(); toast('Rentrée supprimée'); }); break; }
 
     /* Abonnements */
-    case 'add-abo': openModal('Ajouter un abonnement', ABO_FIELDS, {categorie:'Divertissement', frequence:'Mensuel', compte:'Compte Perso', statut:'Actif', prochain:new Date().toISOString().slice(0,10)}, async (data)=>{
+    case 'add-abo': openModal('Ajouter un abonnement', abo_fields(), {categorie:'Divertissement', frequence:'Mensuel', compte:'Compte Perso', statut:'Actif', prochain:new Date().toISOString().slice(0,10)}, async (data)=>{
       state.abonnements.push({id:uid(), ownerId:currentUser().id, notes:'', ...data}); await persist(); await render(); toast('Abonnement ajouté'); }); break;
-    case 'edit-abo': openModal('Modifier l\u2019abonnement', ABO_FIELDS, find(mine(state.abonnements)), async (data)=>{
+    case 'edit-abo': openModal('Modifier l\u2019abonnement', abo_fields(), find(mine(state.abonnements)), async (data)=>{
       Object.assign(find(mine(state.abonnements)), data); await persist(); await render(); toast('Abonnement mis à jour'); }); break;
     case 'del-abo': { const item=find(mine(state.abonnements)); confirmDelete(item.nom, async ()=>{ state.abonnements = state.abonnements.filter(x=>x.id!==id); await persist(); await render(); toast('Abonnement supprimé'); }); break; }
     case 'toggle-abo': { const item=find(mine(state.abonnements)); item.statut = item.statut==='Actif'?'Inactif':'Actif'; await persist(); await render(); toast('Statut mis à jour'); break; }
 
     /* Échéances */
-    case 'add-ech': openModal('Ajouter une échéance', ECH_FIELDS, {nbMensualites:3, premierPaiement:new Date().toISOString().slice(0,10)}, async (data)=>{
+    case 'add-ech': openModal('Ajouter une échéance', ech_fields(), {nbMensualites:3, premierPaiement:new Date().toISOString().slice(0,10)}, async (data)=>{
       state.echeances.push({id:uid(), ownerId:currentUser().id, ...data}); await persist(); await render(); toast('Échéance ajoutée'); }); break;
-    case 'edit-ech': openModal('Modifier l\u2019échéance', ECH_FIELDS, find(mine(state.echeances)), async (data)=>{
+    case 'edit-ech': openModal('Modifier l\u2019échéance', ech_fields(), find(mine(state.echeances)), async (data)=>{
       Object.assign(find(mine(state.echeances)), data); await persist(); await render(); toast('Échéance mise à jour'); }); break;
     case 'del-ech': { const item=find(mine(state.echeances)); confirmDelete(item.achat, async ()=>{ state.echeances = state.echeances.filter(x=>x.id!==id); await persist(); await render(); toast('Échéance supprimée'); }); break; }
 
@@ -1414,23 +1480,23 @@ async function handleAction(action, id, el){
     case 'del-versement': confirmDelete('ce versement', async ()=>{ state.versements = state.versements.filter(x=>x.id!==id); await persist(); await render(); toast('Versement supprimé'); }); break;
 
     /* Charges */
-    case 'add-charge': openModal('Ajouter une charge', CHARGE_FIELDS, {type:'Fixe', compte:'Compte Joint'}, async (data)=>{
+    case 'add-charge': openModal('Ajouter une charge', charge_fields(), {type:'Fixe', compte: jointPartner() ? 'Compte Joint' : 'Compte Perso'}, async (data)=>{
       state.charges.push({id:uid(), ownerId:currentUser().id, notes:'', ...data}); await persist(); await render(); toast('Charge ajoutée'); }); break;
-    case 'edit-charge': openModal('Modifier la charge', CHARGE_FIELDS, find(mine(state.charges)), async (data)=>{
+    case 'edit-charge': openModal('Modifier la charge', charge_fields(), find(mine(state.charges)), async (data)=>{
       Object.assign(find(mine(state.charges)), data); await persist(); await render(); toast('Charge mise à jour'); }); break;
     case 'del-charge': { const item=find(mine(state.charges)); confirmDelete(item.categorie, async ()=>{ state.charges = state.charges.filter(x=>x.id!==id); await persist(); await render(); toast('Charge supprimée'); }); break; }
 
     /* Compte joint */
-    case 'edit-cj': openModal('Modifier le virement compte joint', [{key:'compteJointVirement', label:'Virement mensuel (€)', type:'number', step:'0.01'}], {compteJointVirement: state.compteJointVirement}, async (data)=>{
-      state.compteJointVirement = data.compteJointVirement; await persist(); await render(); toast('Virement mis à jour'); }); break;
     case 'goto-parametres-comptes': currentView = 'parametres'; await render(); break;
+    case 'refresh-joint': { const ok = await ghPullBudget(true); await render(); toast(ok ? 'Actualisé' : 'Rien de neuf'); break; }
 
     /* Auth / users */
     case 'logout': stopPolling(); clearSession(); await boot(); toast('Déconnecté'); break;
     case 'add-user': openModal('Ajouter un compte', userFieldsAdmin(null).concat([{key:'password', label:'Mot de passe', type:'password'}]), {role:'membre'}, async (data)=>{
       if(authState.users.some(u=>u.username===data.username.trim().toLowerCase())) return toast('Cet identifiant existe déjà');
-      const passwordHash = await sha256(data.password||'changeme');
-      authState.users.push({id:uid(), username:data.username.trim().toLowerCase(), displayName:data.displayName, role:data.role, jointWith:null, passwordHash});
+      const salt = randomSalt();
+      const passwordHash = await hashPassword(data.password||'changeme', salt);
+      authState.users.push({id:uid(), username:data.username.trim().toLowerCase(), displayName:data.displayName, role:data.role, jointWith:null, salt, passwordHash});
       await persistAuth(); await render(); toast('Compte créé'); }); break;
     case 'edit-user': {
       const u = find(authState.users);
@@ -1438,16 +1504,26 @@ async function handleAction(action, id, el){
       openModal('Modifier le compte', fields, u, async (data)=>{
         u.displayName = data.displayName;
         if(isAdmin()){ u.username = (data.username||u.username).trim().toLowerCase(); u.role = data.role||u.role; }
-        if(data.password){ u.passwordHash = await sha256(data.password); }
+        if(data.password){ u.salt = randomSalt(); u.passwordHash = await hashPassword(data.password, u.salt); }
         await persistAuth(); await render(); toast('Compte mis à jour'); }); break; }
     case 'del-user': { const u=find(authState.users); if(u.role==='admin' && authState.users.filter(x=>x.role==='admin').length<=1) return toast('Impossible de supprimer le dernier admin');
-      confirmDelete(u.displayName, async ()=>{ authState.users = authState.users.filter(x=>x.id!==id); await persistAuth(); await render(); toast('Compte supprimé'); }); break; }
+      confirmDelete(u.displayName, async ()=>{
+        // Nettoyage : si quelqu'un avait un compte joint actif avec ce compte, on le libère.
+        const partner = authState.users.find(x=>x.jointWith===u.id);
+        if(partner) partner.jointWith = null;
+        authState.users = authState.users.filter(x=>x.id!==id);
+        socialState.jointRequests = socialState.jointRequests.filter(r=>r.fromId!==id && r.toId!==id);
+        await persistAuth(); await persistSocial(); await render(); toast('Compte supprimé'); }); break; }
 
     /* Compte joint : demandes */
     case 'send-joint-request': {
+      const me = currentUser();
+      if(me.jointWith) return toast('Tu as déjà un compte joint actif — quitte-le avant d\'en proposer un autre.');
       const toId = el.dataset.to;
-      if(socialState.jointRequests.some(r=>r.fromId===currentUser().id && r.toId===toId && r.status==='pending')) return toast('Demande déjà envoyée');
-      socialState.jointRequests.push({id:uid(), fromId:currentUser().id, toId, status:'pending', createdAt:new Date().toISOString()});
+      const target = authState.users.find(u=>u.id===toId);
+      if(target && target.jointWith) return toast(`${target.displayName} a déjà un compte joint actif avec quelqu'un d'autre.`);
+      if(socialState.jointRequests.some(r=>r.fromId===me.id && r.toId===toId && r.status==='pending')) return toast('Demande déjà envoyée');
+      socialState.jointRequests.push({id:uid(), fromId:me.id, toId, status:'pending', createdAt:new Date().toISOString()});
       await persistSocial(); await render(); toast('Demande envoyée'); break; }
     case 'cancel-joint-request':
       socialState.jointRequests = socialState.jointRequests.filter(r=>r.id!==id);
@@ -1455,8 +1531,11 @@ async function handleAction(action, id, el){
     case 'accept-joint-request': {
       const req = socialState.jointRequests.find(r=>r.id===id);
       if(!req) break;
+      const me = currentUser();
+      if(me.jointWith){ toast('Tu as déjà un compte joint actif.'); break; }
+      const other = authState.users.find(u=>u.id===req.fromId);
+      if(other && other.jointWith){ req.status='declined'; await persistSocial(); await render(); toast(`${other.displayName} a déjà rejoint un autre compte joint entre-temps.`); break; }
       req.status = 'accepted';
-      const me = currentUser(); const other = authState.users.find(u=>u.id===req.fromId);
       me.jointWith = req.fromId; if(other) other.jointWith = me.id;
       await persistAuth(); await persistSocial(); await render(); toast('Compte joint accepté'); break; }
     case 'decline-joint-request': {
@@ -1509,6 +1588,13 @@ async function handleAction(action, id, el){
 async function sha256(str){
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function randomSalt(){
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function hashPassword(pass, salt){
+  return sha256(salt + ':' + pass);
 }
 function getSession(){ try{ return JSON.parse(localStorage.getItem('budget_session')||'null'); }catch(e){ return null; } }
 function setSession(userId){ localStorage.setItem('budget_session', JSON.stringify({userId})); }
@@ -1594,10 +1680,24 @@ function renderSetupScreen(){
     const pass2 = document.getElementById('su-pass2').value;
     if(pass.length<4) return authError('Le mot de passe doit faire au moins 4 caractères.');
     if(pass!==pass2) return authError('Les mots de passe ne correspondent pas.');
-    const passwordHash = await sha256(pass);
-    const user = {id:uid(), username, passwordHash, displayName:name||username, role:'admin'};
+    // Garantie de repartir totalement vierge : certains navigateurs partagent le
+    // stockage entre fichiers locaux (file://) — on efface tout avant de créer
+    // ce nouvel admin, pour ne jamais hériter de données d'un autre usage.
+    try{
+      localStorage.removeItem('budget_store');
+      localStorage.removeItem('budget_auth');
+      localStorage.removeItem('budget_social');
+      localStorage.removeItem('github_sync_config');
+      localStorage.removeItem('budget_session');
+    }catch(e){}
+    state = defaultState();
+    authState = defaultAuth();
+    socialState = defaultSocial();
+    const salt = randomSalt();
+    const passwordHash = await hashPassword(pass, salt);
+    const user = {id:uid(), username, salt, passwordHash, displayName:name||username, role:'admin'};
     authState.users.push(user);
-    await persistAuth();
+    await Promise.all([persist(), persistSocial(), persistAuth()]);
     setSession(user.id);
     await boot();
   };
@@ -1622,8 +1722,10 @@ function renderLoginScreen(){
     const pass = document.getElementById('li-pass').value;
     const user = authState.users.find(u=>u.username===username);
     if(!user) return authError('Identifiant ou mot de passe incorrect.');
-    const hash = await sha256(pass);
+    // Rétrocompatibilité : les comptes créés avant l'ajout du sel n'en ont pas.
+    const hash = user.salt ? await hashPassword(pass, user.salt) : await sha256(pass);
     if(hash !== user.passwordHash) return authError('Identifiant ou mot de passe incorrect.');
+    if(!user.salt){ user.salt = randomSalt(); user.passwordHash = await hashPassword(pass, user.salt); await persistAuth(); }
     setSession(user.id);
     await boot();
   };
@@ -1701,9 +1803,16 @@ function renderJointRequestsSection(){
   let html = '';
 
   if(me.jointWith){
+    // On a déjà un partenaire actif : toute demande reçue entre-temps est refusée
+    // automatiquement, pour ne jamais laisser l'expéditeur sans réponse.
+    if(incoming.length){
+      incoming.forEach(r=>{ r.status='declined'; });
+      persistSocial();
+    }
     const partner = authState.users.find(u=>u.id===me.jointWith);
     html += `<div class="status-row"><span class="status-dot" style="background:var(--teal);"></span>Compte joint actif avec ${partner?partner.displayName:'?'}</div>
-      <button class="btn btn-ghost btn-sm" data-action="break-joint">${icon('x')}Rompre le compte joint</button>`;
+      <div class="field-note" style="margin-bottom:12px;">Un seul compte joint à la fois. Quitte celui-ci si tu veux en rejoindre un autre.</div>
+      <button class="btn btn-ghost btn-sm" data-action="break-joint">${icon('x')}Quitter le compte joint</button>`;
     return html;
   }
 
@@ -1820,7 +1929,7 @@ function importDataFile(file){
         state = { ...parsed }; delete state.users;
         socialState = defaultSocial();
       } else { throw new Error('format invalide'); }
-      await persist(); await persistAuth(); await persistSocial();
+      await Promise.all([persist(), persistAuth(), persistSocial()]);
       await render();
       toast('Données importées');
     }catch(e){ toast('Fichier invalide'); }
@@ -1848,11 +1957,28 @@ function ghUrl(cfg, path){ return `https://api.github.com/repos/${cfg.owner}/${c
 
 async function ghPull(){
   const a = await ghPullAuth();
-  const b = await ghPullBudget();
-  const c = await ghPullSocial();
+  const b = await ghPullBudget(true);
+  const c = await ghPullSocial(true);
   return a || b || c;
 }
-async function ghPullBudget(){
+/* Fusion sûre des données du budget : chacun ne modifie jamais que SES PROPRES
+   saisies (ownerId). On peut donc fusionner sans risque : on garde toujours ma
+   version locale pour ce qui m'appartient (même pas encore synchronisé), et on
+   récupère la version distante pour ce qui appartient à quelqu'un d'autre —
+   c'est ce qui permet de voir les ajouts du partenaire sans jamais écraser les
+   miens en cours de frappe. */
+function mergeOwned(localArr, remoteArr, myId){
+  const mine = (localArr||[]).filter(x=>x.ownerId===myId);
+  const others = (remoteArr||[]).filter(x=>x.ownerId!==myId);
+  return [...mine, ...others];
+}
+function mergeBudget(local, remote, myId){
+  const merged = {...local};
+  OWNED_ARRAYS.forEach(key=>{ merged[key] = mergeOwned(local[key], remote[key], myId); });
+  return merged;
+}
+
+async function ghPullBudget(merge){
   const cfg = ghConfig();
   if(!cfg.owner || !cfg.repo || !cfg.token) return false;
   try{
@@ -1863,7 +1989,13 @@ async function ghPullBudget(){
     ghSha = data.sha;
     const text = b64DecodeUnicode(data.content);
     const remote = JSON.parse(text);
-    if(remote && remote.compteJointVirement!==undefined){ state = remote; localStorage.setItem('budget_store', JSON.stringify(state)); ghLastSync = new Date(); return true; }
+    if(remote && remote.selectedMonth!==undefined){
+      const me = currentUser();
+      state = (merge && me) ? mergeBudget(state, remote, me.id) : remote;
+      localStorage.setItem('budget_store', JSON.stringify(state));
+      ghLastSync = new Date();
+      return true;
+    }
     return false;
   }catch(e){ console.error('GitHub pull error (budget)', e); return false; }
 }
@@ -2064,8 +2196,12 @@ async function pollNow(){
   if(document.getElementById('modal-root').innerHTML) return; // ne pas perturber une saisie en cours
   if(!ghConfigured()) return;
   const beforeCount = notifBadgeCount();
-  const touched = await ghPullSocial(true);
-  if(!touched) return;
+  const touchedSocial = await ghPullSocial(true);
+  // Le budget n'est rafraîchi en tâche de fond que sur la page compte joint,
+  // pour limiter les appels — la fusion sûre (mergeOwned) protège de toute
+  // façon tes propres saisies en cours, même ailleurs.
+  const touchedBudget = (currentView==='compteJoint') ? await ghPullBudget(true) : false;
+  if(!touchedSocial && !touchedBudget) return;
   const afterCount = notifBadgeCount();
   if(afterCount > beforeCount) notifyBrowser(afterCount - beforeCount);
   renderSidebar();
