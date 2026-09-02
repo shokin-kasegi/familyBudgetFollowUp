@@ -437,6 +437,7 @@ function icon(name){ return `<svg viewBox="0 0 24 24">${ICONS[name]||''}</svg>`;
 const MONTH_NAMES = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 const CATS_ABO = ['Internet','Transport','Mobile','Divertissement','Stockage','Gestion','Finance','Autre'];
 const CATS_REV = ['Salaire','Remboursement','Prime','Cadeau','Autre'];
+const CATS_DEP = ['Achat','Réparation','Santé','Loisirs','Cadeau','Voyage','Imprévu','Autre'];
 const COMPTES = ['Compte Joint','Compte Perso'];
 
 var state = null;
@@ -459,7 +460,7 @@ function defaultState(){
     revenusRecurrents: [],
     revenusExceptionnels: [],
     abonnements: [],
-    echeances: [],
+    depenses: [],
     objectifs: [],
     versements: [],
     charges: []
@@ -499,11 +500,34 @@ async function loadState(){
     });
   }
 
+  // Migration : l'ancien modèle "Échéances" (saisie manuelle séparée) devient une
+  // dépense "Échelonnée" dans le nouvel onglet Dépenses, calculée automatiquement.
+  if(Array.isArray(state.echeances) && state.echeances.length>0){
+    if(!state.depenses) state.depenses = [];
+    state.echeances.forEach(e=>{
+      const nb = e.nbMensualites||1;
+      const [y,m,d] = (e.premierPaiement||'').split('-').map(Number);
+      let dateFin = e.premierPaiement;
+      if(y && m && d){
+        const endMonthIndex = (m-1) + (nb-1);
+        const daysInEnd = new Date(y, endMonthIndex+1, 0).getDate();
+        const endDate = new Date(y, endMonthIndex, Math.min(d, daysInEnd));
+        dateFin = `${endDate.getFullYear()}-${String(endDate.getMonth()+1).padStart(2,'0')}-${String(endDate.getDate()).padStart(2,'0')}`;
+      }
+      state.depenses.push({
+        id: e.id, ownerId: e.ownerId, libelle: e.achat, categorie:'Achat', compte: e.compte||'Compte Perso',
+        montant: e.montantTotal, modePaiement:'Echelonne', dateDebut: e.premierPaiement, dateFin, mensualitesPayees: 0, notes:''
+      });
+    });
+    delete state.echeances;
+    needsPersist = true;
+  }
+
   if(needsPersist) await persist();
   if(needsPersistAuth) await persistAuth();
   if(needsPersistSocial) await persistSocial();
 }
-const OWNED_ARRAYS = ['revenusRecurrents','revenusExceptionnels','abonnements','echeances','objectifs','versements','charges'];
+const OWNED_ARRAYS = ['revenusRecurrents','revenusExceptionnels','abonnements','depenses','objectifs','versements','charges'];
 function mine(arr){
   const me = currentUser();
   return me ? (arr||[]).filter(e=>e.ownerId===me.id) : [];
@@ -600,29 +624,38 @@ function abonnementsActifs(){ return mine(state.abonnements).filter(a=>a.statut=
 function abonnementsTotalMensuel(excludeCompte){
   return abonnementsActifs().filter(a=> excludeCompte ? a.compte!==excludeCompte : true).reduce((s,a)=>s+monthlyCost(a),0);
 }
-function echeanceInstallments(ech){
-  const list = [];
-  if(!ech.premierPaiement) return list;
-  const [y,m,d] = ech.premierPaiement.split('-').map(Number);
-  const today = new Date(); today.setHours(0,0,0,0);
-  const mensualite = ech.nbMensualites ? ech.montantTotal/ech.nbMensualites : 0;
-  for(let i=0;i<(ech.nbMensualites||0);i++){
-    const targetMonthIndex = (m-1)+i;
-    const daysInTargetMonth = new Date(y, targetMonthIndex+1, 0).getDate();
-    const dt = new Date(y, targetMonthIndex, Math.min(d, daysInTargetMonth));
-    list.push({ index:i, date:dt, amount:mensualite, paid: dt < today });
+
+/* ---- Dépenses : uniques (payées en une fois) ou échelonnées (plusieurs mensualités) ---- */
+function depenseNbMensualites(dep){
+  if(dep.modePaiement!=='Echelonne' || !dep.dateDebut || !dep.dateFin) return 1;
+  const [y0,m0] = dep.dateDebut.split('-').map(Number);
+  const [y1,m1] = dep.dateFin.split('-').map(Number);
+  const diff = (y1-y0)*12 + (m1-m0) + 1;
+  return Math.max(diff,1);
+}
+function depenseMensualite(dep){
+  return dep.modePaiement==='Echelonne' ? (Number(dep.montant)||0)/depenseNbMensualites(dep) : (Number(dep.montant)||0);
+}
+function depenseMensualiteDuMois(dep, key){
+  if(dep.modePaiement==='Echelonne'){
+    if(!dep.dateDebut || !dep.dateFin) return 0;
+    return inRangeMonth(key, dep.dateDebut, dep.dateFin) ? depenseMensualite(dep) : 0;
   }
-  return list;
+  if(!dep.date) return 0;
+  return dep.date.slice(0,7)===key ? (Number(dep.montant)||0) : 0;
 }
-function echeanceMensualiteDuMois(ech, key){
-  const {start,end} = monthBounds(key);
-  return echeanceInstallments(ech).filter(i=> i.date>=start && i.date<=end).reduce((s,i)=>s+i.amount,0);
+function depenseResteAPayer(dep){
+  if(dep.modePaiement!=='Echelonne') return 0;
+  const nb = depenseNbMensualites(dep);
+  const payees = Math.min(dep.mensualitesPayees||0, nb);
+  return Math.max((Number(dep.montant)||0) - payees*depenseMensualite(dep), 0);
 }
-function echeanceResteAPayer(ech){
-  return echeanceInstallments(ech).filter(i=>!i.paid).reduce((s,i)=>s+i.amount,0);
+function depensesTotalMois(key, excludeCompte){
+  return mine(state.depenses).filter(d=> excludeCompte ? d.compte!==excludeCompte : true).reduce((s,d)=>s+depenseMensualiteDuMois(d,key),0);
 }
-function echeancesTotalMoisTous(key, excludeCompte){ return mine(state.echeances).filter(e=> excludeCompte ? e.compte!==excludeCompte : true).reduce((s,e)=>s+echeanceMensualiteDuMois(e,key),0); }
-function echeancesResteAPayerTotal(){ return mine(state.echeances).reduce((s,e)=>s+echeanceResteAPayer(e),0); }
+function depensesEchelonneesResteAPayerTotal(){
+  return mine(state.depenses).filter(d=>d.modePaiement==='Echelonne').reduce((s,d)=>s+depenseResteAPayer(d),0);
+}
 
 function chargesActivesMois(key, excludeCompte){
   return mine(state.charges).filter(c=> inRangeMonth(key, c.dateDebut, c.dateFin) && (excludeCompte ? c.compte!==excludeCompte : true));
@@ -666,21 +699,21 @@ function jointAboTotalFor(ownerId){
 function jointChargesTotalFor(ownerId, key){
   return forOwner(state.charges, ownerId).filter(c=>c.compte==='Compte Joint' && inRangeMonth(key, c.dateDebut, c.dateFin)).reduce((s,c)=>s+(Number(c.budget)||0),0);
 }
-function jointEcheancesTotalFor(ownerId, key){
-  return forOwner(state.echeances, ownerId).filter(e=>e.compte==='Compte Joint').reduce((s,e)=>s+echeanceMensualiteDuMois(e,key),0);
+function jointDepensesTotalFor(ownerId, key){
+  return forOwner(state.depenses, ownerId).filter(d=>d.compte==='Compte Joint').reduce((s,d)=>s+depenseMensualiteDuMois(d,key),0);
 }
 function jointDetailFor(ownerId, key){
   const abo = forOwner(state.abonnements, ownerId).filter(a=>a.statut==='Actif' && a.compte==='Compte Joint').map(a=>({nom:a.nom, montant:monthlyCost(a), cat:a.categorie}));
   const ch = forOwner(state.charges, ownerId).filter(c=>c.compte==='Compte Joint' && inRangeMonth(key, c.dateDebut, c.dateFin)).map(c=>({nom:c.categorie, montant:Number(c.budget), cat:c.description||c.type}));
-  const ech = forOwner(state.echeances, ownerId).filter(e=>e.compte==='Compte Joint' && echeanceMensualiteDuMois(e,key)>0).map(e=>({nom:e.achat, montant:echeanceMensualiteDuMois(e,key), cat:'Échéance'}));
-  return [...abo, ...ch, ...ech];
+  const dep = forOwner(state.depenses, ownerId).filter(d=>d.compte==='Compte Joint' && depenseMensualiteDuMois(d,key)>0).map(d=>({nom:d.libelle, montant:depenseMensualiteDuMois(d,key), cat:d.modePaiement==='Echelonne'?'Dépense échelonnée':'Dépense'}));
+  return [...abo, ...ch, ...dep];
 }
 /* Répartition du compte joint au prorata des revenus de chacun.
    Si personne n'a de revenu déclaré ce mois-là, on retombe sur un 50/50.
    Un revenu peut être explicitement exclu de ce calcul (excludeFromJoint). */
 function jointTotalChargesFor(meId, partnerId, key){
-  return jointAboTotalFor(meId) + jointChargesTotalFor(meId, key) + jointEcheancesTotalFor(meId, key)
-       + jointAboTotalFor(partnerId) + jointChargesTotalFor(partnerId, key) + jointEcheancesTotalFor(partnerId, key);
+  return jointAboTotalFor(meId) + jointChargesTotalFor(meId, key) + jointDepensesTotalFor(meId, key)
+       + jointAboTotalFor(partnerId) + jointChargesTotalFor(partnerId, key) + jointDepensesTotalFor(partnerId, key);
 }
 function revenusDuMoisPourPartage(ownerId, key){
   let total = 0;
@@ -713,12 +746,12 @@ function dashboardData(key){
   // dépenses perso classiques (rien ni personne avec qui les partager).
   const aboHorsCJ = partner ? abonnementsTotalMensuel('Compte Joint') : abonnementsTotalMensuel();
   const chargesHorsCJ = partner ? chargesTotalMois(key,'Compte Joint') : chargesTotalMois(key);
-  const echeancesMois = partner ? echeancesTotalMoisTous(key,'Compte Joint') : echeancesTotalMoisTous(key);
+  const depensesHorsCJ = partner ? depensesTotalMois(key,'Compte Joint') : depensesTotalMois(key);
   const virementCJ = partner ? myJointContribution(key) : 0;
   const epargneObj = objectifsEpargneMensuelleMois(key);
-  const totalDepenses = aboHorsCJ + chargesHorsCJ + echeancesMois + virementCJ + epargneObj;
+  const totalDepenses = aboHorsCJ + chargesHorsCJ + depensesHorsCJ + virementCJ + epargneObj;
   const solde = revenu - totalDepenses;
-  return {revenu, aboHorsCJ, chargesHorsCJ, echeancesMois, virementCJ, epargneObj, totalDepenses, solde};
+  return {revenu, aboHorsCJ, chargesHorsCJ, depensesHorsCJ, virementCJ, epargneObj, totalDepenses, solde};
 }
 function anneeData(year){
   const months = [];
@@ -738,6 +771,7 @@ const NAV = [
   {id:'dashboard', label:'Tableau de bord', icon:'dashboard'},
   {id:'revenus', label:'Revenus', icon:'income'},
   {id:'abonnements', label:'Abonnements', icon:'repeat'},
+  {id:'depenses', label:'Dépenses', icon:'wallet'},
   {id:'echeances', label:'Échéances', icon:'calendar'},
   {id:'objectifs', label:'Objectifs', icon:'target'},
   {id:'charges', label:'Charges', icon:'home'},
@@ -840,7 +874,7 @@ async function render(){
   const view = document.getElementById('view');
   const renderers = {
     dashboard: renderDashboard, revenus: renderRevenus, abonnements: renderAbonnements,
-    echeances: renderEcheances, objectifs: renderObjectifs, charges: renderCharges,
+    depenses: renderDepenses, echeances: renderEcheances, objectifs: renderObjectifs, charges: renderCharges,
     compteJoint: renderCompteJoint, annuelle: renderAnnuelle, parametres: renderParametres
   };
   view.innerHTML = renderers[currentView] ? renderers[currentView]() : '';
@@ -878,7 +912,7 @@ function renderDashboard(){
   const positive = d.solde >= 0;
   const gaugePct = d.revenu>0 ? Math.max(0, Math.min(1, 1 - Math.abs(d.solde)/d.revenu)) : (positive?1:0);
 
-  const echEnCours = mine(state.echeances).filter(e=>echeanceResteAPayer(e)>0.01);
+  const echEnCours = mine(state.depenses).filter(d=>d.modePaiement==='Echelonne' && depenseResteAPayer(d)>0.01);
   const objEnCours = mine(state.objectifs).filter(o=>objectifCalc(o).statut!=='Atteint').length;
   const objAtteints = mine(state.objectifs).filter(o=>objectifCalc(o).statut==='Atteint').length;
 
@@ -910,7 +944,7 @@ function renderDashboard(){
     <div class="grid g4" style="margin-bottom:16px;">
       <div class="card stat-card"><div class="k">${icon('repeat')} Abonnements actifs</div><div class="v">${fmtEUR(abonnementsTotalMensuel())}</div><div class="d">${abonnementsActifs().length} actifs / mois</div></div>
       <div class="card stat-card"><div class="k">${icon('home')} Charges fixes</div><div class="v">${fmtEUR(chargesTotalMois(key))}</div><div class="d">tous comptes</div></div>
-      <div class="card stat-card"><div class="k">${icon('calendar')} Mensualités du mois</div><div class="v">${fmtEUR(d.echeancesMois)}</div><div class="d">${echEnCours.length} engagement(s) en cours</div></div>
+      <div class="card stat-card"><div class="k">${icon('calendar')} Mensualités du mois</div><div class="v">${fmtEUR(d.depensesHorsCJ)}</div><div class="d">${echEnCours.length} engagement(s) en cours</div></div>
       <div class="card stat-card"><div class="k">${icon('target')} Épargne à provisionner</div><div class="v">${fmtEUR(d.epargneObj)}</div><div class="d">${objEnCours} objectif(s) en cours · ${objAtteints} atteint(s)</div></div>
     </div>
 
@@ -950,7 +984,7 @@ function drawDashboardCharts(){
     const parts = [
       {label:'Abonnements', value:d.aboHorsCJ, color:'#FFFFFF'},
       {label:'Charges', value:d.chargesHorsCJ, color:'#C7C7CE'},
-      {label:'Échéances', value:d.echeancesMois, color:'#E3D3A9'},
+      {label:'Dépenses', value:d.depensesHorsCJ, color:'#E3D3A9'},
       {label:'Compte joint', value:d.virementCJ, color:'#EFB6AC'},
       {label:'Épargne', value:d.epargneObj, color:'#BFE9D2'},
     ].filter(p=>p.value>0.01);
@@ -1002,7 +1036,7 @@ function renderAnnuelle(){
             <td class="num">${fmtEUR(m.revenu)}</td>
             <td class="num">${fmtEUR(m.aboHorsCJ)}</td>
             <td class="num">${fmtEUR(m.chargesHorsCJ)}</td>
-            <td class="num">${fmtEUR(m.echeancesMois)}</td>
+            <td class="num">${fmtEUR(m.depensesHorsCJ)}</td>
             <td class="num">${fmtEUR(m.virementCJ)}</td>
             <td class="num">${fmtEUR(m.epargneObj)}</td>
             <td class="num">${fmtEUR(m.totalDepenses)}</td>
@@ -1133,44 +1167,112 @@ function abo_fields(){
 }
 
 /* ============================== ÉCHÉANCES ============================== */
-function renderEcheances(){
-  const list = mine(state.echeances);
+/* ============================== DÉPENSES ============================== */
+function renderDepenses(){
+  const list = mine(state.depenses);
   const key = state.selectedMonth;
   return `
-    <div class="page-head"><div><div class="page-title">Échéances</div><div class="page-sub">Achats payés en plusieurs fois</div></div>
-      <button class="btn btn-primary" data-action="add-ech">${icon('plus')}Ajouter une échéance</button></div>
+    <div class="page-head"><div><div class="page-title">Dépenses</div><div class="page-sub">Achats et frais, payés en une fois ou échelonnés</div></div>
+      <button class="btn btn-primary" data-action="add-depense">${icon('plus')}Ajouter une dépense</button></div>
     <div class="card">
-      ${list.length===0 ? emptyState('calendar','Aucune échéance','Suivez vos paiements échelonnés ici.','add-ech','Ajouter une échéance') : `
+      ${list.length===0 ? emptyState('wallet','Aucune dépense','Un achat, une réparation, un imprévu… ajoutez-les ici.','add-depense','Ajouter une dépense') : `
       <div class="table-wrap"><table>
-        <thead><tr><th>Achat</th><th>Compte</th><th>Montant total</th><th>Mensualité</th><th>Progression</th><th>Ce mois</th><th>Reste à payer</th><th>Statut</th><th></th></tr></thead>
-        <tbody>${list.map(e=>{
-          const inst = echeanceInstallments(e);
-          const payees = inst.filter(i=>i.paid).length;
-          const reste = echeanceResteAPayer(e);
-          const done = reste<=0.01;
-          const pct = e.nbMensualites ? payees/e.nbMensualites : 0;
+        <thead><tr><th>Libellé</th><th>Catégorie</th><th>Compte</th><th>Paiement</th><th>Montant</th><th>Ce mois</th><th></th></tr></thead>
+        <tbody>${list.map(d=>{
+          const echelonne = d.modePaiement==='Echelonne';
           return `<tr>
-          <td>${e.achat}</td><td>${e.compte||'Compte Perso'}</td><td class="num">${fmtEUR(e.montantTotal)}</td>
-          <td class="num">${fmtEURPrecise(e.montantTotal/e.nbMensualites)}</td>
-          <td><div style="display:flex;align-items:center;gap:8px;"><div class="progress"><div style="width:${pct*100}%"></div></div><span style="font-size:11.5px;color:var(--text-dim);">${payees}/${e.nbMensualites}</span></div></td>
-          <td class="num">${fmtEUR(echeanceMensualiteDuMois(e,key))}</td>
-          <td class="num">${fmtEUR(reste)}</td>
-          <td><span class="pill ${done?'pill-teal':'pill-amber'}">${done?'Soldé':'En cours'}</span></td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-ech" data-id="${e.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-ech" data-id="${e.id}">${icon('trash')}</button></td>
+          <td>${d.libelle}</td><td><span class="pill pill-dim">${d.categorie}</span></td><td>${d.compte||'Compte Perso'}</td>
+          <td>${echelonne ? `Échelonné (${depenseNbMensualites(d)}x)` : 'En une fois'}</td>
+          <td class="num">${fmtEUR(d.montant)}</td>
+          <td class="num">${fmtEURPrecise(depenseMensualiteDuMois(d,key))}</td>
+          <td class="row-actions"><button class="icon-btn" data-action="edit-depense" data-id="${d.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}">${icon('trash')}</button></td>
         </tr>`;}).join('')}</tbody>
-        <tfoot><tr><td colspan="5">Total ${monthLabel(key)} / Reste à payer</td><td class="num">${fmtEUR(echeancesTotalMoisTous(key))}</td><td class="num">${fmtEUR(echeancesResteAPayerTotal())}</td><td colspan="2"></td></tr></tfoot>
+        <tfoot><tr><td colspan="5">Total ${monthLabel(key)}</td><td class="num">${fmtEUR(depensesTotalMois(key))}</td><td></td></tr></tfoot>
       </table></div>`}
     </div>
   `;
 }
-function ech_fields(){
+function depense_fields(){
   return [
-    {key:'achat', label:'Achat', placeholder:'Nouveau canapé'},
+    {key:'libelle', label:'Libellé', placeholder:'Canapé, restaurant, réparation...'},
+    {key:'categorie', label:'Catégorie', type:'select', options:CATS_DEP},
     {key:'compte', label:'Compte', type:'select', options:compteOptions()},
-    {key:'montantTotal', label:'Montant total (€)', type:'number', step:'0.01'},
-    {key:'nbMensualites', label:'Nombre de mensualités', type:'number', step:'1'},
-    {key:'premierPaiement', label:'Date du 1er paiement', type:'date'},
+    {key:'montant', label:'Montant total (€)', type:'number', step:'0.01'},
+    {key:'modePaiement', label:'Paiement', type:'select', options:[{value:'Unique',label:'En une fois'},{value:'Echelonne',label:'Plusieurs fois (échelonné)'}]},
+    {key:'date', label:'Date de la dépense', type:'date'},
+    {key:'dateDebut', label:'Date de début (échelonné)', type:'date'},
+    {key:'dateFin', label:'Date de fin (échelonné)', type:'date'},
   ];
+}
+function setupDepenseFormToggle(){
+  const sel = document.getElementById('f_modePaiement');
+  if(!sel) return;
+  const dateField = document.getElementById('f_date')?.closest('.field');
+  const debutField = document.getElementById('f_dateDebut')?.closest('.field');
+  const finField = document.getElementById('f_dateFin')?.closest('.field');
+  const montantEl = document.getElementById('f_montant');
+  const debutEl = document.getElementById('f_dateDebut');
+  const finEl = document.getElementById('f_dateFin');
+  const preview = document.getElementById('depense-preview');
+
+  function updatePreview(){
+    if(!preview) return;
+    if(sel.value!=='Echelonne'){ preview.innerHTML=''; return; }
+    const montant = parseFloat(montantEl?.value)||0;
+    const debut = debutEl?.value, fin = finEl?.value;
+    if(!debut || !fin){ preview.innerHTML = 'Renseigne les deux dates pour voir le calcul.'; return; }
+    if(fin < debut){ preview.innerHTML = '<span style="color:var(--coral);">La date de fin doit être après la date de début.</span>'; return; }
+    const nb = depenseNbMensualites({modePaiement:'Echelonne', dateDebut:debut, dateFin:fin});
+    const mensualite = nb>0 ? montant/nb : 0;
+    preview.innerHTML = `→ <strong style="color:var(--text);">${nb}</strong> mensualité${nb>1?'s':''} de <strong style="color:var(--text);">${fmtEURPrecise(mensualite)}</strong>`;
+  }
+  function update(){
+    const echelonne = sel.value==='Echelonne';
+    if(dateField) dateField.style.display = echelonne ? 'none' : '';
+    if(debutField) debutField.style.display = echelonne ? '' : 'none';
+    if(finField) finField.style.display = echelonne ? '' : 'none';
+    updatePreview();
+  }
+  sel.addEventListener('change', update);
+  montantEl?.addEventListener('input', updatePreview);
+  debutEl?.addEventListener('input', updatePreview);
+  finEl?.addEventListener('input', updatePreview);
+  update();
+}
+
+/* ============================== ÉCHÉANCES (vue calculée, à partir des dépenses échelonnées) ============================== */
+function renderEcheances(){
+  const list = mine(state.depenses).filter(d=>d.modePaiement==='Echelonne');
+  const key = state.selectedMonth;
+  return `
+    <div class="page-head"><div><div class="page-title">Échéances</div><div class="page-sub">Calculées automatiquement à partir des dépenses échelonnées</div></div></div>
+    <div class="card">
+      ${list.length===0 ? emptyState('calendar','Aucune échéance en cours','Marque une dépense comme "Échelonnée" dans l\u2019onglet Dépenses pour la voir apparaître ici.','goto-depenses','Aller à Dépenses') : `
+      <div class="table-wrap"><table>
+        <thead><tr><th>Achat</th><th>Compte</th><th>Montant total</th><th>Mensualité</th><th>Progression</th><th>Ce mois</th><th>Reste à payer</th><th>Statut</th><th></th></tr></thead>
+        <tbody>${list.map(d=>{
+          const nb = depenseNbMensualites(d);
+          const payees = Math.min(d.mensualitesPayees||0, nb);
+          const reste = depenseResteAPayer(d);
+          const done = reste<=0.01;
+          const pct = nb ? payees/nb : 0;
+          return `<tr>
+          <td>${d.libelle}</td><td>${d.compte||'Compte Perso'}</td><td class="num">${fmtEUR(d.montant)}</td>
+          <td class="num">${fmtEURPrecise(depenseMensualite(d))}</td>
+          <td><div style="display:flex;align-items:center;gap:8px;"><div class="progress"><div style="width:${pct*100}%"></div></div><span style="font-size:11.5px;color:var(--text-dim);">${payees}/${nb}</span></div></td>
+          <td class="num">${fmtEUR(depenseMensualiteDuMois(d,key))}</td>
+          <td class="num">${fmtEUR(reste)}</td>
+          <td><span class="pill ${done?'pill-teal':'pill-amber'}">${done?'Soldé':'En cours'}</span></td>
+          <td class="row-actions">
+            ${!done ? `<button class="icon-btn" data-action="ech-pay-one" data-id="${d.id}" title="+1 mensualité payée">${icon('check')}</button>` : ''}
+            ${!done ? `<button class="icon-btn" data-action="ech-pay-all" data-id="${d.id}" title="Tout marquer payé">${icon('wallet')}</button>` : ''}
+            <button class="icon-btn" data-action="edit-depense" data-id="${d.id}">${icon('edit')}</button>
+          </td>
+        </tr>`;}).join('')}</tbody>
+        <tfoot><tr><td colspan="5">Total ${monthLabel(key)} / Reste à payer</td><td class="num">${fmtEUR(depensesTotalMois(key))}</td><td class="num">${fmtEUR(depensesEchelonneesResteAPayerTotal())}</td><td colspan="2"></td></tr></tfoot>
+      </table></div>`}
+    </div>
+  `;
 }
 
 /* ============================== OBJECTIFS ============================== */
@@ -1285,8 +1387,8 @@ function renderCompteJoint(){
     `;
   }
 
-  const myTotal = jointAboTotalFor(me.id) + jointChargesTotalFor(me.id, key) + jointEcheancesTotalFor(me.id, key);
-  const partnerTotal = jointAboTotalFor(partner.id) + jointChargesTotalFor(partner.id, key) + jointEcheancesTotalFor(partner.id, key);
+  const myTotal = jointAboTotalFor(me.id) + jointChargesTotalFor(me.id, key) + jointDepensesTotalFor(me.id, key);
+  const partnerTotal = jointAboTotalFor(partner.id) + jointChargesTotalFor(partner.id, key) + jointDepensesTotalFor(partner.id, key);
   const total = myTotal + partnerTotal;
   const shares = jointIncomeShares(key);
   const myDetail = jointDetailFor(me.id, key);
@@ -1454,12 +1556,28 @@ async function handleAction(action, id, el){
     case 'del-abo': { const item=find(mine(state.abonnements)); confirmDelete(item.nom, async ()=>{ state.abonnements = state.abonnements.filter(x=>x.id!==id); await persist(); await render(); toast('Abonnement supprimé'); }); break; }
     case 'toggle-abo': { const item=find(mine(state.abonnements)); item.statut = item.statut==='Actif'?'Inactif':'Actif'; await persist(); await render(); toast('Statut mis à jour'); break; }
 
-    /* Échéances */
-    case 'add-ech': openModal('Ajouter une échéance', ech_fields(), {nbMensualites:3, premierPaiement:new Date().toISOString().slice(0,10)}, async (data)=>{
-      state.echeances.push({id:uid(), ownerId:currentUser().id, ...data}); await persist(); await render(); toast('Échéance ajoutée'); }); break;
-    case 'edit-ech': openModal('Modifier l\u2019échéance', ech_fields(), find(mine(state.echeances)), async (data)=>{
-      Object.assign(find(mine(state.echeances)), data); await persist(); await render(); toast('Échéance mise à jour'); }); break;
-    case 'del-ech': { const item=find(mine(state.echeances)); confirmDelete(item.achat, async ()=>{ state.echeances = state.echeances.filter(x=>x.id!==id); await persist(); await render(); toast('Échéance supprimée'); }); break; }
+    /* Dépenses */
+    case 'add-depense': openModal('Ajouter une dépense', depense_fields(), {categorie:'Achat', compte: jointPartner()?'Compte Perso':'Compte Perso', modePaiement:'Unique', date:new Date().toISOString().slice(0,10)}, async (data)=>{
+      const dep = {id:uid(), ownerId:currentUser().id, libelle:data.libelle, categorie:data.categorie, compte:data.compte, montant:data.montant, modePaiement:data.modePaiement, notes:''};
+      if(data.modePaiement==='Echelonne'){ dep.dateDebut=data.dateDebut; dep.dateFin=data.dateFin; dep.mensualitesPayees=0; }
+      else{ dep.date=data.date; }
+      state.depenses.push(dep); await persist(); await render(); toast('Dépense ajoutée'); },
+      '<div id="depense-preview" class="field-note" style="margin-top:-8px;margin-bottom:14px;min-height:16px;"></div>');
+      setTimeout(setupDepenseFormToggle, 0); break;
+    case 'edit-depense': openModal('Modifier la dépense', depense_fields(), find(mine(state.depenses)), async (data)=>{
+      const dep = find(mine(state.depenses));
+      dep.libelle=data.libelle; dep.categorie=data.categorie; dep.compte=data.compte; dep.montant=data.montant; dep.modePaiement=data.modePaiement;
+      if(data.modePaiement==='Echelonne'){ dep.dateDebut=data.dateDebut; dep.dateFin=data.dateFin; if(dep.mensualitesPayees===undefined) dep.mensualitesPayees=0; delete dep.date; }
+      else{ dep.date=data.date; delete dep.dateDebut; delete dep.dateFin; delete dep.mensualitesPayees; }
+      await persist(); await render(); toast('Dépense mise à jour'); },
+      '<div id="depense-preview" class="field-note" style="margin-top:-8px;margin-bottom:14px;min-height:16px;"></div>');
+      setTimeout(setupDepenseFormToggle, 0); break;
+    case 'del-depense': { const item=find(mine(state.depenses)); confirmDelete(item.libelle, async ()=>{ state.depenses = state.depenses.filter(x=>x.id!==id); await persist(); await render(); toast('Dépense supprimée'); }); break; }
+    case 'goto-depenses': currentView = 'depenses'; await render(); break;
+
+    /* Échéances (vue calculée) : marquage manuel des mensualités payées */
+    case 'ech-pay-one': { const dep = find(mine(state.depenses)); const nb = depenseNbMensualites(dep); dep.mensualitesPayees = Math.min((dep.mensualitesPayees||0)+1, nb); await persist(); await render(); toast('Mensualité marquée payée'); break; }
+    case 'ech-pay-all': { const dep = find(mine(state.depenses)); dep.mensualitesPayees = depenseNbMensualites(dep); await persist(); await render(); toast('Marqué comme soldé'); break; }
 
     /* Objectifs */
     case 'add-obj': openModal('Ajouter un objectif', OBJ_FIELDS, {priorite:'Moyenne', dateDebut:new Date().toISOString().slice(0,10)}, async (data)=>{
