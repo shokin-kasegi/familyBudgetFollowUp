@@ -1692,7 +1692,7 @@ async function handleAction(action, id, el){
       const u = authState.users.find(x=>x.id===req.fromId);
       if(req.type==='export'){
         if(u) exportUserData(u.id);
-        req.status='done'; await persistSocial(); await render(); if(notifOpen) renderNotifPanel(); toast('Export téléchargé'); break;
+        req.status='done'; await persistSocial(); await render(); renderNotifPanel(); toast('Export téléchargé'); break;
       }
       // type 'delete' : on redemande une confirmation explicite avant d'agir, c'est irréversible
       confirmDelete(u ? `le compte de ${u.displayName} (demande approuvée)` : 'ce compte', async ()=>{
@@ -1705,12 +1705,12 @@ async function handleAction(action, id, el){
         }
         req.status='done';
         socialState.accountRequests = socialState.accountRequests.filter(r=>r.id!==req.id);
-        await Promise.all([persistAuth(), persistSocial(), persist()]); await render(); if(notifOpen) renderNotifPanel(); toast('Compte supprimé'); });
+        await Promise.all([persistAuth(), persistSocial(), persist()]); await render(); renderNotifPanel(); toast('Compte supprimé'); });
       break; }
     case 'decline-account-request': {
       const req = socialState.accountRequests.find(r=>r.id===id);
       if(req) req.status='declined';
-      await persistSocial(); await render(); if(notifOpen) renderNotifPanel(); toast('Demande refusée'); break; }
+      await persistSocial(); await render(); renderNotifPanel(); toast('Demande refusée'); break; }
 
     /* Compte joint : demandes */
     case 'send-joint-request': {
@@ -1731,14 +1731,14 @@ async function handleAction(action, id, el){
       const me = currentUser();
       if(me.jointWith){ toast('Tu as déjà un compte joint actif.'); break; }
       const other = authState.users.find(u=>u.id===req.fromId);
-      if(other && other.jointWith){ req.status='declined'; await persistSocial(); await render(); if(notifOpen) renderNotifPanel(); toast(`${other.displayName} a déjà rejoint un autre compte joint entre-temps.`); break; }
+      if(other && other.jointWith){ req.status='declined'; await persistSocial(); await render(); renderNotifPanel(); toast(`${other.displayName} a déjà rejoint un autre compte joint entre-temps.`); break; }
       req.status = 'accepted';
       me.jointWith = req.fromId; if(other) other.jointWith = me.id;
-      await persistAuth(); await persistSocial(); await render(); if(notifOpen) renderNotifPanel(); toast('Compte joint accepté'); break; }
+      await persistAuth(); await persistSocial(); await render(); renderNotifPanel(); toast('Compte joint accepté'); break; }
     case 'decline-joint-request': {
       const req = socialState.jointRequests.find(r=>r.id===id);
       if(req) req.status = 'declined';
-      await persistSocial(); await render(); if(notifOpen) renderNotifPanel(); toast('Demande refusée'); break; }
+      await persistSocial(); await render(); renderNotifPanel(); toast('Demande refusée'); break; }
     case 'break-joint': confirmDelete('votre compte joint', async ()=>{
       const me = currentUser(); const partner = authState.users.find(u=>u.id===me.jointWith);
       me.jointWith = null; if(partner) partner.jointWith = null;
@@ -2454,7 +2454,7 @@ function toggleNotifPanel(force){
   notifOpen = force!==undefined ? force : !notifOpen;
   const panel = document.getElementById('notif-panel');
   panel.classList.toggle('open', notifOpen);
-  if(notifOpen) renderNotifPanel();
+  renderNotifPanel();
 }
 function renderNotifPanel(){
   const panel = document.getElementById('notif-panel');
@@ -2516,7 +2516,7 @@ async function pollNow(){
   const afterCount = notifBadgeCount();
   if(afterCount > beforeCount) notifyBrowser(afterCount - beforeCount);
   renderSidebar();
-  if(notifOpen) renderNotifPanel();
+  renderNotifPanel();
   if(currentView==='compteJoint' || currentView==='parametres'){ await render(); }
 }
 function notifyBrowser(n){
