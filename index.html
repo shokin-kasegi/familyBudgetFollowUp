@@ -2069,16 +2069,10 @@ function renderPendingAccountRequests(){
 function renderJointRequestsSection(){
   const me = currentUser();
   const others = authState.users.filter(u=>u.id!==me.id);
-  const incoming = myPendingIncomingRequests();
+  const incoming = myPendingIncomingRequests(); // nettoie aussi les demandes obsolètes au passage
   let html = '';
 
   if(me.jointWith){
-    // On a déjà un partenaire actif : toute demande reçue entre-temps est refusée
-    // automatiquement, pour ne jamais laisser l'expéditeur sans réponse.
-    if(incoming.length){
-      incoming.forEach(r=>{ r.status='declined'; });
-      persistSocial();
-    }
     const partner = authState.users.find(u=>u.id===me.jointWith);
     html += `<div class="status-row"><span class="status-dot" style="background:var(--teal);"></span>Compte joint actif avec ${partner?partner.displayName:'?'}</div>
       <div class="field-note" style="margin-bottom:12px;">Un seul compte joint à la fois. Quitte celui-ci si tu veux en rejoindre un autre.</div>
@@ -2131,7 +2125,16 @@ async function enableBrowserNotifications(){
 /* ---- Compte joint : demandes (envoi / acceptation / refus) ---- */
 function myPendingIncomingRequests(){
   const me = currentUser();
-  return socialState.jointRequests.filter(r=>r.toId===me.id && r.status==='pending');
+  const incoming = socialState.jointRequests.filter(r=>r.toId===me.id && r.status==='pending');
+  // Si j'ai déjà un partenaire actif, ces demandes n'ont plus lieu d'être : on les
+  // refuse automatiquement plutôt que de les laisser traîner indéfiniment (elles ne
+  // pourront jamais être acceptées de toute façon tant que je reste en couple).
+  if(me.jointWith && incoming.length){
+    incoming.forEach(r=>{ r.status='declined'; });
+    persistSocial();
+    return [];
+  }
+  return incoming;
 }
 function mySentPendingRequest(toId){
   const me = currentUser();
