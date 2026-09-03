@@ -1640,7 +1640,18 @@ async function handleAction(action, id, el){
     /* Comptes : export ciblé et purge de données par l'admin */
     case 'export-user-data': exportUserData(id); toast('Export téléchargé'); break;
     case 'wipe-user-data': { const u=find(authState.users); confirmDelete(`les données de ${u.displayName}`, async ()=>{
-        wipeUserData(id); await persist(); await render(); toast('Données vidées'); }); break; }
+        wipeUserData(id);
+        // Vider les données doit aussi faire quitter le compte joint (les lignes
+        // taguées "Compte Joint" de cette personne disparaissent, la relation n'a
+        // donc plus de sens et resterait sinon une référence fantôme).
+        const hadPartner = !!u.jointWith;
+        if(u.jointWith){
+          const partner = authState.users.find(x=>x.id===u.jointWith);
+          if(partner) partner.jointWith = null;
+          u.jointWith = null;
+          await persistAuth();
+        }
+        await persist(); await render(); toast(hadPartner ? 'Données vidées et compte joint quitté' : 'Données vidées'); }); break; }
 
     /* Comptes : demandes des membres (export / suppression) */
     case 'request-export': {
