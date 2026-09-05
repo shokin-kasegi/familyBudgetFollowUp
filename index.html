@@ -817,6 +817,12 @@ function renderSidebar(){
   document.getElementById('mobile-title').textContent = NAV.find(n=>n.id===currentView)?.label || 'Solde';
 }
 function initials(u){ if(!u) return '?'; return (u.displayName||u.username||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
+function visibleUserRows(me){
+  // Un admin voit tout le monde. Un membre ne voit que son propre compte
+  // (+ celui de son/sa partenaire de compte joint, puisqu'ils sont déjà liés).
+  if(isAdmin()) return authState.users;
+  return authState.users.filter(u=>u.id===me.id || (me.jointWith && u.id===me.jointWith));
+}
 function avatarColor(u){
   if(!u) return 'var(--text-faint)';
   const colors = ['linear-gradient(135deg,#FFFFFF,#D6D6DC)','linear-gradient(135deg,#C7C7CE,#9A9AA4)','linear-gradient(135deg,#EFB6AC,#C97C70)','linear-gradient(135deg,#BFE9D2,#82C79F)'];
@@ -1195,11 +1201,30 @@ function abo_fields(){
 /* ============================== ÉCHÉANCES ============================== */
 /* ============================== DÉPENSES ============================== */
 function renderDepenses(){
-  const list = mine(state.depenses);
+  const all = mine(state.depenses);
+  const list = all.filter(d=>d.modePaiement!=='Previsionnelle');
+  const previsionnelles = all.filter(d=>d.modePaiement==='Previsionnelle')
+    .sort((a,b)=> PRIORITE_ORDER[a.priorite||'Basse'] - PRIORITE_ORDER[b.priorite||'Basse']);
   const key = state.selectedMonth;
   return `
-    <div class="page-head"><div><div class="page-title">Dépenses</div><div class="page-sub">Achats et frais, payés en une fois ou échelonnés</div></div>
+    <div class="page-head"><div><div class="page-title">Dépenses</div><div class="page-sub">Achats et frais, payés en une fois, échelonnés, ou prévisionnels</div></div>
       <button class="btn btn-primary" data-action="add-depense">${icon('plus')}Ajouter une dépense</button></div>
+
+    ${previsionnelles.length>0 ? `
+    <div class="card" style="margin-bottom:16px;">
+      <div class="section-head" style="margin-bottom:10px;"><h3 style="font-size:14px;font-weight:600;">Dépenses prévisionnelles</h3></div>
+      <div class="field-note" style="margin-bottom:14px;">Pas encore de date fixée — n'impactent pas encore ton budget. Planifie une date pour qu'elles soient prises en compte.</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Libellé</th><th>Catégorie</th><th>Priorité</th><th>Montant estimé</th><th></th></tr></thead>
+        <tbody>${previsionnelles.map(d=>`<tr>
+          <td>${d.libelle}</td><td><span class="pill pill-dim">${d.categorie}</span></td>
+          <td><span class="pill ${prioritePillClass(d.priorite)}">${d.priorite||'Basse'}</span></td>
+          <td class="num">${fmtEUR(d.montant)}</td>
+          <td class="row-actions"><button class="btn btn-ghost btn-sm" data-action="edit-depense" data-id="${d.id}">${icon('calendar')}Planifier une date</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}">${icon('trash')}</button></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>` : ''}
+
     <div class="card">
       ${list.length===0 ? emptyState('wallet','Aucune dépense','Un achat, une réparation, un imprévu… ajoutez-les ici.','add-depense','Ajouter une dépense') : `
       <div class="table-wrap"><table>
@@ -1218,16 +1243,23 @@ function renderDepenses(){
     </div>
   `;
 }
+const PRIORITE_ORDER = {'Haute':0, 'Moyenne':1, 'Basse':2};
+function prioritePillClass(p){
+  if(p==='Haute') return 'pill-coral';
+  if(p==='Moyenne') return 'pill-amber';
+  return 'pill-dim';
+}
 function depense_fields(){
   return [
     {key:'libelle', label:'Libellé', placeholder:'Canapé, restaurant, réparation...'},
     {key:'categorie', label:'Catégorie', type:'select', options:CATS_DEP},
     {key:'compte', label:'Compte', type:'select', options:compteOptions()},
     {key:'montant', label:'Montant total (€)', type:'number', step:'0.01'},
-    {key:'modePaiement', label:'Paiement', type:'select', options:[{value:'Unique',label:'En une fois'},{value:'Echelonne',label:'Plusieurs fois (échelonné)'}]},
+    {key:'modePaiement', label:'Paiement', type:'select', options:[{value:'Unique',label:'En une fois'},{value:'Echelonne',label:'Plusieurs fois (échelonné)'},{value:'Previsionnelle',label:'Prévisionnelle (pas encore datée)'}]},
     {key:'date', label:'Date de la dépense', type:'date'},
     {key:'dateDebut', label:'Date de début (échelonné)', type:'date'},
     {key:'dateFin', label:'Date de fin (échelonné)', type:'date'},
+    {key:'priorite', label:'Priorité', type:'select', options:['Haute','Moyenne','Basse']},
   ];
 }
 function setupDepenseFormToggle(){
@@ -1236,6 +1268,7 @@ function setupDepenseFormToggle(){
   const dateField = document.getElementById('f_date')?.closest('.field');
   const debutField = document.getElementById('f_dateDebut')?.closest('.field');
   const finField = document.getElementById('f_dateFin')?.closest('.field');
+  const prioriteField = document.getElementById('f_priorite')?.closest('.field');
   const montantEl = document.getElementById('f_montant');
   const debutEl = document.getElementById('f_dateDebut');
   const finEl = document.getElementById('f_dateFin');
@@ -1254,9 +1287,11 @@ function setupDepenseFormToggle(){
   }
   function update(){
     const echelonne = sel.value==='Echelonne';
-    if(dateField) dateField.style.display = echelonne ? 'none' : '';
-    if(debutField) debutField.style.display = echelonne ? '' : 'none';
-    if(finField) finField.style.display = echelonne ? '' : 'none';
+    const previsionnelle = sel.value==='Previsionnelle';
+    if(dateField) dateField.style.display = (echelonne || previsionnelle) ? 'none' : '';
+    if(debutField) debutField.style.display = (echelonne && !previsionnelle) ? '' : 'none';
+    if(finField) finField.style.display = (echelonne && !previsionnelle) ? '' : 'none';
+    if(prioriteField) prioriteField.style.display = previsionnelle ? '' : 'none';
     updatePreview();
   }
   sel.addEventListener('change', update);
@@ -1616,19 +1651,21 @@ async function handleAction(action, id, el){
     case 'toggle-abo': { const item=find(mine(state.abonnements)); item.statut = item.statut==='Actif'?'Inactif':'Actif'; await persist(); await render(); toast('Statut mis à jour'); break; }
 
     /* Dépenses */
-    case 'add-depense': openModal('Ajouter une dépense', depense_fields(), {categorie:'Achat', compte: jointPartner()?'Compte Perso':'Compte Perso', modePaiement:'Unique', date:new Date().toISOString().slice(0,10)}, async (data)=>{
+    case 'add-depense': openModal('Ajouter une dépense', depense_fields(), {categorie:'Achat', compte: jointPartner()?'Compte Perso':'Compte Perso', modePaiement:'Unique', date:new Date().toISOString().slice(0,10), priorite:'Moyenne'}, async (data)=>{
       const dep = {id:uid(), ownerId:currentUser().id, libelle:data.libelle, categorie:data.categorie, compte:data.compte, montant:data.montant, modePaiement:data.modePaiement, notes:''};
       if(data.modePaiement==='Echelonne'){ dep.dateDebut=data.dateDebut; dep.dateFin=data.dateFin; dep.mensualitesPayees=0; }
+      else if(data.modePaiement==='Previsionnelle'){ dep.priorite=data.priorite; }
       else{ dep.date=data.date; }
-      state.depenses.push(dep); await persist(); await render(); toast('Dépense ajoutée'); },
+      state.depenses.push(dep); await persist(); await render(); toast(data.modePaiement==='Previsionnelle' ? 'Dépense prévisionnelle ajoutée' : 'Dépense ajoutée'); },
       '<div id="depense-preview" class="field-note" style="margin-top:-8px;margin-bottom:14px;min-height:16px;"></div>');
       setTimeout(setupDepenseFormToggle, 0); break;
     case 'edit-depense': openModal('Modifier la dépense', depense_fields(), find(mine(state.depenses)), async (data)=>{
       const dep = find(mine(state.depenses));
       dep.libelle=data.libelle; dep.categorie=data.categorie; dep.compte=data.compte; dep.montant=data.montant; dep.modePaiement=data.modePaiement;
-      if(data.modePaiement==='Echelonne'){ dep.dateDebut=data.dateDebut; dep.dateFin=data.dateFin; if(dep.mensualitesPayees===undefined) dep.mensualitesPayees=0; delete dep.date; }
-      else{ dep.date=data.date; delete dep.dateDebut; delete dep.dateFin; delete dep.mensualitesPayees; }
-      await persist(); await render(); toast('Dépense mise à jour'); },
+      if(data.modePaiement==='Echelonne'){ dep.dateDebut=data.dateDebut; dep.dateFin=data.dateFin; if(dep.mensualitesPayees===undefined) dep.mensualitesPayees=0; delete dep.date; delete dep.priorite; }
+      else if(data.modePaiement==='Previsionnelle'){ dep.priorite=data.priorite; delete dep.date; delete dep.dateDebut; delete dep.dateFin; delete dep.mensualitesPayees; }
+      else{ dep.date=data.date; delete dep.dateDebut; delete dep.dateFin; delete dep.mensualitesPayees; delete dep.priorite; }
+      await persist(); await render(); toast(data.modePaiement==='Previsionnelle' ? 'Dépense mise à jour' : 'Dépense planifiée'); },
       '<div id="depense-preview" class="field-note" style="margin-top:-8px;margin-bottom:14px;min-height:16px;"></div>');
       setTimeout(setupDepenseFormToggle, 0); break;
     case 'del-depense': { const item=find(mine(state.depenses)); confirmDelete(item.libelle, async ()=>{ state.depenses = state.depenses.filter(x=>x.id!==id); await persist(); await render(); toast('Dépense supprimée'); }); break; }
@@ -2063,8 +2100,8 @@ function renderParametres(){
 
     <div class="card settings-block">
       <h3>Comptes</h3>
-      <div class="sub">${isAdmin() ? "Gère qui peut accéder à ce budget." : "Toi et les autres personnes ayant accès à ce budget."}</div>
-      ${authState.users.map(u=>`
+      <div class="sub">${isAdmin() ? "Gère qui peut accéder à ce budget." : "Ton compte, et celui de ton/ta partenaire de compte joint si tu en as un."}</div>
+      ${visibleUserRows(me).map(u=>`
         <div class="user-row">
           <div class="avatar" style="background:${avatarColor(u)}">${initials(u)}</div>
           <div class="info"><div class="name">${u.displayName} ${u.id===me.id?'<span style="color:var(--text-faint);font-weight:400;">(toi)</span>':''}</div>
@@ -2197,7 +2234,7 @@ function renderJointRequestsSection(){
 
   if(others.length===0){
     html += emptyState('users','Personne d\u2019autre pour l\u2019instant','Ajoute un autre compte pour proposer un compte joint.','','');
-  } else {
+  } else if(isAdmin()){
     html += `<div class="sub" style="margin:${incoming.length?'16px':'0'} 0 8px;font-weight:600;color:var(--text);">Proposer un compte joint</div>`;
     others.forEach(u=>{
       const sent = mySentPendingRequest(u.id);
@@ -2208,6 +2245,14 @@ function renderJointRequestsSection(){
           : `<button class="btn btn-ghost btn-sm" data-action="send-joint-request" data-to="${u.id}">${icon('plus')}Proposer</button>`}
       </div>`;
     });
+  } else {
+    // Un membre ne voit pas la liste des autres comptes : il saisit l'identifiant
+    // de la personne à qui il veut proposer un compte joint.
+    html += `<div class="sub" style="margin:${incoming.length?'16px':'0'} 0 8px;font-weight:600;color:var(--text);">Proposer un compte joint</div>
+      <div class="field"><label>Identifiant de la personne</label>
+        <div class="kv-input-row"><input id="joint-target-username" type="text" placeholder="identifiant"><button class="btn btn-primary btn-sm" data-action="send-joint-request-by-username">${icon('plus')}Proposer</button></div>
+      </div>
+      <div id="joint-target-error" class="auth-error" style="display:none;"></div>`;
   }
   return html;
 }
