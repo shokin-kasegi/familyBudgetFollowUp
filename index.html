@@ -440,6 +440,7 @@ const ICONS = {
   bot:'<path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.97-4.03 9-9 9-1.5 0-2.9-.36-4.14-1L3 21l1.14-3.6A8.96 8.96 0 0 1 3 12c0-4.97 4.03-9 9-9s9 4.03 9 9Z"/>',
   logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
   refresh:'<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+  search:'<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
   bell:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
   eye:'<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/>',
   eyeOff:'<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.9 19.9 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a19.9 19.9 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
@@ -471,6 +472,8 @@ function defaultState(){
   return {
     selectedMonth: `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`,
     selectedYear: now.getFullYear(),
+    analyseYear: now.getFullYear(),
+    analyseTerm: '',
     revenusRecurrents: [],
     revenusExceptionnels: [],
     abonnements: [],
@@ -818,6 +821,62 @@ function anneeData(year){
   return {months, totals};
 }
 
+/* ============================== ANALYSE PAR POSTE DE DÉPENSE ============================== */
+/* Vue transversale : combien a été dépensé pour un poste donné (ex. "Netflix",
+   "Tabac"), mois par mois sur une année, tous types de saisies confondus
+   (abonnements, charges, dépenses). */
+function analyseSearchableTerms(){
+  const terms = new Set();
+  mine(state.abonnements).forEach(a=>terms.add(a.nom));
+  mine(state.charges).forEach(c=>{ terms.add(c.categorie); if(c.description) terms.add(c.description); });
+  mine(state.depenses).forEach(d=>terms.add(d.libelle));
+  return Array.from(terms).filter(Boolean).sort((a,b)=>a.localeCompare(b));
+}
+function analyseMatchingEntries(term){
+  const t = (term||'').trim().toLowerCase();
+  if(!t) return [];
+  const out = [];
+  mine(state.abonnements).forEach(a=>{ if(a.nom.toLowerCase().includes(t)) out.push({type:'abonnement', item:a}); });
+  mine(state.charges).forEach(c=>{ if((c.categorie||'').toLowerCase().includes(t) || (c.description||'').toLowerCase().includes(t)) out.push({type:'charge', item:c}); });
+  mine(state.depenses).forEach(d=>{ if(d.libelle.toLowerCase().includes(t)) out.push({type:'depense', item:d}); });
+  return out;
+}
+function analyseMonthlyTotals(term, year){
+  const matches = analyseMatchingEntries(term);
+  const months = [];
+  for(let m=1;m<=12;m++){
+    const key = monthKey(year,m);
+    let total = 0;
+    matches.forEach(({type,item})=>{
+      if(type==='abonnement'){ if(item.statut==='Actif') total += monthlyCost(item); }
+      else if(type==='charge'){ if(inRangeMonth(key, item.dateDebut, item.dateFin)) total += Number(item.budget)||0; }
+      else if(type==='depense'){ total += depenseMensualiteDuMois(item, key); }
+    });
+    months.push({key, total});
+  }
+  return months;
+}
+function analyseYearsWithData(term){
+  const matches = analyseMatchingEntries(term);
+  const years = new Set();
+  const now = new Date();
+  years.add(now.getFullYear());
+  matches.forEach(({type,item})=>{
+    if(type==='abonnement'){ years.add(now.getFullYear()); } // pas d'historique de date sur les abonnements
+    if(type==='charge'){
+      if(item.dateDebut) years.add(Number(item.dateDebut.slice(0,4)));
+      if(item.dateFin) years.add(Number(item.dateFin.slice(0,4)));
+      if(!item.dateDebut && !item.dateFin) years.add(now.getFullYear());
+    }
+    if(type==='depense'){
+      if(item.date) years.add(Number(item.date.slice(0,4)));
+      if(item.dateDebut) years.add(Number(item.dateDebut.slice(0,4)));
+      if(item.dateFin) years.add(Number(item.dateFin.slice(0,4)));
+    }
+  });
+  return Array.from(years).sort((a,b)=>a-b);
+}
+
 /* ============================== SIDEBAR / NAV ============================== */
 const NAV = [
   {id:'dashboard', label:'Tableau de bord', icon:'dashboard'},
@@ -829,6 +888,7 @@ const NAV = [
   {id:'charges', label:'Charges', icon:'home'},
   {id:'compteJoint', label:'Compte joint', icon:'users'},
   {id:'annuelle', label:'Vue annuelle', icon:'chart'},
+  {id:'analyse', label:'Analyse', icon:'search'},
   {id:'parametres', label:'Paramètres', icon:'settings'},
 ];
 function renderSidebar(){
@@ -940,7 +1000,7 @@ async function render(){
   const renderers = {
     dashboard: renderDashboard, revenus: renderRevenus, abonnements: renderAbonnements,
     depenses: renderDepenses, echeances: renderEcheances, objectifs: renderObjectifs, charges: renderCharges,
-    compteJoint: renderCompteJoint, annuelle: renderAnnuelle, parametres: renderParametres
+    compteJoint: renderCompteJoint, annuelle: renderAnnuelle, analyse: renderAnalyse, parametres: renderParametres
   };
   view.innerHTML = renderers[currentView] ? renderers[currentView]() : '';
   afterRender();
@@ -1032,11 +1092,12 @@ function monthStepperHTML(key, target){
     <button data-stepper="${target}" data-dir="1">${icon('chevR')}</button>
   </div>`;
 }
-function yearStepperHTML(year){
+function yearStepperHTML(year, target){
+  target = target || 'annuelle';
   return `<div class="stepper">
-    <button data-year-step="-1">${icon('chevL')}</button>
+    <button data-year-step="-1" data-year-target="${target}">${icon('chevL')}</button>
     <span class="label display">${year}</span>
-    <button data-year-step="1">${icon('chevR')}</button>
+    <button data-year-step="1" data-year-target="${target}">${icon('chevR')}</button>
   </div>`;
 }
 
@@ -1611,6 +1672,11 @@ function afterRender(){
   try{
     if(currentView==='dashboard') drawDashboardCharts();
     if(currentView==='annuelle') drawAnnuelleChart();
+    if(currentView==='analyse'){
+      drawAnalyseChart();
+      const input = document.getElementById('analyse-search');
+      if(input) input.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); handleAction('run-analyse'); } });
+    }
     if(currentView==='compteJoint'){
       drawJointCompareChart();
       markMessagesRead();
@@ -1636,7 +1702,12 @@ document.addEventListener('click', async (e)=>{
   if(stepBtn){ state.selectedMonth = addMonths(state.selectedMonth, Number(stepBtn.dataset.dir)); await persist(); await render(); return; }
 
   const yearBtn = e.target.closest('[data-year-step]');
-  if(yearBtn){ state.selectedYear += Number(yearBtn.dataset.yearStep); await persist(); await render(); return; }
+  if(yearBtn){
+    const t = yearBtn.dataset.yearTarget || 'annuelle';
+    if(t==='analyse'){ state.analyseYear = (state.analyseYear||new Date().getFullYear()) + Number(yearBtn.dataset.yearStep); }
+    else{ state.selectedYear += Number(yearBtn.dataset.yearStep); }
+    await persist(); await render(); return;
+  }
 
   const burger = e.target.closest('#burger');
   if(burger){ document.getElementById('sidebar').classList.toggle('open'); document.getElementById('overlay-scrim').classList.toggle('show'); return; }
@@ -1714,6 +1785,9 @@ async function handleAction(action, id, el){
       setTimeout(setupDepenseFormToggle, 0); break;
     case 'del-depense': { const item=find(mine(state.depenses)); confirmDelete(item.libelle, async ()=>{ state.depenses = state.depenses.filter(x=>x.id!==id); await persist(); await render(); toast('Dépense supprimée'); }); break; }
     case 'goto-depenses': currentView = 'depenses'; await render(); break;
+    case 'run-analyse': {
+      const val = document.getElementById('analyse-search').value;
+      state.analyseTerm = val; await persist(); await render(); break; }
 
     /* Échéances (vue calculée) : marquage manuel des mensualités payées */
     case 'ech-pay-one': { const dep = find(mine(state.depenses)); const nb = depenseNbMensualites(dep); dep.mensualitesPayees = Math.min((dep.mensualitesPayees||0)+1, nb); await persist(); await render(); toast('Mensualité marquée payée'); break; }
@@ -2137,6 +2211,72 @@ function authError(msg){
 }
 
 /* ============================== PARAMÈTRES ============================== */
+/* ============================== ANALYSE ============================== */
+function renderAnalyse(){
+  const term = state.analyseTerm || '';
+  const year = state.analyseYear || new Date().getFullYear();
+  const suggestions = analyseSearchableTerms();
+  const hasResults = term.trim().length>0;
+  const months = hasResults ? analyseMonthlyTotals(term, year) : [];
+  const yearTotal = months.reduce((s,m)=>s+m.total,0);
+  const yearsWithData = hasResults ? analyseYearsWithData(term) : [];
+  const allYearsTotal = hasResults ? yearsWithData.reduce((s,y)=>s+analyseMonthlyTotals(term,y).reduce((s2,m)=>s2+m.total,0),0) : 0;
+
+  return `
+    <div class="page-head"><div><div class="page-title">Analyse</div><div class="page-sub">Combien tu as dépensé pour un poste précis, mois par mois</div></div></div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="field"><label>Rechercher un poste (ex. Netflix, Tabac...)</label>
+        <div class="kv-input-row">
+          <input id="analyse-search" type="text" list="analyse-suggestions" placeholder="Netflix, Tabac, Loyer..." value="${term.replace(/"/g,'&quot;')}">
+          <button class="btn btn-primary btn-sm" data-action="run-analyse">${icon('search')}Chercher</button>
+        </div>
+        <datalist id="analyse-suggestions">${suggestions.map(s=>`<option value="${s.replace(/"/g,'&quot;')}">`).join('')}</datalist>
+      </div>
+    </div>
+
+    ${!hasResults ? `<div class="card">${emptyState('search','Cherche un poste de dépense','Tape un nom (Netflix, Tabac, Loyer...) pour voir combien tu y as consacré, mois par mois et sur l\u2019année.','','')}</div>` : `
+
+    <div class="page-head" style="margin-bottom:16px;"><div><div class="page-sub" style="margin-top:0;">Résultats pour "${term}" — ${months.filter(m=>m.total>0).length===0 ? 'aucune correspondance ce mois-ci' : ''}</div></div>${yearStepperHTML(year, 'analyse')}</div>
+
+    <div class="grid g3" style="margin-bottom:16px;">
+      <div class="card stat-card"><div class="k">${icon('calendar')} Total ${year}</div><div class="v">${fmtEUR(yearTotal)}</div></div>
+      <div class="card stat-card"><div class="k">${icon('wallet')} Moyenne mensuelle ${year}</div><div class="v">${fmtEUR(yearTotal/12)}</div></div>
+      <div class="card stat-card"><div class="k">${icon('chart')} Total tous les ans confondus</div><div class="v">${fmtEUR(allYearsTotal)}</div><div class="d">${yearsWithData.join(', ')}</div></div>
+    </div>
+
+    <div class="card chart-card" style="margin-bottom:16px;">
+      <h3>Répartition mensuelle — ${year}</h3>
+      <canvas id="chartAnalyse"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap"><table>
+        <thead><tr><th>Mois</th><th>Montant</th></tr></thead>
+        <tbody>${months.map(m=>`<tr><td style="text-transform:capitalize;">${MONTH_NAMES[Number(m.key.split('-')[1])-1]}</td><td class="num">${fmtEUR(m.total)}</td></tr>`).join('')}</tbody>
+        <tfoot><tr><td>Total ${year}</td><td class="num">${fmtEUR(yearTotal)}</td></tr></tfoot>
+      </table></div>
+    </div>
+    `}
+  `;
+}
+function drawAnalyseChart(){
+  const ctx = document.getElementById('chartAnalyse');
+  if(!ctx) return;
+  if(!chartLibReady()){ chartUnavailableNote('chartAnalyse'); return; }
+  destroyChart('analyse');
+  const term = state.analyseTerm || '';
+  const year = state.analyseYear || new Date().getFullYear();
+  const months = analyseMonthlyTotals(term, year);
+  charts.analyse = new Chart(ctx, {
+    type:'bar',
+    data:{ labels: months.map(m=>MONTH_NAMES[Number(m.key.split('-')[1])-1].slice(0,3)),
+      datasets:[{ label: term, data: months.map(m=>m.total), backgroundColor:'rgba(255,255,255,0.65)', borderRadius:6, maxBarThickness:32 }]},
+    options:{ scales:{ x:{ grid:{display:false}, ticks:{color:'#565D6C', font:{size:10.5}} }, y:{ grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#565D6C', font:{size:10.5}} } },
+      plugins:{ legend:{ display:false } } }
+  });
+}
+
 function renderParametres(){
   const me = currentUser();
   return `
