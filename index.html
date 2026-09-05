@@ -557,6 +557,24 @@ async function loadState(){
     }
   }
 
+  // Migration : même bricolage possible sur les revenus RÉCURRENTS négatifs —
+  // l'équivalent logique est une charge récurrente (Fixe), pas une dépense ponctuelle.
+  if(Array.isArray(state.revenusRecurrents)){
+    const negatifsRec = state.revenusRecurrents.filter(r=>Number(r.montant)<0);
+    if(negatifsRec.length>0){
+      if(!state.charges) state.charges = [];
+      negatifsRec.forEach(r=>{
+        state.charges.push({
+          id: r.id, ownerId: r.ownerId, categorie: r.libelle, type:'Fixe',
+          description: r.categorie==='Autre' ? '' : r.categorie, budget: Math.abs(Number(r.montant)),
+          compte:'Compte Perso', dateDebut: r.dateDebut||null, dateFin: r.dateFin||null, notes:''
+        });
+      });
+      state.revenusRecurrents = state.revenusRecurrents.filter(r=>Number(r.montant)>=0);
+      needsPersist = true;
+    }
+  }
+
   if(needsPersist) await persist();
   if(needsPersistAuth) await persistAuth();
   if(needsPersistSocial) await persistSocial();
@@ -1652,8 +1670,10 @@ async function handleAction(action, id, el){
   switch(action){
     /* Revenus récurrents */
     case 'add-revrec': openModal('Ajouter un revenu récurrent', revrecFields(), {categorie:'Salaire', dateDebut: new Date().toISOString().slice(0,10)}, async (data)=>{
+      if(Number(data.montant)<0){ toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense récurrente.'); return false; }
       state.revenusRecurrents.push({id:uid(), ownerId:currentUser().id, ...data}); await persist(); await render(); toast('Revenu ajouté'); }); break;
     case 'edit-revrec': openModal('Modifier le revenu', revrecFields(), find(mine(state.revenusRecurrents)), async (data)=>{
+      if(Number(data.montant)<0){ toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense récurrente.'); return false; }
       Object.assign(find(mine(state.revenusRecurrents)), data); await persist(); await render(); toast('Revenu mis à jour'); }); break;
     case 'del-revrec': { const item=find(mine(state.revenusRecurrents)); confirmDelete(item.libelle, async ()=>{ state.revenusRecurrents = state.revenusRecurrents.filter(x=>x.id!==id); await persist(); await render(); toast('Revenu supprimé'); }); break; }
 
