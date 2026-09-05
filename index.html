@@ -1713,8 +1713,9 @@ async function handleAction(action, id, el){
       if(!req) break;
       const u = authState.users.find(x=>x.id===req.fromId);
       if(req.type==='export'){
-        if(u) exportUserData(u.id);
-        req.status='done'; await persistSocial(); await render(); renderNotifPanel(); toast('Export téléchargé'); break;
+        // On n'exporte plus directement côté admin : on approuve, et c'est la
+        // personne concernée qui télécharge elle-même, une seule fois.
+        req.status='approved'; await persistSocial(); await render(); renderNotifPanel(); toast('Demande approuvée — la personne peut maintenant télécharger ses données.'); break;
       }
       if(req.type==='reset'){
         // "Reset" : on vide les données mais on garde le compte (identifiants intacts).
@@ -1750,6 +1751,12 @@ async function handleAction(action, id, el){
       const req = socialState.accountRequests.find(r=>r.id===id);
       if(req) req.status='declined';
       await persistSocial(); await render(); renderNotifPanel(); toast('Demande refusée'); break; }
+    case 'download-my-export': {
+      const req = myApprovedExportRequest();
+      if(!req) break;
+      exportUserData(currentUser().id);
+      socialState.accountRequests = socialState.accountRequests.filter(r=>r.id!==req.id); // usage unique : la demande disparaît après téléchargement
+      await persistSocial(); await render(); renderNotifPanel(); toast('Téléchargement effectué'); break; }
 
     /* Compte joint : demandes */
     case 'send-joint-request': {
@@ -2073,13 +2080,17 @@ function userFieldsSelf(excludeId){
 
 function renderMemberAccountRequests(me){
   const exportReq = myPendingAccountRequest('export');
+  const approvedExport = myApprovedExportRequest();
   const resetReq = myPendingAccountRequest('reset');
   const deleteReq = myPendingAccountRequest('delete');
   return `
     <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:16px;">
       <div class="sub" style="margin-bottom:10px;">Par défaut, seul un administrateur peut exporter, réinitialiser ou supprimer un compte. Tu peux lui en faire la demande :</div>
+      ${approvedExport ? `<div class="status-row" style="margin-bottom:12px;"><span class="status-dot" style="background:var(--teal);"></span>Ta demande d'export a été approuvée</div>
+        <button class="btn btn-primary btn-sm" data-action="download-my-export" style="margin-bottom:14px;">${icon('arrowDown')}Télécharger mes données</button>
+        <div class="field-note" style="margin-bottom:14px;">Ce bouton ne fonctionne qu'une fois — il disparaîtra après le téléchargement. Il faudra refaire une demande si tu en as besoin à nouveau.</div>` : ''}
       <div class="row-actions" style="justify-content:flex-start;gap:10px;flex-wrap:wrap;">
-        ${exportReq
+        ${approvedExport ? '' : exportReq
           ? `<span class="pill pill-amber">Export demandé — en attente</span>`
           : `<button class="btn btn-ghost btn-sm" data-action="request-export">${icon('arrowDown')}Demander l\u2019export de mes données</button>`}
         ${resetReq
@@ -2206,8 +2217,12 @@ function myPendingAccountRequest(type){
   const me = currentUser();
   return socialState.accountRequests.find(r=>r.fromId===me.id && r.type===type && r.status==='pending');
 }
+function myApprovedExportRequest(){
+  const me = currentUser();
+  return socialState.accountRequests.find(r=>r.fromId===me.id && r.type==='export' && r.status==='approved');
+}
 function notifBadgeCount(){
-  return myPendingIncomingRequests().length + unreadMessagesCount() + pendingAccountRequests().length;
+  return myPendingIncomingRequests().length + unreadMessagesCount() + pendingAccountRequests().length + (myApprovedExportRequest() ? 1 : 0);
 }
 function markMessagesRead(){
   const me = currentUser();
@@ -2513,6 +2528,12 @@ function renderNotifPanel(){
       <div class="info"><div class="name">${from?from.displayName:'?'}</div><div class="meta">${label}</div></div>
     </div>`);
   });
+  if(myApprovedExportRequest()){
+    items.push(`<div class="notif-item" data-action="open-parametres">
+      <div class="avatar" style="background:${avatarColor(me)};width:32px;height:32px;font-size:12px;">${initials(me)}</div>
+      <div class="info"><div class="name">Ton export est prêt</div><div class="meta">Va dans Paramètres pour le télécharger</div></div>
+    </div>`);
+  }
   panel.innerHTML = `
     <div class="notif-head"><span>Notifications</span><button class="icon-btn" data-action="close-notif">${icon('x')}</button></div>
     <div class="notif-body">
