@@ -448,8 +448,66 @@ const ICONS = {
 };
 function icon(name){ return `<svg viewBox="0 0 24 24">${ICONS[name]||''}</svg>`; }
 
+/* ============================== I18N ============================== */
+function getLang(){ try{ return localStorage.getItem('app_lang')||'fr'; }catch(e){ return 'fr'; } }
+function setLang(l){ try{ localStorage.setItem('app_lang', l); }catch(e){} currentLang = l; }
+var currentLang = getLang();
+const I18N = {
+  fr: {
+    nav_dashboard:'Tableau de bord', nav_revenus:'Revenus', nav_abonnements:'Abonnements', nav_depenses:'Dépenses',
+    nav_echeances:'Échéances', nav_objectifs:'Objectifs', nav_charges:'Charges', nav_compteJoint:'Compte joint',
+    nav_annuelle:'Vue annuelle', nav_analyse:'Analyse', nav_parametres:'Paramètres',
+    btn_add:'Ajouter', btn_edit:'Modifier', btn_delete:'Supprimer', btn_cancel:'Annuler', btn_save:'Enregistrer',
+    btn_confirm:'Confirmer', btn_search:'Chercher', btn_export:'Exporter', btn_import:'Importer', btn_connect:'Connecter',
+    btn_disconnect:'Déconnecter', btn_logout:'Se déconnecter', btn_login:'Se connecter', btn_close:'Fermer',
+    btn_accept:'Accepter', btn_decline:'Refuser', btn_send:'Envoyer', btn_download:'Télécharger',
+    common_yes:'Oui', common_no:'Non', common_active:'Actif', common_inactive:'Inactif', common_you:'toi',
+    th_label:'Libellé', th_category:'Catégorie', th_amount:'Montant', th_account:'Compte', th_start:'Début', th_end:'Fin',
+    th_status:'Statut', th_total:'Total', th_thisMonth:'Ce mois', th_actions:'',
+    toast_added:'Ajouté(e)', toast_updated:'Mis(e) à jour', toast_deleted:'Supprimé(e)', toast_error:'Une erreur est survenue',
+    page_dashboard_title:'Tableau de bord', page_dashboard_sub:"Vue d'ensemble de vos finances",
+    page_revenus_title:'Revenus', page_revenus_sub:'Sources fixes et rentrées ponctuelles',
+    page_abonnements_title:'Abonnements', page_abonnements_sub:'Tous vos abonnements récurrents',
+    page_depenses_title:'Dépenses', page_depenses_sub:'Achats et frais, payés en une fois, échelonnés, ou prévisionnels',
+    page_echeances_title:'Échéances', page_echeances_sub:'Calculées automatiquement à partir des dépenses échelonnées',
+    page_objectifs_title:'Objectifs', page_objectifs_sub:'Épargne progressive vers vos projets',
+    page_charges_title:'Budget Charges', page_charges_sub:'Dépenses fixes ou temporaires',
+    page_compteJoint_title:'Compte joint', page_compteJoint_sub:'Comparatif des dépenses partagées',
+    page_annuelle_title:'Vue annuelle', page_analyse_title:'Analyse', page_analyse_sub:'Combien tu as dépensé pour un poste précis, mois par mois',
+    page_parametres_title:'Paramètres', page_parametres_sub:'Comptes, synchronisation et assistant',
+    empty_nothingHere:"Rien pour l'instant",
+  },
+  en: {
+    nav_dashboard:'Dashboard', nav_revenus:'Income', nav_abonnements:'Subscriptions', nav_depenses:'Expenses',
+    nav_echeances:'Installments', nav_objectifs:'Goals', nav_charges:'Bills', nav_compteJoint:'Joint account',
+    nav_annuelle:'Yearly view', nav_analyse:'Analytics', nav_parametres:'Settings',
+    btn_add:'Add', btn_edit:'Edit', btn_delete:'Delete', btn_cancel:'Cancel', btn_save:'Save',
+    btn_confirm:'Confirm', btn_search:'Search', btn_export:'Export', btn_import:'Import', btn_connect:'Connect',
+    btn_disconnect:'Disconnect', btn_logout:'Log out', btn_login:'Log in', btn_close:'Close',
+    btn_accept:'Accept', btn_decline:'Decline', btn_send:'Send', btn_download:'Download',
+    common_yes:'Yes', common_no:'No', common_active:'Active', common_inactive:'Inactive', common_you:'you',
+    th_label:'Label', th_category:'Category', th_amount:'Amount', th_account:'Account', th_start:'Start', th_end:'End',
+    th_status:'Status', th_total:'Total', th_thisMonth:'This month', th_actions:'',
+    toast_added:'Added', toast_updated:'Updated', toast_deleted:'Deleted', toast_error:'Something went wrong',
+    page_dashboard_title:'Dashboard', page_dashboard_sub:'An overview of your finances',
+    page_revenus_title:'Income', page_revenus_sub:'Recurring sources and one-off inflows',
+    page_abonnements_title:'Subscriptions', page_abonnements_sub:'All your recurring subscriptions',
+    page_depenses_title:'Expenses', page_depenses_sub:'Purchases and costs, paid at once, in installments, or planned',
+    page_echeances_title:'Installments', page_echeances_sub:'Automatically calculated from installment expenses',
+    page_objectifs_title:'Goals', page_objectifs_sub:'Progressive savings toward your projects',
+    page_charges_title:'Bills budget', page_charges_sub:'Fixed or temporary expenses',
+    page_compteJoint_title:'Joint account', page_compteJoint_sub:'Shared expenses comparison',
+    page_annuelle_title:'Yearly view', page_analyse_title:'Analytics', page_analyse_sub:'How much you spent on a specific item, month by month',
+    page_parametres_title:'Settings', page_parametres_sub:'Accounts, sync and assistant',
+    empty_nothingHere:'Nothing here yet',
+  }
+};
+function t(key){ return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.fr[key]) || key; }
+
 /* ============================== STATE ============================== */
-const MONTH_NAMES = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+const MONTH_NAMES_FR = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+const MONTH_NAMES_EN = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function monthNames(){ return currentLang==='en' ? MONTH_NAMES_EN : MONTH_NAMES_FR; }
 const CATS_ABO = ['Internet','Transport','Mobile','Divertissement','Stockage','Gestion','Finance','Autre'];
 const CATS_REV = ['Salaire','Remboursement','Prime','Cadeau','Autre'];
 const CATS_DEP = ['Achat','Réparation','Santé','Loisirs','Cadeau','Voyage','Imprévu','Autre'];
@@ -633,9 +691,9 @@ function persistSocial(){
 /* ============================== HELPERS ============================== */
 const fmtEUR = (n) => new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format(Math.round((n||0)*100)/100);
 const fmtEURPrecise = (n) => new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:2}).format(n||0);
-function fmtDate(d){ if(!d) return '—'; const dt=new Date(d+'T00:00:00'); if(isNaN(dt)) return '—'; return dt.toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'}); }
+function fmtDate(d){ if(!d) return '—'; const dt=new Date(d+'T00:00:00'); if(isNaN(dt)) return '—'; return dt.toLocaleDateString(currentLang==='en'?'en-US':'fr-FR',{day:'2-digit',month:'short',year:'numeric'}); }
 function monthKey(y,m){ return `${y}-${String(m).padStart(2,'0')}`; }
-function monthLabel(key){ const [y,m] = key.split('-').map(Number); return `${MONTH_NAMES[m-1]} ${y}`; }
+function monthLabel(key){ const [y,m] = key.split('-').map(Number); return `${monthNames()[m-1]} ${y}`; }
 function monthBounds(key){ const [y,m]=key.split('-').map(Number); return {start:new Date(y,m-1,1), end:new Date(y,m,0)}; }
 function addMonths(key, delta){ let [y,m]=key.split('-').map(Number); m+=delta; while(m>12){m-=12;y++;} while(m<1){m+=12;y--;} return monthKey(y,m); }
 function inRangeMonth(key, dateDebut, dateFin){
@@ -894,19 +952,21 @@ function analyseYearsWithData(term){
 }
 
 /* ============================== SIDEBAR / NAV ============================== */
-const NAV = [
-  {id:'dashboard', label:'Tableau de bord', icon:'dashboard'},
-  {id:'revenus', label:'Revenus', icon:'income'},
-  {id:'abonnements', label:'Abonnements', icon:'repeat'},
-  {id:'depenses', label:'Dépenses', icon:'wallet'},
-  {id:'echeances', label:'Échéances', icon:'calendar'},
-  {id:'objectifs', label:'Objectifs', icon:'target'},
-  {id:'charges', label:'Charges', icon:'home'},
-  {id:'compteJoint', label:'Compte joint', icon:'users'},
-  {id:'annuelle', label:'Vue annuelle', icon:'chart'},
-  {id:'analyse', label:'Analyse', icon:'search'},
-  {id:'parametres', label:'Paramètres', icon:'settings'},
-];
+function navItems(){
+  return [
+    {id:'dashboard', label:t('nav_dashboard'), icon:'dashboard'},
+    {id:'revenus', label:t('nav_revenus'), icon:'income'},
+    {id:'abonnements', label:t('nav_abonnements'), icon:'repeat'},
+    {id:'depenses', label:t('nav_depenses'), icon:'wallet'},
+    {id:'echeances', label:t('nav_echeances'), icon:'calendar'},
+    {id:'objectifs', label:t('nav_objectifs'), icon:'target'},
+    {id:'charges', label:t('nav_charges'), icon:'home'},
+    {id:'compteJoint', label:t('nav_compteJoint'), icon:'users'},
+    {id:'annuelle', label:t('nav_annuelle'), icon:'chart'},
+    {id:'analyse', label:t('nav_analyse'), icon:'search'},
+    {id:'parametres', label:t('nav_parametres'), icon:'settings'},
+  ];
+}
 function renderSidebar(){
   const sb = document.getElementById('sidebar');
   const me = currentUser();
@@ -916,7 +976,7 @@ function renderSidebar(){
       <div class="brand-mark">${icon('logo')}</div>
       <div><div class="brand-name">Solde</div><div class="brand-sub">Budget personnel</div></div>
     </div>
-    ${NAV.map(n=>`<button class="nav-item ${currentView===n.id?'active':''}" data-nav="${n.id}">${icon(n.icon)}<span>${n.label}</span></button>`).join('')}
+    ${navItems().map(n=>`<button class="nav-item ${currentView===n.id?'active':''}" data-nav="${n.id}">${icon(n.icon)}<span>${n.label}</span></button>`).join('')}
     <div class="nav-spacer"></div>
     <button class="nav-item" data-action="toggle-notif-panel" style="position:relative;">${icon('bell')}<span>Notifications</span>${badge>0?`<span class="notif-badge">${badge}</span>`:''}</button>
     <div class="sidebar-user">
@@ -924,9 +984,9 @@ function renderSidebar(){
       <div class="info"><div class="name">${me?me.displayName:''}</div><div class="role">${me?me.role:''}</div></div>
       <button class="icon-btn" data-action="logout" title="Se déconnecter">${icon('logout')}</button>
     </div>
-    <div class="sidebar-foot">Données stockées sur cet appareil, synchronisées via GitHub si connecté.</div>
+    <div class="sidebar-foot">${currentLang==='en'?'Data stored on this device, synced via GitHub if connected.':'Données stockées sur cet appareil, synchronisées via GitHub si connecté.'}</div>
   `;
-  document.getElementById('mobile-title').textContent = NAV.find(n=>n.id===currentView)?.label || 'Solde';
+  document.getElementById('mobile-title').textContent = navItems().find(n=>n.id===currentView)?.label || 'Solde';
 }
 function initials(u){ if(!u) return '?'; return (u.displayName||u.username||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
 function visibleUserRows(me){
@@ -1060,7 +1120,7 @@ function renderDashboard(){
   return `
     <div class="page-head">
       <div>
-        <div class="page-title">Tableau de bord</div>
+        <div class="page-title">${t('page_dashboard_title')}</div>
         <div class="page-sub">Vue d'ensemble de vos finances</div>
       </div>
       ${monthStepperHTML(key,'dashboard')}
@@ -1148,7 +1208,7 @@ function drawDashboardCharts(){
     const {months} = anneeData(state.selectedYear);
     charts.annMini = new Chart(ctx2, {
       type:'line',
-      data:{ labels: months.map(m=>MONTH_NAMES[Number(m.key.split('-')[1])-1].slice(0,3)),
+      data:{ labels: months.map(m=>monthNames()[Number(m.key.split('-')[1])-1].slice(0,3)),
         datasets:[
           {label:'Revenus', data:months.map(m=>m.revenu), borderColor:'#BFE9D2', backgroundColor:'rgba(191,233,210,0.08)', fill:true, tension:.35, pointRadius:0, borderWidth:2},
           {label:'Dépenses', data:months.map(m=>m.totalDepenses), borderColor:'#EFB6AC', backgroundColor:'rgba(239,182,172,0.06)', fill:true, tension:.35, pointRadius:0, borderWidth:2}
@@ -1166,7 +1226,7 @@ function renderAnnuelle(){
   const {months, totals} = anneeData(year);
   return `
     <div class="page-head">
-      <div><div class="page-title">Vue annuelle</div><div class="page-sub">Synthèse des 12 mois de ${year}</div></div>
+      <div><div class="page-title">${t('page_annuelle_title')}</div><div class="page-sub">${currentLang==='en'?`12-month summary for ${year}`:`Synthèse des 12 mois de ${year}`}</div></div>
       ${yearStepperHTML(year)}
     </div>
     <div class="grid g3" style="margin-bottom:16px;">
@@ -1180,7 +1240,7 @@ function renderAnnuelle(){
         <thead><tr><th>Mois</th><th>Revenus</th><th>Abonnements</th><th>Charges</th><th>Échéances</th><th>Compte joint</th><th>Épargne</th><th>Dépenses</th><th>Solde</th></tr></thead>
         <tbody>
           ${months.map(m=>`<tr>
-            <td style="text-transform:capitalize;">${MONTH_NAMES[Number(m.key.split('-')[1])-1]}</td>
+            <td style="text-transform:capitalize;">${monthNames()[Number(m.key.split('-')[1])-1]}</td>
             <td class="num">${fmtEUR(m.revenu)}</td>
             <td class="num">${fmtEUR(m.aboHorsCJ)}</td>
             <td class="num">${fmtEUR(m.chargesHorsCJ)}</td>
@@ -1203,7 +1263,7 @@ function drawAnnuelleChart(){
   const {months} = anneeData(state.selectedYear);
   charts.annFull = new Chart(ctx, {
     type:'bar',
-    data:{ labels: months.map(m=>MONTH_NAMES[Number(m.key.split('-')[1])-1].slice(0,3)),
+    data:{ labels: months.map(m=>monthNames()[Number(m.key.split('-')[1])-1].slice(0,3)),
       datasets:[
         {type:'bar', label:'Revenus', data:months.map(m=>m.revenu), backgroundColor:'rgba(191,233,210,0.65)', borderRadius:6, maxBarThickness:22},
         {type:'bar', label:'Dépenses', data:months.map(m=>m.totalDepenses), backgroundColor:'rgba(239,182,172,0.65)', borderRadius:6, maxBarThickness:22},
@@ -1219,7 +1279,7 @@ function drawAnnuelleChart(){
 function renderRevenus(){
   const rr = mine(state.revenusRecurrents), re = mine(state.revenusExceptionnels);
   return `
-    <div class="page-head"><div><div class="page-title">Revenus</div><div class="page-sub">Sources fixes et rentrées ponctuelles</div></div></div>
+    <div class="page-head"><div><div class="page-title">${t('page_revenus_title')}</div><div class="page-sub">${t('page_revenus_sub')}</div></div></div>
 
     <div class="section-head"><h3 style="font-size:15px;font-weight:600;">Revenus récurrents</h3>
       <button class="btn btn-primary btn-sm" data-action="add-revrec">${icon('plus')}Ajouter un revenu</button></div>
@@ -1283,7 +1343,7 @@ function revexcFields(){
 function renderAbonnements(){
   const list = mine(state.abonnements);
   return `
-    <div class="page-head"><div><div class="page-title">Abonnements</div><div class="page-sub">Tous vos abonnements récurrents</div></div>
+    <div class="page-head"><div><div class="page-title">${t('page_abonnements_title')}</div><div class="page-sub">${t('page_abonnements_sub')}</div></div>
       <button class="btn btn-primary" data-action="add-abo">${icon('plus')}Ajouter un abonnement</button></div>
     <div class="card">
       ${list.length===0 ? emptyState('repeat','Aucun abonnement','Streaming, mobile, logiciels… suivez-les tous ici.','add-abo','Ajouter un abonnement') : `
@@ -1324,7 +1384,7 @@ function renderDepenses(){
     .sort((a,b)=> PRIORITE_ORDER[a.priorite||'Basse'] - PRIORITE_ORDER[b.priorite||'Basse']);
   const key = state.selectedMonth;
   return `
-    <div class="page-head"><div><div class="page-title">Dépenses</div><div class="page-sub">Achats et frais, payés en une fois, échelonnés, ou prévisionnels</div></div>
+    <div class="page-head"><div><div class="page-title">${t('page_depenses_title')}</div><div class="page-sub">${t('page_depenses_sub')}</div></div>
       <button class="btn btn-primary" data-action="add-depense">${icon('plus')}Ajouter une dépense</button></div>
 
     ${previsionnelles.length>0 ? `
@@ -1423,7 +1483,7 @@ function renderEcheances(){
   const list = mine(state.depenses).filter(d=>d.modePaiement==='Echelonne');
   const key = state.selectedMonth;
   return `
-    <div class="page-head"><div><div class="page-title">Échéances</div><div class="page-sub">Calculées automatiquement à partir des dépenses échelonnées</div></div></div>
+    <div class="page-head"><div><div class="page-title">${t('page_echeances_title')}</div><div class="page-sub">${t('page_echeances_sub')}</div></div></div>
     <div class="card">
       ${list.length===0 ? emptyState('calendar','Aucune échéance en cours','Marque une dépense comme "Échelonnée" dans l\u2019onglet Dépenses pour la voir apparaître ici.','goto-depenses','Aller à Dépenses') : `
       <div class="table-wrap"><table>
@@ -1457,7 +1517,7 @@ function renderEcheances(){
 function renderObjectifs(){
   const list = mine(state.objectifs);
   return `
-    <div class="page-head"><div><div class="page-title">Objectifs</div><div class="page-sub">Épargne progressive vers vos projets</div></div>
+    <div class="page-head"><div><div class="page-title">${t('page_objectifs_title')}</div><div class="page-sub">${t('page_objectifs_sub')}</div></div>
       <button class="btn btn-primary" data-action="add-obj">${icon('plus')}Ajouter un objectif</button></div>
     ${list.length===0 ? `<div class="card">${emptyState('target','Aucun objectif','Créez un objectif d\u2019épargne pour un projet qui compte pour vous.','add-obj','Ajouter un objectif')}</div>` : `
     <div class="grid g2" style="margin-bottom:24px;">
@@ -1521,7 +1581,7 @@ function renderCharges(){
   const list = mine(state.charges);
   const key = state.selectedMonth;
   return `
-    <div class="page-head"><div><div class="page-title">Budget Charges</div><div class="page-sub">Dépenses fixes ou temporaires</div></div>
+    <div class="page-head"><div><div class="page-title">${t('page_charges_title')}</div><div class="page-sub">${t('page_charges_sub')}</div></div>
       <button class="btn btn-primary" data-action="add-charge">${icon('plus')}Ajouter une charge</button></div>
     <div class="card">
       ${list.length===0 ? emptyState('home','Aucune charge','Loyer, courses, factures… ajoutez vos charges ici.','add-charge','Ajouter une charge') : `
@@ -1560,7 +1620,7 @@ function renderCompteJoint(){
 
   if(!partner){
     return `
-      <div class="page-head"><div><div class="page-title">Compte joint</div><div class="page-sub">Comparatif des dépenses partagées</div></div></div>
+      <div class="page-head"><div><div class="page-title">${t('page_compteJoint_title')}</div><div class="page-sub">${t('page_compteJoint_sub')}</div></div></div>
       <div class="card">${emptyState('users','Aucun compte joint configuré','Choisis avec qui tu partages un compte joint pour comparer vos dépenses communes.','goto-parametres-comptes','Configurer dans Paramètres')}</div>
     `;
   }
@@ -1573,7 +1633,7 @@ function renderCompteJoint(){
   const partnerDetail = jointDetailFor(partner.id, key);
 
   return `
-    <div class="page-head"><div><div class="page-title">Compte joint</div><div class="page-sub">Comparatif avec ${partner.displayName} — ${monthLabel(key)}</div></div>
+    <div class="page-head"><div><div class="page-title">${t('page_compteJoint_title')}</div><div class="page-sub">${currentLang==='en'?`Comparing with ${partner.displayName} — ${monthLabel(key)}`:`Comparatif avec ${partner.displayName} — ${monthLabel(key)}`}</div></div>
       <button class="btn btn-ghost" data-action="refresh-joint">${icon('refresh')}Actualiser</button></div>
 
     <div class="grid g3" style="margin-bottom:16px;">
@@ -1840,6 +1900,7 @@ async function handleAction(action, id, el){
 
     /* Auth / users */
     case 'logout': stopPolling(); clearSession(); await boot(); toast('Déconnecté'); break;
+    case 'set-lang': setLang(el.dataset.lang); await render(); break;
     case 'add-user': openModal('Ajouter un compte', userFieldsAdmin(null).concat([{key:'password', label:'Mot de passe', type:'password'}]), {role:'membre'}, async (data)=>{
       if(authState.users.some(u=>u.username===data.username.trim().toLowerCase())){ toast('Cet identifiant existe déjà'); return false; }
       const salt = randomSalt();
@@ -2196,14 +2257,14 @@ function renderLoginScreen(){
   root.innerHTML = `
     <div class="auth-card">
       <div class="auth-brand"><div class="brand-mark">${icon('logo')}</div><div><div class="brand-name">Solde</div></div></div>
-      <div class="auth-title">Connexion</div>
-      <div class="auth-sub">Accède à ton budget partagé.</div>
+      <div class="auth-title">${currentLang==='en'?'Sign in':'Connexion'}</div>
+      <div class="auth-sub">${currentLang==='en'?'Access your shared budget.':'Accède à ton budget partagé.'}</div>
       <div id="auth-error-slot"></div>
       <form id="login-form">
-        <div class="field"><label>Identifiant</label><input id="li-username" type="text" required autocomplete="username"></div>
-        <div class="field"><label>Mot de passe</label><div class="pw-wrap"><input id="li-pass" type="password" required autocomplete="current-password"><button type="button" class="pw-toggle" data-toggle-pw="li-pass">${icon('eye')}</button></div></div>
-        <div class="field" style="display:flex;align-items:center;gap:9px;"><input id="li-remember" type="checkbox" style="width:16px;height:16px;accent-color:#FFFFFF;"><label style="margin:0;font-size:13px;color:var(--text);">Rester connecté (${REMEMBER_DAYS} jours)</label></div>
-        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Se connecter</button>
+        <div class="field"><label>${currentLang==='en'?'Username':'Identifiant'}</label><input id="li-username" type="text" required autocomplete="username"></div>
+        <div class="field"><label>${currentLang==='en'?'Password':'Mot de passe'}</label><div class="pw-wrap"><input id="li-pass" type="password" required autocomplete="current-password"><button type="button" class="pw-toggle" data-toggle-pw="li-pass">${icon('eye')}</button></div></div>
+        <div class="field" style="display:flex;align-items:center;gap:9px;"><input id="li-remember" type="checkbox" style="width:16px;height:16px;accent-color:#FFFFFF;"><label style="margin:0;font-size:13px;color:var(--text);">${currentLang==='en'?`Stay signed in (${REMEMBER_DAYS} days)`:`Rester connecté (${REMEMBER_DAYS} jours)`}</label></div>
+        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}${t('btn_login')}</button>
       </form>
     </div>`;
   document.getElementById('login-form').onsubmit = async (e)=>{
@@ -2242,7 +2303,7 @@ function renderAnalyse(){
   const allYearsTotal = hasResults ? yearsWithData.reduce((s,y)=>s+analyseMonthlyTotals(term,y).reduce((s2,m)=>s2+m.total,0),0) : 0;
 
   return `
-    <div class="page-head"><div><div class="page-title">Analyse</div><div class="page-sub">Combien tu as dépensé pour un poste précis, mois par mois</div></div></div>
+    <div class="page-head"><div><div class="page-title">${t('page_analyse_title')}</div><div class="page-sub">${t('page_analyse_sub')}</div></div></div>
 
     <div class="card" style="margin-bottom:16px;">
       <div class="field"><label>Rechercher un poste (ex. Netflix, Tabac...)</label>
@@ -2273,7 +2334,7 @@ function renderAnalyse(){
     <div class="card">
       <div class="table-wrap"><table>
         <thead><tr><th>Mois</th><th>Montant</th></tr></thead>
-        <tbody>${months.map(m=>`<tr><td style="text-transform:capitalize;">${MONTH_NAMES[Number(m.key.split('-')[1])-1]}</td><td class="num">${fmtEUR(m.total)}</td></tr>`).join('')}</tbody>
+        <tbody>${months.map(m=>`<tr><td style="text-transform:capitalize;">${monthNames()[Number(m.key.split('-')[1])-1]}</td><td class="num">${fmtEUR(m.total)}</td></tr>`).join('')}</tbody>
         <tfoot><tr><td>Total ${year}</td><td class="num">${fmtEUR(yearTotal)}</td></tr></tfoot>
       </table></div>
     </div>
@@ -2290,7 +2351,7 @@ function drawAnalyseChart(){
   const months = analyseMonthlyTotals(term, year);
   charts.analyse = new Chart(ctx, {
     type:'bar',
-    data:{ labels: months.map(m=>MONTH_NAMES[Number(m.key.split('-')[1])-1].slice(0,3)),
+    data:{ labels: months.map(m=>monthNames()[Number(m.key.split('-')[1])-1].slice(0,3)),
       datasets:[{ label: term, data: months.map(m=>m.total), backgroundColor:'rgba(255,255,255,0.65)', borderRadius:6, maxBarThickness:32 }]},
     options:{ scales:{ x:{ grid:{display:false}, ticks:{color:'#565D6C', font:{size:10.5}} }, y:{ grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#565D6C', font:{size:10.5}} } },
       plugins:{ legend:{ display:false } } }
@@ -2300,7 +2361,16 @@ function drawAnalyseChart(){
 function renderParametres(){
   const me = currentUser();
   return `
-    <div class="page-head"><div><div class="page-title">Paramètres</div><div class="page-sub">Comptes, synchronisation et assistant</div></div></div>
+    <div class="page-head"><div><div class="page-title">${t('page_parametres_title')}</div><div class="page-sub">${t('page_parametres_sub')}</div></div></div>
+
+    <div class="card settings-block">
+      <h3>${currentLang==='en'?'Language':'Langue'}</h3>
+      <div class="sub">${currentLang==='en'?'Applies to this device only.':'Ne concerne que cet appareil.'}</div>
+      <div class="row-actions" style="justify-content:flex-start;gap:10px;">
+        <button class="btn ${currentLang==='fr'?'btn-primary':'btn-ghost'} btn-sm" data-action="set-lang" data-lang="fr">Français</button>
+        <button class="btn ${currentLang==='en'?'btn-primary':'btn-ghost'} btn-sm" data-action="set-lang" data-lang="en">English</button>
+      </div>
+    </div>
 
     <div class="card settings-block">
       <h3>Comptes</h3>
