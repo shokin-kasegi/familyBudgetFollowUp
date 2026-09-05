@@ -539,6 +539,24 @@ async function loadState(){
     needsPersist = true;
   }
 
+  // Migration : les revenus exceptionnels négatifs (ancien "bricolage" pour noter une
+  // dépense ponctuelle, avant l'existence de l'onglet Dépenses) deviennent de vraies
+  // dépenses "En une fois", avec un montant positif comme il se doit.
+  if(Array.isArray(state.revenusExceptionnels)){
+    const negatifs = state.revenusExceptionnels.filter(r=>Number(r.montant)<0);
+    if(negatifs.length>0){
+      if(!state.depenses) state.depenses = [];
+      negatifs.forEach(r=>{
+        state.depenses.push({
+          id: r.id, ownerId: r.ownerId, libelle: r.libelle, categorie: r.categorie==='Autre' ? 'Imprévu' : r.categorie,
+          compte: 'Compte Perso', montant: Math.abs(Number(r.montant)), modePaiement:'Unique', date: r.date, notes:''
+        });
+      });
+      state.revenusExceptionnels = state.revenusExceptionnels.filter(r=>Number(r.montant)>=0);
+      needsPersist = true;
+    }
+  }
+
   if(needsPersist) await persist();
   if(needsPersistAuth) await persistAuth();
   if(needsPersistSocial) await persistSocial();
@@ -851,7 +869,7 @@ function openModal(title, fields, values, onSave, extraHtml){
   const ov = document.getElementById('ov');
   ov.addEventListener('click', (e)=>{ if(e.target.id==='ov') closeModal(); });
   document.getElementById('cancel-btn')?.addEventListener('click', closeModal);
-  document.getElementById('modal-form').onsubmit = (e)=>{
+  document.getElementById('modal-form').onsubmit = async (e)=>{
     e.preventDefault();
     const data = {};
     fields.forEach(f=>{
@@ -862,7 +880,11 @@ function openModal(title, fields, values, onSave, extraHtml){
       if(f.type==='date' && v==='') v = null;
       data[f.key] = v;
     });
-    onSave(data);
+    // onSave peut renvoyer explicitement false pour signaler une validation
+    // échouée : dans ce cas, le modal reste ouvert (rien n'est perdu, l'utilisateur
+    // corrige simplement sa saisie) plutôt que de se fermer sur une erreur.
+    const result = await onSave(data);
+    if(result===false) return;
     closeModal();
   };
   setTimeout(()=>{ const first = document.querySelector('#modal-form input,#modal-form select'); if(first) first.focus(); }, 50);
@@ -1156,7 +1178,7 @@ function revexcFields(){
     {key:'date', label:'Date', type:'date'},
     {key:'libelle', label:'Libellé', placeholder:'Prime annuelle'},
     {key:'categorie', label:'Catégorie', type:'select', options:CATS_REV},
-    {key:'montant', label:'Montant (€, négatif si dépense exceptionnelle)', type:'number', step:'0.01'},
+    {key:'montant', label:'Montant (€)', type:'number', step:'0.01'},
   ];
   if(jointPartner()) fields.push({key:'excludeFromJoint', label:'Ne pas compter ce revenu dans le calcul du compte joint', type:'checkbox'});
   return fields;
@@ -1637,8 +1659,10 @@ async function handleAction(action, id, el){
 
     /* Revenus exceptionnels */
     case 'add-revexc': openModal('Ajouter une rentrée exceptionnelle', revexcFields(), {date:new Date().toISOString().slice(0,10), categorie:'Autre'}, async (data)=>{
+      if(Number(data.montant)<0){ toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense exceptionnelle.'); return false; }
       state.revenusExceptionnels.push({id:uid(), ownerId:currentUser().id, ...data}); await persist(); await render(); toast('Rentrée ajoutée'); }); break;
     case 'edit-revexc': openModal('Modifier la rentrée', revexcFields(), find(mine(state.revenusExceptionnels)), async (data)=>{
+      if(Number(data.montant)<0){ toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense exceptionnelle.'); return false; }
       Object.assign(find(mine(state.revenusExceptionnels)), data); await persist(); await render(); toast('Rentrée mise à jour'); }); break;
     case 'del-revexc': { const item=find(mine(state.revenusExceptionnels)); confirmDelete(item.libelle, async ()=>{ state.revenusExceptionnels = state.revenusExceptionnels.filter(x=>x.id!==id); await persist(); await render(); toast('Rentrée supprimée'); }); break; }
 
@@ -1707,7 +1731,7 @@ async function handleAction(action, id, el){
     /* Auth / users */
     case 'logout': stopPolling(); clearSession(); await boot(); toast('Déconnecté'); break;
     case 'add-user': openModal('Ajouter un compte', userFieldsAdmin(null).concat([{key:'password', label:'Mot de passe', type:'password'}]), {role:'membre'}, async (data)=>{
-      if(authState.users.some(u=>u.username===data.username.trim().toLowerCase())) return toast('Cet identifiant existe déjà');
+      if(authState.users.some(u=>u.username===data.username.trim().toLowerCase())){ toast('Cet identifiant existe déjà'); return false; }
       const salt = randomSalt();
       const passwordHash = await hashPassword(data.password||'changeme', salt);
       authState.users.push({id:uid(), username:data.username.trim().toLowerCase(), displayName:data.displayName, role:data.role, jointWith:null, salt, passwordHash});
