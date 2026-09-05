@@ -11,7 +11,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js" onerror="
+  var s=document.createElement('script');
+  s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js';
+  s.onload=function(){ if(window.render && window.currentView) render(); };
+  document.head.appendChild(s);
+"></script>
 <style>
 :root{
   --bg:#000000;
@@ -988,7 +993,13 @@ function yearStepperHTML(year){
   </div>`;
 }
 
+function chartLibReady(){ return typeof Chart !== 'undefined'; }
+function chartUnavailableNote(canvasId){
+  const ctx = document.getElementById(canvasId);
+  if(ctx && ctx.parentElement) ctx.parentElement.insertAdjacentHTML('beforeend', '<div class="field-note" style="text-align:center;padding:20px 0;">Graphique indisponible pour le moment (bibliothèque non chargée) — réessaie de recharger la page.</div>');
+}
 function drawDashboardCharts(){
+  if(!chartLibReady()){ chartUnavailableNote('chartRepartition'); chartUnavailableNote('chartAnnuelMini'); return; }
   const key = state.selectedMonth;
   const d = dashboardData(key);
   destroyChart('rep');
@@ -1063,6 +1074,7 @@ function renderAnnuelle(){
 function drawAnnuelleChart(){
   const ctx = document.getElementById('chartAnnuelFull');
   if(!ctx) return;
+  if(!chartLibReady()){ chartUnavailableNote('chartAnnuelFull'); return; }
   destroyChart('annFull');
   const {months} = anneeData(state.selectedYear);
   charts.annFull = new Chart(ctx, {
@@ -1480,9 +1492,10 @@ function renderMessagesList(partner){
 function drawJointCompareChart(){
   const ctx = document.getElementById('chartJointCompare');
   if(!ctx) return;
-  destroyChart('jointCmp');
   const me = currentUser(); const partner = jointPartner();
   if(!partner) return;
+  if(!chartLibReady()){ chartUnavailableNote('chartJointCompare'); return; }
+  destroyChart('jointCmp');
   const key = state.selectedMonth;
   const myTotal = jointAboTotalFor(me.id) + jointChargesTotalFor(me.id, key);
   const partnerTotal = jointAboTotalFor(partner.id) + jointChargesTotalFor(partner.id, key);
@@ -1500,16 +1513,20 @@ function avatarSolid(u){
 
 /* ============================== EVENT HANDLING ============================== */
 function afterRender(){
-  if(currentView==='dashboard') drawDashboardCharts();
-  if(currentView==='annuelle') drawAnnuelleChart();
-  if(currentView==='compteJoint'){
-    drawJointCompareChart();
-    markMessagesRead();
-    const input = document.getElementById('msg-input');
-    if(input) input.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleAction('send-message'); } });
-    const list = document.getElementById('joint-messages');
-    if(list) list.scrollTop = list.scrollHeight;
-  }
+  // Un souci ponctuel de graphique (ex. bibliothèque externe indisponible) ne
+  // doit jamais interrompre le reste de l'application (notifications, sync...).
+  try{
+    if(currentView==='dashboard') drawDashboardCharts();
+    if(currentView==='annuelle') drawAnnuelleChart();
+    if(currentView==='compteJoint'){
+      drawJointCompareChart();
+      markMessagesRead();
+      const input = document.getElementById('msg-input');
+      if(input) input.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleAction('send-message'); } });
+      const list = document.getElementById('joint-messages');
+      if(list) list.scrollTop = list.scrollHeight;
+    }
+  }catch(e){ console.error('afterRender: erreur non bloquante', e); }
 }
 
 document.addEventListener('change', (e)=>{
@@ -2343,57 +2360,32 @@ async function ghPush(){
   const c = await ghPushSocial();
   return a || b || c;
 }
-async function ghPushBudget(){
+/* Écrit un fichier sur GitHub, avec une nouvelle tentative automatique en cas de
+   conflit (HTTP 409 — le fichier a changé entre-temps, ex. deux appareils qui
+   synchronisent au même moment). On relit simplement le sha à jour et on
+   réessaie une fois, ce qui suffit dans l'immense majorité des cas. */
+async function ghPutWithRetry(path, dataObj, message, attempt){
   const cfg = ghConfig();
   if(!cfg.owner || !cfg.repo || !cfg.token) return false;
   try{
-    const check = await fetch(ghUrl(cfg, cfg.path||'data.json'), { headers: ghHeaders(cfg.token) });
-    if(check.status===200){ const d = await check.json(); ghSha = d.sha; }
-    else if(check.status===404){ ghSha = null; }
-    const body = { message:'Mise à jour budget', content: b64EncodeUnicode(JSON.stringify(state, null, 2)) };
-    if(ghSha) body.sha = ghSha;
-    const res = await fetch(ghUrl(cfg, cfg.path||'data.json'), { method:'PUT', headers:{...ghHeaders(cfg.token), 'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const check = await fetch(ghUrl(cfg, path), { headers: ghHeaders(cfg.token) });
+    let sha = null;
+    if(check.status===200){ const d = await check.json(); sha = d.sha; }
+    const body = { message, content: b64EncodeUnicode(JSON.stringify(dataObj, null, 2)) };
+    if(sha) body.sha = sha;
+    const res = await fetch(ghUrl(cfg, path), { method:'PUT', headers:{...ghHeaders(cfg.token), 'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if(res.status===409 && !attempt){
+      // Conflit : quelqu'un d'autre a écrit entre-temps. On relit et réessaie une fois.
+      return ghPutWithRetry(path, dataObj, message, true);
+    }
     if(!res.ok){ throw new Error('HTTP '+res.status); }
-    const data = await res.json();
-    ghSha = data.content.sha;
     ghLastSync = new Date();
     return true;
-  }catch(e){ console.error('GitHub push error (budget)', e); return false; }
+  }catch(e){ console.error('GitHub push error ('+path+')', e); return false; }
 }
-async function ghPushAuth(){
-  const cfg = ghConfig();
-  if(!cfg.owner || !cfg.repo || !cfg.token) return false;
-  try{
-    const check = await fetch(ghUrl(cfg, cfg.authPath||'auth.json'), { headers: ghHeaders(cfg.token) });
-    if(check.status===200){ const d = await check.json(); ghAuthSha = d.sha; }
-    else if(check.status===404){ ghAuthSha = null; }
-    const body = { message:'Mise à jour comptes', content: b64EncodeUnicode(JSON.stringify(authState, null, 2)) };
-    if(ghAuthSha) body.sha = ghAuthSha;
-    const res = await fetch(ghUrl(cfg, cfg.authPath||'auth.json'), { method:'PUT', headers:{...ghHeaders(cfg.token), 'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    if(!res.ok){ throw new Error('HTTP '+res.status); }
-    const data = await res.json();
-    ghAuthSha = data.content.sha;
-    ghLastSync = new Date();
-    return true;
-  }catch(e){ console.error('GitHub push error (auth)', e); return false; }
-}
-async function ghPushSocial(){
-  const cfg = ghConfig();
-  if(!cfg.owner || !cfg.repo || !cfg.token) return false;
-  try{
-    const check = await fetch(ghUrl(cfg, cfg.socialPath||'social.json'), { headers: ghHeaders(cfg.token) });
-    if(check.status===200){ const d = await check.json(); ghSocialSha = d.sha; }
-    else if(check.status===404){ ghSocialSha = null; }
-    const body = { message:'Mise à jour social', content: b64EncodeUnicode(JSON.stringify(socialState, null, 2)) };
-    if(ghSocialSha) body.sha = ghSocialSha;
-    const res = await fetch(ghUrl(cfg, cfg.socialPath||'social.json'), { method:'PUT', headers:{...ghHeaders(cfg.token), 'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    if(!res.ok){ throw new Error('HTTP '+res.status); }
-    const data = await res.json();
-    ghSocialSha = data.content.sha;
-    ghLastSync = new Date();
-    return true;
-  }catch(e){ console.error('GitHub push error (social)', e); return false; }
-}
+async function ghPushBudget(){ return ghPutWithRetry(ghConfig().path||'data.json', state, 'Mise à jour budget'); }
+async function ghPushAuth(){ return ghPutWithRetry(ghConfig().authPath||'auth.json', authState, 'Mise à jour comptes'); }
+async function ghPushSocial(){ return ghPutWithRetry(ghConfig().socialPath||'social.json', socialState, 'Mise à jour social'); }
 async function ghTestAndConnect(owner, repo, token){
   ghSaveConfig({owner, repo, token, path:'data.json', authPath:'auth.json', socialPath:'social.json'});
   const found = await ghPull();
