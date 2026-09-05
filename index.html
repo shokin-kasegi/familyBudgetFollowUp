@@ -1698,6 +1698,11 @@ async function handleAction(action, id, el){
       if(myPendingAccountRequest('export')) return toast('Déjà demandé, en attente.');
       socialState.accountRequests.push({id:uid(), fromId:me.id, type:'export', status:'pending', createdAt:new Date().toISOString()});
       await persistSocial(); await render(); toast('Demande envoyée à un administrateur'); break; }
+    case 'request-reset-data': {
+      const me = currentUser();
+      if(myPendingAccountRequest('reset')) return toast('Déjà demandé, en attente.');
+      socialState.accountRequests.push({id:uid(), fromId:me.id, type:'reset', status:'pending', createdAt:new Date().toISOString()});
+      await persistSocial(); await render(); toast('Demande envoyée à un administrateur'); break; }
     case 'request-delete-account': {
       const me = currentUser();
       if(myPendingAccountRequest('delete')) return toast('Déjà demandé, en attente.');
@@ -1710,6 +1715,23 @@ async function handleAction(action, id, el){
       if(req.type==='export'){
         if(u) exportUserData(u.id);
         req.status='done'; await persistSocial(); await render(); renderNotifPanel(); toast('Export téléchargé'); break;
+      }
+      if(req.type==='reset'){
+        // "Reset" : on vide les données mais on garde le compte (identifiants intacts).
+        confirmDelete(u ? `les données de ${u.displayName} (demande approuvée)` : 'ces données', async ()=>{
+          if(u){
+            wipeUserData(u.id);
+            if(u.jointWith){
+              const partner = authState.users.find(x=>x.id===u.jointWith);
+              if(partner) partner.jointWith = null;
+              u.jointWith = null;
+              await persistAuth();
+            }
+          }
+          req.status='done';
+          socialState.accountRequests = socialState.accountRequests.filter(r=>r.id!==req.id);
+          await Promise.all([persistSocial(), persist()]); await render(); renderNotifPanel(); toast('Données réinitialisées'); });
+        break;
       }
       // type 'delete' : on redemande une confirmation explicite avant d'agir, c'est irréversible
       confirmDelete(u ? `le compte de ${u.displayName} (demande approuvée)` : 'ce compte', async ()=>{
@@ -2051,19 +2073,29 @@ function userFieldsSelf(excludeId){
 
 function renderMemberAccountRequests(me){
   const exportReq = myPendingAccountRequest('export');
+  const resetReq = myPendingAccountRequest('reset');
   const deleteReq = myPendingAccountRequest('delete');
   return `
     <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:16px;">
-      <div class="sub" style="margin-bottom:10px;">Par défaut, seul un administrateur peut exporter ou supprimer un compte. Tu peux lui en faire la demande :</div>
+      <div class="sub" style="margin-bottom:10px;">Par défaut, seul un administrateur peut exporter, réinitialiser ou supprimer un compte. Tu peux lui en faire la demande :</div>
       <div class="row-actions" style="justify-content:flex-start;gap:10px;flex-wrap:wrap;">
         ${exportReq
           ? `<span class="pill pill-amber">Export demandé — en attente</span>`
           : `<button class="btn btn-ghost btn-sm" data-action="request-export">${icon('arrowDown')}Demander l\u2019export de mes données</button>`}
+        ${resetReq
+          ? `<span class="pill pill-amber">Reset demandé — en attente</span>`
+          : `<button class="btn btn-ghost btn-sm" data-action="request-reset-data">${icon('refresh')}Demander à vider mes données</button>`}
         ${deleteReq
           ? `<span class="pill pill-amber">Suppression demandée — en attente</span>`
           : `<button class="btn btn-ghost btn-sm" data-action="request-delete-account" style="color:var(--coral);">${icon('trash')}Demander la suppression de mon compte</button>`}
       </div>
+      <div class="field-note" style="margin-top:10px;">"Vider mes données" garde ton compte et tes identifiants — seules tes saisies (revenus, dépenses...) sont remises à zéro. "Supprimer mon compte" retire aussi tes identifiants, définitivement.</div>
     </div>`;
+}
+function accountRequestLabel(type){
+  if(type==='export') return 'demande l\u2019export de ses données';
+  if(type==='reset') return 'demande à vider ses données (garde son compte)';
+  return 'demande la suppression de son compte';
 }
 function renderPendingAccountRequests(){
   const pending = pendingAccountRequests();
@@ -2073,7 +2105,7 @@ function renderPendingAccountRequests(){
       <div class="sub" style="margin-bottom:10px;font-weight:600;color:var(--text);">Demandes en attente</div>
       ${pending.map(r=>{
         const from = authState.users.find(u=>u.id===r.fromId);
-        const label = r.type==='export' ? 'demande l\u2019export de ses données' : 'demande la suppression de son compte';
+        const label = accountRequestLabel(r.type);
         return `<div class="user-row">
           <div class="avatar" style="background:${avatarColor(from)}">${initials(from)}</div>
           <div class="info"><div class="name">${from?from.displayName:'?'}</div><div class="meta">${label}</div></div>
@@ -2475,7 +2507,7 @@ function renderNotifPanel(){
   });
   pendingAccountRequests().forEach(r=>{
     const from = authState.users.find(u=>u.id===r.fromId);
-    const label = r.type==='export' ? 'demande l\u2019export de ses données' : 'demande la suppression de son compte';
+    const label = accountRequestLabel(r.type);
     items.push(`<div class="notif-item" data-action="open-parametres">
       <div class="avatar" style="background:${avatarColor(from)};width:32px;height:32px;font-size:12px;">${initials(from)}</div>
       <div class="info"><div class="name">${from?from.displayName:'?'}</div><div class="meta">${label}</div></div>
