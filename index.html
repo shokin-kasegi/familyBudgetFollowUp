@@ -830,15 +830,29 @@ function analyseSearchableTerms(){
   mine(state.abonnements).forEach(a=>terms.add(a.nom));
   mine(state.charges).forEach(c=>{ terms.add(c.categorie); if(c.description) terms.add(c.description); });
   mine(state.depenses).forEach(d=>terms.add(d.libelle));
+  const partner = jointPartner();
+  if(partner){
+    forOwner(state.abonnements, partner.id).filter(a=>a.compte==='Compte Joint').forEach(a=>terms.add(a.nom));
+    forOwner(state.charges, partner.id).filter(c=>c.compte==='Compte Joint').forEach(c=>{ terms.add(c.categorie); if(c.description) terms.add(c.description); });
+    forOwner(state.depenses, partner.id).filter(d=>d.compte==='Compte Joint').forEach(d=>terms.add(d.libelle));
+  }
   return Array.from(terms).filter(Boolean).sort((a,b)=>a.localeCompare(b));
 }
 function analyseMatchingEntries(term){
   const t = (term||'').trim().toLowerCase();
   if(!t) return [];
   const out = [];
-  mine(state.abonnements).forEach(a=>{ if(a.nom.toLowerCase().includes(t)) out.push({type:'abonnement', item:a}); });
-  mine(state.charges).forEach(c=>{ if((c.categorie||'').toLowerCase().includes(t) || (c.description||'').toLowerCase().includes(t)) out.push({type:'charge', item:c}); });
-  mine(state.depenses).forEach(d=>{ if(d.libelle.toLowerCase().includes(t)) out.push({type:'depense', item:d}); });
+  mine(state.abonnements).forEach(a=>{ if(a.nom.toLowerCase().includes(t)) out.push({type:'abonnement', item:a, mine:true}); });
+  mine(state.charges).forEach(c=>{ if((c.categorie||'').toLowerCase().includes(t) || (c.description||'').toLowerCase().includes(t)) out.push({type:'charge', item:c, mine:true}); });
+  mine(state.depenses).forEach(d=>{ if(d.libelle.toLowerCase().includes(t)) out.push({type:'depense', item:d, mine:true}); });
+  // Les saisies jointes du/de la partenaire comptent aussi, même si on n'en est
+  // pas à l'origine — c'est bien une dépense commune, on doit la voir dans le total.
+  const partner = jointPartner();
+  if(partner){
+    forOwner(state.abonnements, partner.id).filter(a=>a.compte==='Compte Joint').forEach(a=>{ if(a.nom.toLowerCase().includes(t)) out.push({type:'abonnement', item:a, mine:false}); });
+    forOwner(state.charges, partner.id).filter(c=>c.compte==='Compte Joint').forEach(c=>{ if((c.categorie||'').toLowerCase().includes(t) || (c.description||'').toLowerCase().includes(t)) out.push({type:'charge', item:c, mine:false}); });
+    forOwner(state.depenses, partner.id).filter(d=>d.compte==='Compte Joint').forEach(d=>{ if(d.libelle.toLowerCase().includes(t)) out.push({type:'depense', item:d, mine:false}); });
+  }
   return out;
 }
 function analyseMonthlyTotals(term, year){
@@ -846,13 +860,15 @@ function analyseMonthlyTotals(term, year){
   const months = [];
   for(let m=1;m<=12;m++){
     const key = monthKey(year,m);
-    let total = 0;
-    matches.forEach(({type,item})=>{
-      if(type==='abonnement'){ if(item.statut==='Actif') total += monthlyCost(item); }
-      else if(type==='charge'){ if(inRangeMonth(key, item.dateDebut, item.dateFin)) total += Number(item.budget)||0; }
-      else if(type==='depense'){ total += depenseMensualiteDuMois(item, key); }
+    let total = 0, totalMine = 0, totalPartner = 0;
+    matches.forEach(({type,item,mine:isMine})=>{
+      let v = 0;
+      if(type==='abonnement'){ if(item.statut==='Actif') v = monthlyCost(item); }
+      else if(type==='charge'){ if(inRangeMonth(key, item.dateDebut, item.dateFin)) v = Number(item.budget)||0; }
+      else if(type==='depense'){ v = depenseMensualiteDuMois(item, key); }
+      total += v; if(isMine) totalMine += v; else totalPartner += v;
     });
-    months.push({key, total});
+    months.push({key, total, totalMine, totalPartner});
   }
   return months;
 }
@@ -2219,6 +2235,9 @@ function renderAnalyse(){
   const hasResults = term.trim().length>0;
   const months = hasResults ? analyseMonthlyTotals(term, year) : [];
   const yearTotal = months.reduce((s,m)=>s+m.total,0);
+  const yearTotalMine = months.reduce((s,m)=>s+m.totalMine,0);
+  const yearTotalPartner = months.reduce((s,m)=>s+m.totalPartner,0);
+  const partner = jointPartner();
   const yearsWithData = hasResults ? analyseYearsWithData(term) : [];
   const allYearsTotal = hasResults ? yearsWithData.reduce((s,y)=>s+analyseMonthlyTotals(term,y).reduce((s2,m)=>s2+m.total,0),0) : 0;
 
@@ -2240,7 +2259,8 @@ function renderAnalyse(){
     <div class="page-head" style="margin-bottom:16px;"><div><div class="page-sub" style="margin-top:0;">Résultats pour "${term}" — ${months.filter(m=>m.total>0).length===0 ? 'aucune correspondance ce mois-ci' : ''}</div></div>${yearStepperHTML(year, 'analyse')}</div>
 
     <div class="grid g3" style="margin-bottom:16px;">
-      <div class="card stat-card"><div class="k">${icon('calendar')} Total ${year}</div><div class="v">${fmtEUR(yearTotal)}</div></div>
+      <div class="card stat-card"><div class="k">${icon('calendar')} Total ${year}</div><div class="v">${fmtEUR(yearTotal)}</div>
+        ${partner && yearTotalPartner>0 ? `<div class="d">Toi : ${fmtEUR(yearTotalMine)} · ${partner.displayName} : ${fmtEUR(yearTotalPartner)}</div>` : ''}</div>
       <div class="card stat-card"><div class="k">${icon('wallet')} Moyenne mensuelle ${year}</div><div class="v">${fmtEUR(yearTotal/12)}</div></div>
       <div class="card stat-card"><div class="k">${icon('chart')} Total tous les ans confondus</div><div class="v">${fmtEUR(allYearsTotal)}</div><div class="d">${yearsWithData.join(', ')}</div></div>
     </div>
