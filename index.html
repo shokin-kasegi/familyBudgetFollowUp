@@ -464,7 +464,7 @@ function defaultAuth(){
   return { users: [] };
 }
 function defaultSocial(){
-  return { jointRequests: [], messages: [], accountRequests: [] };
+  return { jointRequests: [], messages: [], accountRequests: [], expenseDeleteRequests: [] };
 }
 function defaultState(){
   const now = new Date();
@@ -503,6 +503,7 @@ async function loadState(){
     const rawSocial = localStorage.getItem('budget_social');
     socialState = rawSocial ? JSON.parse(rawSocial) : defaultSocial();
     if(!socialState.accountRequests){ socialState.accountRequests = []; needsPersistSocial = true; }
+    if(!socialState.expenseDeleteRequests){ socialState.expenseDeleteRequests = []; needsPersistSocial = true; }
     if(!rawSocial) needsPersistSocial = true;
   }catch(e){ socialState = defaultSocial(); needsPersistSocial = true; }
 
@@ -718,9 +719,9 @@ function jointDepensesTotalFor(ownerId, key){
   return forOwner(state.depenses, ownerId).filter(d=>d.compte==='Compte Joint').reduce((s,d)=>s+depenseMensualiteDuMois(d,key),0);
 }
 function jointDetailFor(ownerId, key){
-  const abo = forOwner(state.abonnements, ownerId).filter(a=>a.statut==='Actif' && a.compte==='Compte Joint').map(a=>({nom:a.nom, montant:monthlyCost(a), cat:a.categorie}));
-  const ch = forOwner(state.charges, ownerId).filter(c=>c.compte==='Compte Joint' && inRangeMonth(key, c.dateDebut, c.dateFin)).map(c=>({nom:c.categorie, montant:Number(c.budget), cat:c.description||c.type}));
-  const dep = forOwner(state.depenses, ownerId).filter(d=>d.compte==='Compte Joint' && depenseMensualiteDuMois(d,key)>0).map(d=>({nom:d.libelle, montant:depenseMensualiteDuMois(d,key), cat:d.modePaiement==='Echelonne'?'Dépense échelonnée':'Dépense'}));
+  const abo = forOwner(state.abonnements, ownerId).filter(a=>a.statut==='Actif' && a.compte==='Compte Joint').map(a=>({id:a.id, itemType:'abonnements', nom:a.nom, montant:monthlyCost(a), cat:a.categorie}));
+  const ch = forOwner(state.charges, ownerId).filter(c=>c.compte==='Compte Joint' && inRangeMonth(key, c.dateDebut, c.dateFin)).map(c=>({id:c.id, itemType:'charges', nom:c.categorie, montant:Number(c.budget), cat:c.description||c.type}));
+  const dep = forOwner(state.depenses, ownerId).filter(d=>d.compte==='Compte Joint' && depenseMensualiteDuMois(d,key)>0).map(d=>({id:d.id, itemType:'depenses', nom:d.libelle, montant:depenseMensualiteDuMois(d,key), cat:d.modePaiement==='Echelonne'?'Dépense échelonnée':'Dépense'}));
   return [...abo, ...ch, ...dep];
 }
 /* Répartition du compte joint au prorata des revenus de chacun.
@@ -1464,11 +1465,28 @@ function renderCompteJoint(){
         <div class="section-head" style="margin-bottom:10px;"><h3 style="font-size:14px;font-weight:600;">Lignes de ${partner.displayName}</h3></div>
         ${partnerDetail.length===0 ? emptyState('link','Rien pour l\u2019instant','',  '', '') : `
         <div class="table-wrap"><table>
-          <thead><tr><th>Élément</th><th>Catégorie</th><th>Montant / mois</th></tr></thead>
-          <tbody>${partnerDetail.map(d=>`<tr><td>${d.nom}</td><td><span class="pill pill-dim">${d.cat}</span></td><td class="num">${fmtEURPrecise(d.montant)}</td></tr>`).join('')}</tbody>
+          <thead><tr><th>Élément</th><th>Catégorie</th><th>Montant / mois</th><th></th></tr></thead>
+          <tbody>${partnerDetail.map(d=>{
+            const pending = existingExpenseDeleteRequest(d.id);
+            return `<tr><td>${d.nom}</td><td><span class="pill pill-dim">${d.cat}</span></td><td class="num">${fmtEURPrecise(d.montant)}</td>
+            <td class="row-actions">${pending
+              ? `<span class="pill pill-amber">Suppression demandée</span>`
+              : `<button class="icon-btn del" data-action="request-delete-expense" data-item-id="${d.id}" data-item-type="${d.itemType}" data-item-label="${d.nom.replace(/"/g,'&quot;')}" title="Demander la suppression">${icon('trash')}</button>`}</td>
+          </tr>`;}).join('')}</tbody>
         </table></div>`}
       </div>
     </div>
+
+    ${myPendingExpenseDeleteRequestsReceived().length>0 ? `
+    <div class="card" style="margin-top:16px;">
+      <div class="section-head" style="margin-bottom:10px;"><h3 style="font-size:14px;font-weight:600;">Demandes de suppression reçues</h3></div>
+      ${myPendingExpenseDeleteRequestsReceived().map(r=>`
+        <div class="user-row">
+          <div class="info"><div class="name">${r.itemLabel}</div><div class="meta">${partner.displayName} souhaite retirer cette ligne du compte joint</div></div>
+          <button class="btn btn-primary btn-sm" data-action="approve-expense-delete" data-id="${r.id}">${icon('check')}Accepter</button>
+          <button class="btn btn-ghost btn-sm" data-action="decline-expense-delete" data-id="${r.id}">${icon('x')}Refuser</button>
+        </div>`).join('')}
+    </div>` : ''}
 
     <div class="card" style="margin-top:16px;">
       <div class="section-head" style="margin-bottom:10px;"><h3 style="font-size:14px;font-weight:600;">Messages avec ${partner.displayName}</h3></div>
@@ -1690,6 +1708,8 @@ async function handleAction(action, id, el){
           u.jointWith = null;
           await persistAuth();
         }
+        socialState.expenseDeleteRequests = socialState.expenseDeleteRequests.filter(r=>r.fromId!==id && r.toId!==id);
+        await persistSocial();
         await persist(); await render(); toast(hadPartner ? 'Données vidées et compte joint quitté' : 'Données vidées'); }); break; }
 
     /* Comptes : demandes des membres (export / suppression) */
@@ -1758,6 +1778,28 @@ async function handleAction(action, id, el){
       socialState.accountRequests = socialState.accountRequests.filter(r=>r.id!==req.id); // usage unique : la demande disparaît après téléchargement
       await persistSocial(); await render(); renderNotifPanel(); toast('Téléchargement effectué'); break; }
 
+    /* Compte joint : demande de suppression d'une ligne appartenant au/à la partenaire */
+    case 'request-delete-expense': {
+      const itemId = el.dataset.itemId, itemType = el.dataset.itemType, itemLabel = el.dataset.itemLabel;
+      const partner = jointPartner();
+      if(!partner) break;
+      if(existingExpenseDeleteRequest(itemId)) return toast('Une demande est déjà en attente pour cette ligne.');
+      socialState.expenseDeleteRequests.push({id:uid(), fromId:currentUser().id, toId:partner.id, itemType, itemId, itemLabel, status:'pending', createdAt:new Date().toISOString()});
+      await persistSocial(); await render(); toast('Demande de suppression envoyée'); break; }
+    case 'approve-expense-delete': {
+      const req = socialState.expenseDeleteRequests.find(r=>r.id===id);
+      if(!req) break;
+      const arr = itemArrayFor(req.itemType);
+      const idx = arr.findIndex(x=>x.id===req.itemId);
+      if(idx>=0) arr.splice(idx,1);
+      req.status='done';
+      socialState.expenseDeleteRequests = socialState.expenseDeleteRequests.filter(r=>r.id!==req.id);
+      await Promise.all([persist(), persistSocial()]); await render(); renderNotifPanel(); toast('Ligne supprimée'); break; }
+    case 'decline-expense-delete': {
+      const req = socialState.expenseDeleteRequests.find(r=>r.id===id);
+      if(req) req.status='declined';
+      await persistSocial(); await render(); renderNotifPanel(); toast('Demande refusée'); break; }
+
     /* Compte joint : demandes */
     case 'send-joint-request': {
       const me = currentUser();
@@ -1789,6 +1831,7 @@ async function handleAction(action, id, el){
       const me = currentUser(); const partner = authState.users.find(u=>u.id===me.jointWith);
       me.jointWith = null; if(partner) partner.jointWith = null;
       socialState.jointRequests = socialState.jointRequests.filter(r=>!((r.fromId===me.id||r.toId===me.id) && r.status==='accepted'));
+      socialState.expenseDeleteRequests = socialState.expenseDeleteRequests.filter(r=>!(r.fromId===me.id||r.toId===me.id));
       await persistAuth(); await persistSocial(); await render(); toast('Compte joint rompu'); }); break;
 
     /* Messagerie */
@@ -2221,8 +2264,22 @@ function myApprovedExportRequest(){
   const me = currentUser();
   return socialState.accountRequests.find(r=>r.fromId===me.id && r.type==='export' && r.status==='approved');
 }
+/* ---- Suppression d'une dépense du/de la partenaire : nécessite son accord ---- */
+function myPendingExpenseDeleteRequestsReceived(){
+  const me = currentUser();
+  return socialState.expenseDeleteRequests.filter(r=>r.toId===me.id && r.status==='pending');
+}
+function itemArrayFor(itemType){
+  if(itemType==='abonnements') return state.abonnements;
+  if(itemType==='charges') return state.charges;
+  if(itemType==='depenses') return state.depenses;
+  return [];
+}
+function existingExpenseDeleteRequest(itemId){
+  return socialState.expenseDeleteRequests.find(r=>r.itemId===itemId && r.status==='pending');
+}
 function notifBadgeCount(){
-  return myPendingIncomingRequests().length + unreadMessagesCount() + pendingAccountRequests().length + (myApprovedExportRequest() ? 1 : 0);
+  return myPendingIncomingRequests().length + unreadMessagesCount() + pendingAccountRequests().length + (myApprovedExportRequest() ? 1 : 0) + myPendingExpenseDeleteRequestsReceived().length;
 }
 function markMessagesRead(){
   const me = currentUser();
@@ -2251,7 +2308,7 @@ function wipeUserData(userId){
 /* ============================== NETTOYAGE SOCIAL (fusion sûre lors des synchros) ============================== */
 function mergeSocial(local, remote){
   const byId = (arr)=>{ const m=new Map(); (arr||[]).forEach(x=>m.set(x.id,x)); return m; };
-  const mReq = byId(local.jointRequests), mMsg = byId(local.messages), mAcc = byId(local.accountRequests);
+  const mReq = byId(local.jointRequests), mMsg = byId(local.messages), mAcc = byId(local.accountRequests), mExp = byId(local.expenseDeleteRequests);
   (remote.jointRequests||[]).forEach(r=>{
     const existing = mReq.get(r.id);
     // le statut le plus "avancé" gagne (une réponse locale ne doit pas être écrasée par un pending distant obsolète)
@@ -2262,7 +2319,11 @@ function mergeSocial(local, remote){
     const existing = mAcc.get(r.id);
     if(!existing || (r.status!=='pending')) mAcc.set(r.id, r);
   });
-  return { jointRequests: Array.from(mReq.values()), messages: Array.from(mMsg.values()), accountRequests: Array.from(mAcc.values()) };
+  (remote.expenseDeleteRequests||[]).forEach(r=>{
+    const existing = mExp.get(r.id);
+    if(!existing || (r.status!=='pending')) mExp.set(r.id, r);
+  });
+  return { jointRequests: Array.from(mReq.values()), messages: Array.from(mMsg.values()), accountRequests: Array.from(mAcc.values()), expenseDeleteRequests: Array.from(mExp.values()) };
 }
 
 let syncTimer = null;
@@ -2534,6 +2595,17 @@ function renderNotifPanel(){
       <div class="info"><div class="name">Ton export est prêt</div><div class="meta">Va dans Paramètres pour le télécharger</div></div>
     </div>`);
   }
+  myPendingExpenseDeleteRequestsReceived().forEach(r=>{
+    const from = authState.users.find(u=>u.id===r.fromId);
+    items.push(`<div class="notif-item">
+      <div class="avatar" style="background:${avatarColor(from)};width:32px;height:32px;font-size:12px;">${initials(from)}</div>
+      <div class="info"><div class="name">${r.itemLabel}</div><div class="meta">${from?from.displayName:'?'} souhaite retirer cette ligne du compte joint</div></div>
+      <div class="row-actions" style="gap:6px;">
+        <button class="icon-btn" data-action="approve-expense-delete" data-id="${r.id}" style="color:var(--teal);">${icon('check')}</button>
+        <button class="icon-btn del" data-action="decline-expense-delete" data-id="${r.id}">${icon('x')}</button>
+      </div>
+    </div>`);
+  });
   panel.innerHTML = `
     <div class="notif-head"><span>Notifications</span><button class="icon-btn" data-action="close-notif">${icon('x')}</button></div>
     <div class="notif-body">
