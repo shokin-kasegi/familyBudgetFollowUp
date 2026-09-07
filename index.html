@@ -1981,6 +1981,25 @@ async function handleAction(action, id, el){
       if(socialState.jointRequests.some(r=>r.fromId===me.id && r.toId===toId && r.status==='pending')) return toast('Demande déjà envoyée');
       socialState.jointRequests.push({id:uid(), fromId:me.id, toId, status:'pending', createdAt:new Date().toISOString()});
       await persistSocial(); await render(); toast('Demande envoyée'); break; }
+    case 'send-joint-request-by-username': {
+      const me = currentUser();
+      const errEl = document.getElementById('joint-target-error');
+      if(errEl){ errEl.style.display='none'; errEl.textContent=''; }
+      if(me.jointWith) return toast('Tu as déjà un compte joint actif — quitte-le avant d\'en proposer un autre.');
+      const inputEl = document.getElementById('joint-target-username');
+      const uname = (inputEl?.value||'').trim().toLowerCase();
+      if(!uname) return toast('Entre un identifiant.');
+      const target = authState.users.find(u=>u.username===uname);
+      if(!target){
+        if(errEl){ errEl.textContent = 'Aucun compte trouvé avec cet identifiant.'; errEl.style.display=''; }
+        else toast('Aucun compte trouvé avec cet identifiant.');
+        return;
+      }
+      if(target.id===me.id) return toast('Tu ne peux pas te proposer un compte joint à toi-même.');
+      if(target.jointWith) return toast(`${target.displayName} a déjà un compte joint actif avec quelqu'un d'autre.`);
+      if(socialState.jointRequests.some(r=>r.fromId===me.id && r.toId===target.id && r.status==='pending')) return toast('Demande déjà envoyée');
+      socialState.jointRequests.push({id:uid(), fromId:me.id, toId:target.id, status:'pending', createdAt:new Date().toISOString()});
+      await persistSocial(); await render(); toast('Demande envoyée'); break; }
     case 'cancel-joint-request':
       socialState.jointRequests = socialState.jointRequests.filter(r=>r.id!==id);
       await persistSocial(); await render(); toast('Demande annulée'); break;
