@@ -298,6 +298,22 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
 .pw-toggle{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);}
 .pw-toggle:hover{background:rgba(255,255,255,0.06);color:var(--text);}
 .pw-toggle svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;}
+.th-filter-wrap{position:relative;display:inline-flex;align-items:center;gap:4px;}
+.th-filter-btn{width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;border-radius:5px;color:var(--text-faint);flex-shrink:0;}
+.th-filter-btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2.2;}
+.th-filter-btn:hover,.th-filter-btn.active{color:var(--text);background:rgba(255,255,255,0.08);}
+.col-filter-panel{position:absolute;top:24px;left:0;z-index:40;width:230px;background:#161616;border:1px solid var(--border);border-radius:12px;padding:10px;box-shadow:0 12px 32px rgba(0,0,0,0.5);text-transform:none;font-weight:400;}
+.cf-sort-row{display:flex;flex-direction:column;gap:2px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+.cf-sort-row button{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:7px;font-size:12.5px;color:var(--text);text-align:left;}
+.cf-sort-row button:hover{background:rgba(255,255,255,0.06);}
+.cf-sort-row svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;flex-shrink:0;}
+.cf-search{width:100%;padding:7px 9px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid var(--border);font-size:12.5px;color:var(--text);margin-bottom:8px;}
+.cf-list{max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;margin-bottom:8px;}
+.cf-item{display:flex;align-items:center;gap:7px;padding:5px 6px;border-radius:6px;font-size:12.5px;color:var(--text);cursor:pointer;}
+.cf-item:hover{background:rgba(255,255,255,0.05);}
+.cf-item input{width:14px;height:14px;flex-shrink:0;accent-color:#FFFFFF;}
+.cf-actions{display:flex;gap:6px;}
+.cf-actions .btn{flex:1;justify-content:center;padding:6px;}
 
 /* ---------- Settings ---------- */
 .settings-block{margin-bottom:24px;}
@@ -441,6 +457,9 @@ const ICONS = {
   logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
   refresh:'<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
   search:'<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  filterDown:'<polyline points="6 9 12 15 18 9"/>',
+  sortAsc:'<path d="M11 5v14M11 5l-4 4M11 5l4 4"/>',
+  sortDesc:'<path d="M11 19V5M11 19l-4-4M11 19l4-4"/>',
   bell:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
   eye:'<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/>',
   eyeOff:'<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.9 19.9 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a19.9 19.9 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
@@ -1318,59 +1337,96 @@ function abo_fields(){
 
 /* ============================== ÉCHÉANCES ============================== */
 /* ============================== DÉPENSES ============================== */
+/* Filtre façon Excel : par colonne, tri croissant/décroissant + sélection des
+   valeurs à afficher (cases à cocher). L'état confirmé (après OK) vit dans
+   state.depensesFilter ; l'état en cours d'édition dans le panneau ouvert vit
+   en mémoire (colFilterOpen/colFilterPending) pour ne synchroniser qu'à la
+   validation, comme dans Excel (Annuler ne doit rien changer). */
+let colFilterOpen = null;      // colonne dont le panneau est ouvert, ex. 'categorie'
+let colFilterPending = null;   // Set des valeurs cochées, en cours d'édition
+let colFilterSearch = '';      // texte de recherche dans le panneau ouvert
+
+const DEP_COLUMNS = {
+  libelle:   { label:'Libellé',   type:'text',   get:d=>d.libelle },
+  categorie: { label:'Catégorie', type:'text',   get:d=>d.categorie },
+  compte:    { label:'Compte',    type:'text',   get:d=>d.compte||'Compte Perso' },
+  paiement:  { label:'Paiement',  type:'text',   get:d=>d.modePaiement==='Echelonne'?'Échelonné':(d.modePaiement==='Previsionnelle'?'Prévisionnelle':'En une fois') },
+  montant:   { label:'Montant',   type:'number', get:d=>Number(d.montant)||0 },
+};
+
 function depensesFilterState(){
-  return state.depensesFilter || {categorie:'', compte:'', mode:''};
-}
-function applyDepensesFilter(arr){
-  const f = depensesFilterState();
-  return arr.filter(d=>
-    (!f.categorie || d.categorie===f.categorie) &&
-    (!f.compte || (d.compte||'Compte Perso')===f.compte) &&
-    (!f.mode || d.modePaiement===f.mode)
-  );
+  if(!state.depensesFilter || !state.depensesFilter.selected){
+    state.depensesFilter = { sortCol:null, sortDir:'asc', selected:{} };
+  }
+  return state.depensesFilter;
 }
 function depensesFilterActive(){
   const f = depensesFilterState();
-  return !!(f.categorie || f.compte || f.mode);
+  return Object.values(f.selected).some(v=>v!==null && v!==undefined);
+}
+function applyDepensesFilterAndSort(arr){
+  const f = depensesFilterState();
+  let out = arr.filter(d=>{
+    for(const col in f.selected){
+      const sel = f.selected[col];
+      if(sel && !sel.includes(String(DEP_COLUMNS[col].get(d)))) return false;
+    }
+    return true;
+  });
+  if(f.sortCol && DEP_COLUMNS[f.sortCol]){
+    const {type, get} = DEP_COLUMNS[f.sortCol];
+    out = [...out].sort((a,b)=>{
+      let va=get(a), vb=get(b);
+      if(type==='text'){ va=String(va).toLowerCase(); vb=String(vb).toLowerCase(); }
+      if(va<vb) return f.sortDir==='asc'?-1:1;
+      if(va>vb) return f.sortDir==='asc'?1:-1;
+      return 0;
+    });
+  }
+  return out;
+}
+function colDistinctValues(col, arr){
+  return Array.from(new Set(arr.map(d=>String(DEP_COLUMNS[col].get(d))))).sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
+}
+function colFilterHeaderHTML(col, arr){
+  const c = DEP_COLUMNS[col];
+  const f = depensesFilterState();
+  const active = !!f.selected[col] || f.sortCol===col;
+  return `<th><span class="th-filter-wrap">${c.label}<button class="th-filter-btn ${active?'active':''}" data-action="toggle-col-filter" data-col="${col}">${icon('filterDown')}</button>${colFilterOpen===col ? colFilterPanelHTML(col, arr) : ''}</span></th>`;
+}
+function colFilterPanelHTML(col, arr){
+  const c = DEP_COLUMNS[col];
+  const values = colDistinctValues(col, arr);
+  const shown = colFilterSearch ? values.filter(v=>v.toLowerCase().includes(colFilterSearch.toLowerCase())) : values;
+  const allChecked = shown.length>0 && shown.every(v=>colFilterPending.has(v));
+  const isNumeric = c.type==='number';
+  return `
+    <div class="col-filter-panel" data-col="${col}">
+      <div class="cf-sort-row">
+        <button data-action="col-sort" data-col="${col}" data-dir="asc">${icon('sortAsc')}${isNumeric?'Croissant':'A à Z'}</button>
+        <button data-action="col-sort" data-col="${col}" data-dir="desc">${icon('sortDesc')}${isNumeric?'Décroissant':'Z à A'}</button>
+      </div>
+      <input type="text" class="cf-search" data-action="col-filter-search" placeholder="Rechercher…" value="${colFilterSearch.replace(/"/g,'&quot;')}">
+      <div class="cf-list">
+        <label class="cf-item"><input type="checkbox" data-action="col-filter-toggle-all" ${allChecked?'checked':''}> <strong>(Tout sélectionner)</strong></label>
+        ${shown.map(v=>`<label class="cf-item" data-value-row="${v.replace(/"/g,'&quot;')}"><input type="checkbox" data-action="col-filter-toggle-value" data-value="${v.replace(/"/g,'&quot;')}" ${colFilterPending.has(v)?'checked':''}> ${isNumeric?fmtEUR(Number(v)):v}</label>`).join('')}
+      </div>
+      <div class="cf-actions">
+        <button class="btn btn-primary btn-sm" data-action="col-filter-ok">${icon('check')}OK</button>
+        <button class="btn btn-ghost btn-sm" data-action="col-filter-cancel">Annuler</button>
+      </div>
+    </div>`;
 }
 function renderDepenses(){
   const all = mine(state.depenses);
-  const allCats = Array.from(new Set(all.map(d=>d.categorie))).sort((a,b)=>a.localeCompare(b));
-  const list = applyDepensesFilter(all.filter(d=>d.modePaiement!=='Previsionnelle'));
-  const previsionnelles = applyDepensesFilter(all.filter(d=>d.modePaiement==='Previsionnelle'))
+  const list = applyDepensesFilterAndSort(all.filter(d=>d.modePaiement!=='Previsionnelle'));
+  const previsionnelles = all.filter(d=>d.modePaiement==='Previsionnelle')
     .sort((a,b)=> PRIORITE_ORDER[a.priorite||'Basse'] - PRIORITE_ORDER[b.priorite||'Basse']);
   const key = state.selectedMonth;
-  const f = depensesFilterState();
+  const filtrableArr = all.filter(d=>d.modePaiement!=='Previsionnelle');
   return `
     <div class="page-head"><div><div class="page-title">Dépenses</div><div class="page-sub">Achats et frais, payés en une fois, échelonnés, ou prévisionnels</div></div>
       <button class="btn btn-primary" data-action="add-depense">${icon('plus')}Ajouter une dépense</button></div>
-
-    <div class="card" style="margin-bottom:16px;">
-      <div class="filter-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
-        <div class="field" style="flex:1;min-width:140px;margin-bottom:0;"><label>Catégorie</label>
-          <select data-filter="categorie">
-            <option value="">Toutes</option>
-            ${allCats.map(c=>`<option value="${c}" ${f.categorie===c?'selected':''}>${c}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field" style="flex:1;min-width:140px;margin-bottom:0;"><label>Compte</label>
-          <select data-filter="compte">
-            <option value="">Tous</option>
-            <option value="Compte Perso" ${f.compte==='Compte Perso'?'selected':''}>Compte Perso</option>
-            <option value="Compte Joint" ${f.compte==='Compte Joint'?'selected':''}>Compte Joint</option>
-          </select>
-        </div>
-        <div class="field" style="flex:1;min-width:140px;margin-bottom:0;"><label>Paiement</label>
-          <select data-filter="mode">
-            <option value="">Tous</option>
-            <option value="Unique" ${f.mode==='Unique'?'selected':''}>En une fois</option>
-            <option value="Echelonne" ${f.mode==='Echelonne'?'selected':''}>Échelonné</option>
-            <option value="Previsionnelle" ${f.mode==='Previsionnelle'?'selected':''}>Prévisionnelle</option>
-          </select>
-        </div>
-        ${depensesFilterActive() ? `<button class="btn btn-ghost btn-sm" data-action="clear-depenses-filter">${icon('x')}Réinitialiser</button>` : ''}
-      </div>
-    </div>
 
     ${previsionnelles.length>0 ? `
     <div class="card" style="margin-bottom:16px;">
@@ -1388,11 +1444,18 @@ function renderDepenses(){
     </div>` : ''}
 
     <div class="card">
-      ${list.length===0 ? (depensesFilterActive()
-          ? emptyState('wallet','Aucun résultat','Aucune dépense ne correspond à ces filtres.','clear-depenses-filter','Réinitialiser les filtres')
-          : emptyState('wallet','Aucune dépense','Un achat, une réparation, un imprévu… ajoutez-les ici.','add-depense','Ajouter une dépense')) : `
+      ${depensesFilterActive() ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-depenses-filter">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
+      ${filtrableArr.length===0 ? emptyState('wallet','Aucune dépense','Un achat, une réparation, un imprévu… ajoutez-les ici.','add-depense','Ajouter une dépense') :
+        (list.length===0 ? emptyState('wallet','Aucun résultat','Aucune dépense ne correspond à ces filtres.','clear-depenses-filter','Réinitialiser les filtres') : `
       <div class="table-wrap"><table>
-        <thead><tr><th>Libellé</th><th>Catégorie</th><th>Compte</th><th>Paiement</th><th>Montant</th><th>Ce mois</th><th></th></tr></thead>
+        <thead><tr>
+          ${colFilterHeaderHTML('libelle', filtrableArr)}
+          ${colFilterHeaderHTML('categorie', filtrableArr)}
+          ${colFilterHeaderHTML('compte', filtrableArr)}
+          ${colFilterHeaderHTML('paiement', filtrableArr)}
+          ${colFilterHeaderHTML('montant', filtrableArr)}
+          <th>Ce mois</th><th></th>
+        </tr></thead>
         <tbody>${list.map(d=>{
           const echelonne = d.modePaiement==='Echelonne';
           return `<tr>
@@ -1403,7 +1466,7 @@ function renderDepenses(){
           <td class="row-actions"><button class="icon-btn" data-action="edit-depense" data-id="${d.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}">${icon('trash')}</button></td>
         </tr>`;}).join('')}</tbody>
         <tfoot><tr><td colspan="5">${depensesFilterActive()?'Total (filtré)':'Total'} ${monthLabel(key)}</td><td class="num">${fmtEUR(list.reduce((s,d)=>s+depenseMensualiteDuMois(d,key),0))}</td><td></td></tr></tfoot>
-      </table></div>`}
+      </table></div>`)}
     </div>
   `;
 }
@@ -1751,6 +1814,18 @@ function afterRender(){
   }catch(e){ console.error('afterRender: erreur non bloquante', e); }
 }
 
+document.addEventListener('input', (e)=>{
+  if(e.target.dataset && e.target.dataset.action==='col-filter-search'){
+    colFilterSearch = e.target.value;
+    // Filtre la liste affichée sans re-render complet, pour ne pas perdre le focus pendant la frappe.
+    const panel = e.target.closest('.col-filter-panel');
+    if(!panel) return;
+    panel.querySelectorAll('.cf-list .cf-item[data-value-row]').forEach(row=>{
+      const v = row.dataset.valueRow.toLowerCase();
+      row.style.display = v.includes(colFilterSearch.toLowerCase()) ? '' : 'none';
+    });
+  }
+});
 document.addEventListener('change', async (e)=>{
   if(e.target.id==='import-file-input' && e.target.files[0]){ importDataFile(e.target.files[0]); }
   if(e.target.dataset && e.target.dataset.filter){
@@ -1762,6 +1837,10 @@ document.addEventListener('change', async (e)=>{
 
 document.addEventListener('click', async (e)=>{
   if(notifOpen && !e.target.closest('#notif-panel') && !e.target.closest('[data-action="toggle-notif-panel"]')){ toggleNotifPanel(false); }
+  if(colFilterOpen && !e.target.closest('.col-filter-panel') && !e.target.closest('[data-action="toggle-col-filter"]')){
+    colFilterOpen = null; colFilterPending = null; colFilterSearch = '';
+    render();
+  }
 
   const navBtn = e.target.closest('[data-nav]');
   if(navBtn){ currentView = navBtn.dataset.nav; closeSidebarMobile(); await render(); return; }
@@ -1853,7 +1932,47 @@ async function handleAction(action, id, el){
       setTimeout(setupDepenseFormToggle, 0); break;
     case 'del-depense': { const item=find(mine(state.depenses)); confirmDelete(item.libelle, async ()=>{ state.depenses = state.depenses.filter(x=>x.id!==id); await persist(); await render(); toast('Dépense supprimée'); }); break; }
     case 'goto-depenses': currentView = 'depenses'; await render(); break;
-    case 'clear-depenses-filter': state.depensesFilter = {categorie:'', compte:'', mode:''}; await persist(); await render(); break;
+    case 'clear-depenses-filter': state.depensesFilter = { sortCol:null, sortDir:'asc', selected:{} }; await persist(); await render(); break;
+    case 'toggle-col-filter': {
+      const col = el.dataset.col;
+      if(colFilterOpen===col){ colFilterOpen = null; }
+      else{
+        colFilterOpen = col;
+        colFilterSearch = '';
+        const f = depensesFilterState();
+        const arr = mine(state.depenses).filter(d=>d.modePaiement!=='Previsionnelle');
+        const all = colDistinctValues(col, arr);
+        colFilterPending = new Set(f.selected[col] || all);
+      }
+      await render(); break; }
+    case 'col-sort': {
+      const f = depensesFilterState();
+      f.sortCol = el.dataset.col; f.sortDir = el.dataset.dir;
+      colFilterOpen = null;
+      await persist(); await render(); break; }
+    case 'col-filter-toggle-all': {
+      const col = colFilterOpen;
+      const arr = mine(state.depenses).filter(d=>d.modePaiement!=='Previsionnelle');
+      const shown = colFilterSearch ? colDistinctValues(col, arr).filter(v=>v.toLowerCase().includes(colFilterSearch.toLowerCase())) : colDistinctValues(col, arr);
+      const allChecked = shown.every(v=>colFilterPending.has(v));
+      shown.forEach(v=>{ if(allChecked) colFilterPending.delete(v); else colFilterPending.add(v); });
+      await render(); break; }
+    case 'col-filter-toggle-value': {
+      const v = el.dataset.value;
+      if(colFilterPending.has(v)) colFilterPending.delete(v); else colFilterPending.add(v);
+      await render(); break; }
+    case 'col-filter-ok': {
+      const col = colFilterOpen;
+      const arr = mine(state.depenses).filter(d=>d.modePaiement!=='Previsionnelle');
+      const all = colDistinctValues(col, arr);
+      const f = depensesFilterState();
+      // Si tout est coché, ça revient à "pas de filtre" sur cette colonne.
+      f.selected[col] = (colFilterPending.size===all.length) ? null : Array.from(colFilterPending);
+      colFilterOpen = null; colFilterPending = null; colFilterSearch = '';
+      await persist(); await render(); break; }
+    case 'col-filter-cancel':
+      colFilterOpen = null; colFilterPending = null; colFilterSearch = '';
+      await render(); break;
     case 'run-analyse': {
       const val = document.getElementById('analyse-search').value;
       state.analyseTerm = val; await persist(); await render(); break; }
