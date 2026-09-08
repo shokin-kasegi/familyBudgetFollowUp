@@ -1858,7 +1858,7 @@ async function handleAction(action, id, el){
       confirmDelete(u.displayName, async ()=>{
         // Nettoyage : si quelqu'un avait un compte joint actif avec ce compte, on le libère.
         const partner = authState.users.find(x=>x.jointWith===u.id);
-        if(partner) partner.jointWith = null;
+        if(partner){ partner.jointWith = null; untagJointExpenses([partner.id]); }
         authState.users = authState.users.filter(x=>x.id!==id);
         socialState.jointRequests = socialState.jointRequests.filter(r=>r.fromId!==id && r.toId!==id);
         socialState.accountRequests = socialState.accountRequests.filter(r=>r.fromId!==id);
@@ -1875,7 +1875,7 @@ async function handleAction(action, id, el){
         const hadPartner = !!u.jointWith;
         if(u.jointWith){
           const partner = authState.users.find(x=>x.id===u.jointWith);
-          if(partner) partner.jointWith = null;
+          if(partner){ partner.jointWith = null; untagJointExpenses([partner.id]); }
           u.jointWith = null;
           await persistAuth();
         }
@@ -1915,7 +1915,7 @@ async function handleAction(action, id, el){
             wipeUserData(u.id);
             if(u.jointWith){
               const partner = authState.users.find(x=>x.id===u.jointWith);
-              if(partner) partner.jointWith = null;
+              if(partner){ partner.jointWith = null; untagJointExpenses([partner.id]); }
               u.jointWith = null;
               await persistAuth();
             }
@@ -1929,7 +1929,7 @@ async function handleAction(action, id, el){
       confirmDelete(u ? `le compte de ${u.displayName} (demande approuvée)` : 'ce compte', async ()=>{
         if(u){
           const partner = authState.users.find(x=>x.jointWith===u.id);
-          if(partner) partner.jointWith = null;
+          if(partner){ partner.jointWith = null; untagJointExpenses([partner.id]); }
           authState.users = authState.users.filter(x=>x.id!==u.id);
           socialState.jointRequests = socialState.jointRequests.filter(r=>r.fromId!==u.id && r.toId!==u.id);
           wipeUserData(u.id);
@@ -2022,7 +2022,8 @@ async function handleAction(action, id, el){
       me.jointWith = null; if(partner) partner.jointWith = null;
       socialState.jointRequests = socialState.jointRequests.filter(r=>!((r.fromId===me.id||r.toId===me.id) && r.status==='accepted'));
       socialState.expenseDeleteRequests = socialState.expenseDeleteRequests.filter(r=>!(r.fromId===me.id||r.toId===me.id));
-      await persistAuth(); await persistSocial(); await render(); toast('Compte joint rompu'); }); break;
+      untagJointExpenses(partner ? [me.id, partner.id] : [me.id]);
+      await persistAuth(); await persistSocial(); await persist(); await render(); toast('Compte joint rompu'); }); break;
 
     /* Messagerie */
     case 'send-message': {
@@ -2571,6 +2572,16 @@ function exportUserData(userId){
 }
 function wipeUserData(userId){
   OWNED_ARRAYS.forEach(key=>{ state[key] = (state[key]||[]).filter(item=>item.ownerId!==userId); });
+}
+/* Repasse en Compte Perso toutes les saisies taguées Compte Joint appartenant à
+   ces deux personnes — utilisé chaque fois qu'un compte joint prend fin, pour ne
+   jamais laisser de dépenses "orphelines" toujours taguées comme communes. */
+function untagJointExpenses(userIds){
+  ['abonnements','charges','depenses'].forEach(key=>{
+    (state[key]||[]).forEach(item=>{
+      if(userIds.includes(item.ownerId) && item.compte==='Compte Joint') item.compte='Compte Perso';
+    });
+  });
 }
 
 /* ============================== NETTOYAGE SOCIAL (fusion sûre lors des synchros) ============================== */
