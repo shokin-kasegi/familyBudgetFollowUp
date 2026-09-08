@@ -76,7 +76,17 @@ a{color:inherit;}
   backdrop-filter:blur(30px) saturate(150%);
   -webkit-backdrop-filter:blur(30px) saturate(150%);
   z-index:40;
+  transition:width .18s ease, padding .18s ease;
 }
+#shell.nav-collapsed .sidebar{width:0;padding:0;overflow:hidden;border-right:none;}
+.sidebar-expand-btn{
+  display:none;position:fixed;top:22px;left:22px;z-index:50;
+  width:38px;height:38px;border-radius:11px;align-items:center;justify-content:center;
+  background:var(--panel-2);border:1px solid var(--border);box-shadow:var(--shadow-soft);
+}
+.sidebar-expand-btn svg{width:18px;height:18px;stroke:var(--text);fill:none;stroke-width:1.8;}
+#shell.nav-collapsed .sidebar-expand-btn{display:flex;}
+@media(max-width:880px){ .sidebar-expand-btn{display:none !important;} }
 .brand{
   display:flex;align-items:center;gap:10px;
   padding:6px 10px 26px 10px;
@@ -403,6 +413,7 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
 <div id="auth-root"></div>
 <div id="shell">
   <nav class="sidebar" id="sidebar"></nav>
+  <button class="sidebar-expand-btn" data-action="toggle-sidebar-collapse" title="Afficher la navigation"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
   <div id="overlay-scrim"></div>
   <main>
     <div class="mobile-topbar">
@@ -441,6 +452,9 @@ const ICONS = {
   trash:'<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
   chevL:'<polyline points="15 18 9 12 15 6"/>',
   chevR:'<polyline points="9 18 15 12 9 6"/>',
+  chevU:'<polyline points="18 15 12 9 6 15"/>',
+  chevD:'<polyline points="6 9 12 15 18 9"/>',
+  menu:'<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>',
   wallet:'<path d="M20 12V7H5a2 2 0 0 1 0-4h13v4"/><path d="M4 7v11a2 2 0 0 0 2 2h14v-6"/><circle cx="17" cy="14" r="1"/>',
   arrowDown:'<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>',
   arrowUp:'<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>',
@@ -927,16 +941,25 @@ const NAV = [
   {id:'analyse', label:'Analyse', icon:'search'},
   {id:'parametres', label:'Paramètres', icon:'settings'},
 ];
+function orderedNavItems(){
+  const order = (state.navOrder && state.navOrder.length) ? state.navOrder : NAV.map(n=>n.id);
+  const byId = {}; NAV.forEach(n=>byId[n.id]=n);
+  const ordered = order.filter(id=>byId[id]).map(id=>byId[id]);
+  NAV.forEach(n=>{ if(!order.includes(n.id)) ordered.push(n); }); // tout nouvel onglet non encore rangé va à la fin
+  return ordered;
+}
 function renderSidebar(){
   const sb = document.getElementById('sidebar');
   const me = currentUser();
   const badge = notifBadgeCount();
+  document.getElementById('shell').classList.toggle('nav-collapsed', !!state.navCollapsed);
   sb.innerHTML = `
     <div class="brand">
       <div class="brand-mark">${icon('logo')}</div>
       <div><div class="brand-name">Solde</div><div class="brand-sub">Budget personnel</div></div>
+      <button class="icon-btn" data-action="toggle-sidebar-collapse" title="Masquer la navigation" style="margin-left:auto;">${icon('chevL')}</button>
     </div>
-    ${NAV.map(n=>`<button class="nav-item ${currentView===n.id?'active':''}" data-nav="${n.id}">${icon(n.icon)}<span>${n.label}</span></button>`).join('')}
+    ${orderedNavItems().map(n=>`<button class="nav-item ${currentView===n.id?'active':''}" data-nav="${n.id}">${icon(n.icon)}<span>${n.label}</span></button>`).join('')}
     <div class="nav-spacer"></div>
     <button class="nav-item" data-action="toggle-notif-panel" style="position:relative;">${icon('bell')}<span>Notifications</span>${badge>0?`<span class="notif-badge">${badge}</span>`:''}</button>
     <div class="sidebar-user">
@@ -946,7 +969,7 @@ function renderSidebar(){
     </div>
     <div class="sidebar-foot">Données stockées sur cet appareil, synchronisées via GitHub si connecté.</div>
   `;
-  document.getElementById('mobile-title').textContent = NAV.find(n=>n.id===currentView)?.label || 'Solde';
+  document.getElementById('mobile-title').textContent = orderedNavItems().find(n=>n.id===currentView)?.label || 'Solde';
 }
 function initials(u){ if(!u) return '?'; return (u.displayName||u.username||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
 function visibleUserRows(me){
@@ -2126,6 +2149,16 @@ async function handleAction(action, id, el){
 
     /* Auth / users */
     case 'logout': stopPolling(); clearSession(); await boot(); toast('Déconnecté'); break;
+    case 'toggle-sidebar-collapse': state.navCollapsed = !state.navCollapsed; await persist(); await render(); break;
+    case 'nav-move-up': case 'nav-move-down': {
+      const items = orderedNavItems().map(n=>n.id);
+      const idx = items.indexOf(id);
+      const swapWith = action==='nav-move-up' ? idx-1 : idx+1;
+      if(swapWith<0 || swapWith>=items.length) break;
+      [items[idx], items[swapWith]] = [items[swapWith], items[idx]];
+      state.navOrder = items;
+      await persist(); await render(); break; }
+    case 'reset-nav-order': state.navOrder = null; await persist(); await render(); break;
     case 'add-user': openModal('Ajouter un compte', userFieldsAdmin(null).concat([{key:'password', label:'Mot de passe', type:'password'}]), {role:'membre'}, async (data)=>{
       if(authState.users.some(u=>u.username===data.username.trim().toLowerCase())){ toast('Cet identifiant existe déjà'); return false; }
       const salt = randomSalt();
@@ -2605,8 +2638,24 @@ function drawAnalyseChart(){
 
 function renderParametres(){
   const me = currentUser();
+  const navItemsOrdered = orderedNavItems();
   return `
     <div class="page-head"><div><div class="page-title">Paramètres</div><div class="page-sub">Comptes, synchronisation et assistant</div></div></div>
+
+    <div class="card settings-block">
+      <h3>Navigation</h3>
+      <div class="sub">Réordonne les onglets, ou masque la barre de navigation pour gagner de la place à l'écran.</div>
+      <div class="row-actions" style="justify-content:flex-start;margin:12px 0 14px;">
+        <button class="btn btn-ghost btn-sm" data-action="toggle-sidebar-collapse">${icon(state.navCollapsed?'eye':'eyeOff')}${state.navCollapsed?'Afficher la barre de navigation':'Masquer la barre de navigation'}</button>
+        ${state.navOrder ? `<button class="btn btn-ghost btn-sm" data-action="reset-nav-order">${icon('refresh')}Réinitialiser l'ordre</button>` : ''}
+      </div>
+      ${navItemsOrdered.map((n,i)=>`
+        <div class="user-row">
+          <div class="info" style="display:flex;align-items:center;gap:10px;flex-direction:row;">${icon(n.icon)}<div class="name">${n.label}</div></div>
+          <button class="icon-btn" data-action="nav-move-up" data-id="${n.id}" ${i===0?'disabled':''} title="Monter">${icon('chevU')}</button>
+          <button class="icon-btn" data-action="nav-move-down" data-id="${n.id}" ${i===navItemsOrdered.length-1?'disabled':''} title="Descendre">${icon('chevD')}</button>
+        </div>`).join('')}
+    </div>
 
     <div class="card settings-block">
       <h3>Comptes</h3>
