@@ -1236,17 +1236,38 @@ function drawAnnuelleChart(){
 }
 
 /* ============================== REVENUS ============================== */
+const REVREC_COLUMNS = {
+  libelle: { label:'Libellé', type:'text', get:r=>r.libelle },
+  categorie: { label:'Catégorie', type:'text', get:r=>r.categorie },
+  montant: { label:'Montant / mois', type:'number', get:r=>Number(r.montant)||0 },
+};
+const REVEXC_COLUMNS = {
+  date: { label:'Date', type:'text', get:r=>r.date||'' },
+  libelle: { label:'Libellé', type:'text', get:r=>r.libelle },
+  categorie: { label:'Catégorie', type:'text', get:r=>r.categorie },
+  montant: { label:'Montant', type:'number', get:r=>Number(r.montant)||0 },
+};
 function renderRevenus(){
-  const rr = mine(state.revenusRecurrents), re = mine(state.revenusExceptionnels);
+  const rrAll = mine(state.revenusRecurrents), reAll = mine(state.revenusExceptionnels);
+  const rr = applyTableFilterAndSort('revrec', REVREC_COLUMNS, rrAll);
+  const reFiltered = applyTableFilterAndSort('revexc', REVEXC_COLUMNS, reAll);
+  const re = tableFilterState('revexc').sortCol ? reFiltered : [...reFiltered].sort((a,b)=>new Date(b.date)-new Date(a.date));
   return `
     <div class="page-head"><div><div class="page-title">Revenus</div><div class="page-sub">Sources fixes et rentrées ponctuelles</div></div></div>
 
     <div class="section-head"><h3 style="font-size:15px;font-weight:600;">Revenus récurrents</h3>
       <button class="btn btn-primary btn-sm" data-action="add-revrec">${icon('plus')}Ajouter un revenu</button></div>
     <div class="card" style="margin-bottom:24px;">
-      ${rr.length===0 ? emptyState('income','Aucun revenu récurrent','Ajoutez votre salaire ou toute autre source de revenu régulière.','add-revrec','Ajouter un revenu') : `
+      ${tableFilterActive('revrec') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="revrec">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
+      ${rrAll.length===0 ? emptyState('income','Aucun revenu récurrent','Ajoutez votre salaire ou toute autre source de revenu régulière.','add-revrec','Ajouter un revenu') :
+        (rr.length===0 ? emptyState('income','Aucun résultat','Aucun revenu ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
       <div class="table-wrap"><table>
-        <thead><tr><th>Libellé</th><th>Catégorie</th><th>Montant / mois</th><th>Début</th><th>Fin</th><th></th></tr></thead>
+        <thead><tr>
+          ${colFilterHeaderHTML('revrec', REVREC_COLUMNS, 'libelle', rrAll)}
+          ${colFilterHeaderHTML('revrec', REVREC_COLUMNS, 'categorie', rrAll)}
+          ${colFilterHeaderHTML('revrec', REVREC_COLUMNS, 'montant', rrAll)}
+          <th>Début</th><th>Fin</th><th></th>
+        </tr></thead>
         <tbody>${rr.map(r=>`<tr>
           <td>${r.libelle}</td><td><span class="pill pill-dim">${r.categorie}</span></td>
           <td class="num" style="color:var(--teal)">${fmtEUR(r.montant)}</td>
@@ -1254,21 +1275,29 @@ function renderRevenus(){
           <td class="row-actions"><button class="icon-btn" data-action="edit-revrec" data-id="${r.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-revrec" data-id="${r.id}">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
         <tfoot><tr><td colspan="2">Total mensuel</td><td class="num" style="color:var(--teal)">${fmtEUR(rr.reduce((s,r)=>s+Number(r.montant),0))}</td><td colspan="3"></td></tr></tfoot>
-      </table></div>`}
+      </table></div>`)}
     </div>
 
     <div class="section-head"><h3 style="font-size:15px;font-weight:600;">Rentrées exceptionnelles</h3>
       <button class="btn btn-primary btn-sm" data-action="add-revexc">${icon('plus')}Ajouter une rentrée</button></div>
     <div class="card">
-      ${re.length===0 ? emptyState('inbox','Aucune rentrée exceptionnelle','Prime, remboursement, cadeau… ajoutez-les ici.','add-revexc','Ajouter une rentrée') : `
+      ${tableFilterActive('revexc') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="revexc">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
+      ${reAll.length===0 ? emptyState('inbox','Aucune rentrée exceptionnelle','Prime, remboursement, cadeau… ajoutez-les ici.','add-revexc','Ajouter une rentrée') :
+        (re.length===0 ? emptyState('inbox','Aucun résultat','Aucune rentrée ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
       <div class="table-wrap"><table>
-        <thead><tr><th>Date</th><th>Libellé</th><th>Catégorie</th><th>Montant</th><th></th></tr></thead>
-        <tbody>${[...re].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(r=>`<tr>
+        <thead><tr>
+          ${colFilterHeaderHTML('revexc', REVEXC_COLUMNS, 'date', reAll)}
+          ${colFilterHeaderHTML('revexc', REVEXC_COLUMNS, 'libelle', reAll)}
+          ${colFilterHeaderHTML('revexc', REVEXC_COLUMNS, 'categorie', reAll)}
+          ${colFilterHeaderHTML('revexc', REVEXC_COLUMNS, 'montant', reAll)}
+          <th></th>
+        </tr></thead>
+        <tbody>${re.map(r=>`<tr>
           <td>${fmtDate(r.date)}</td><td>${r.libelle}</td><td><span class="pill pill-dim">${r.categorie}</span></td>
           <td class="num" style="color:${r.montant>=0?'var(--teal)':'var(--coral)'}">${fmtEUR(r.montant)}</td>
           <td class="row-actions"><button class="icon-btn" data-action="edit-revexc" data-id="${r.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-revexc" data-id="${r.id}">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
-      </table></div>`}
+      </table></div>`)}
     </div>
   `;
 }
@@ -1300,15 +1329,35 @@ function revexcFields(){
 }
 
 /* ============================== ABONNEMENTS ============================== */
+const ABO_COLUMNS = {
+  nom: { label:'Nom', type:'text', get:a=>a.nom },
+  categorie: { label:'Catégorie', type:'text', get:a=>a.categorie },
+  montant: { label:'Montant', type:'number', get:a=>Number(a.montant)||0 },
+  frequence: { label:'Fréquence', type:'text', get:a=>a.frequence },
+  compte: { label:'Compte', type:'text', get:a=>a.compte },
+  statut: { label:'Statut', type:'text', get:a=>a.statut },
+};
 function renderAbonnements(){
-  const list = mine(state.abonnements);
+  const all = mine(state.abonnements);
+  const list = applyTableFilterAndSort('abonnements', ABO_COLUMNS, all);
   return `
     <div class="page-head"><div><div class="page-title">Abonnements</div><div class="page-sub">Tous vos abonnements récurrents</div></div>
       <button class="btn btn-primary" data-action="add-abo">${icon('plus')}Ajouter un abonnement</button></div>
     <div class="card">
-      ${list.length===0 ? emptyState('repeat','Aucun abonnement','Streaming, mobile, logiciels… suivez-les tous ici.','add-abo','Ajouter un abonnement') : `
+      ${tableFilterActive('abonnements') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="abonnements">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
+      ${all.length===0 ? emptyState('repeat','Aucun abonnement','Streaming, mobile, logiciels… suivez-les tous ici.','add-abo','Ajouter un abonnement') :
+        (list.length===0 ? emptyState('repeat','Aucun résultat','Aucun abonnement ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
       <div class="table-wrap"><table>
-        <thead><tr><th>Nom</th><th>Catégorie</th><th>Montant</th><th>Fréquence</th><th>Coût mensualisé</th><th>Prochain</th><th>Compte</th><th>Statut</th><th></th></tr></thead>
+        <thead><tr>
+          ${colFilterHeaderHTML('abonnements', ABO_COLUMNS, 'nom', all)}
+          ${colFilterHeaderHTML('abonnements', ABO_COLUMNS, 'categorie', all)}
+          ${colFilterHeaderHTML('abonnements', ABO_COLUMNS, 'montant', all)}
+          ${colFilterHeaderHTML('abonnements', ABO_COLUMNS, 'frequence', all)}
+          <th>Coût mensualisé</th><th>Prochain</th>
+          ${colFilterHeaderHTML('abonnements', ABO_COLUMNS, 'compte', all)}
+          ${colFilterHeaderHTML('abonnements', ABO_COLUMNS, 'statut', all)}
+          <th></th>
+        </tr></thead>
         <tbody>${list.map(a=>`<tr>
           <td>${a.nom}</td><td><span class="pill pill-dim">${a.categorie}</span></td>
           <td class="num">${fmtEURPrecise(a.montant)}</td><td>${a.frequence}</td>
@@ -1318,7 +1367,7 @@ function renderAbonnements(){
           <td class="row-actions"><button class="icon-btn" data-action="edit-abo" data-id="${a.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-abo" data-id="${a.id}">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
         <tfoot><tr><td colspan="4">Total mensuel (actifs)</td><td class="num" style="color:var(--violet)">${fmtEUR(abonnementsTotalMensuel())}</td><td colspan="4"></td></tr></tfoot>
-      </table></div>`}
+      </table></div>`)}
     </div>
   `;
 }
@@ -1336,45 +1385,39 @@ function abo_fields(){
 }
 
 /* ============================== ÉCHÉANCES ============================== */
-/* ============================== DÉPENSES ============================== */
-/* Filtre façon Excel : par colonne, tri croissant/décroissant + sélection des
-   valeurs à afficher (cases à cocher). L'état confirmé (après OK) vit dans
-   state.depensesFilter ; l'état en cours d'édition dans le panneau ouvert vit
-   en mémoire (colFilterOpen/colFilterPending) pour ne synchroniser qu'à la
-   validation, comme dans Excel (Annuler ne doit rien changer). */
-let colFilterOpen = null;      // colonne dont le panneau est ouvert, ex. 'categorie'
+/* ============================== FILTRE GÉNÉRIQUE (façon Excel) ============================== */
+/* Réutilisé sur toutes les pages ayant des tableaux de saisies : tri
+   croissant/décroissant par colonne + sélection des valeurs à afficher
+   (cases à cocher). L'état confirmé (après OK) vit dans state.tableFilters,
+   par nom de table ; l'état en cours d'édition du panneau ouvert vit en
+   mémoire (colFilterOpen/colFilterPending), pour ne synchroniser qu'à la
+   validation (Annuler ne doit rien changer, comme dans Excel). */
+let colFilterOpen = null;      // { table, col }
 let colFilterPending = null;   // Set des valeurs cochées, en cours d'édition
 let colFilterSearch = '';      // texte de recherche dans le panneau ouvert
 
-const DEP_COLUMNS = {
-  libelle:   { label:'Libellé',   type:'text',   get:d=>d.libelle },
-  categorie: { label:'Catégorie', type:'text',   get:d=>d.categorie },
-  compte:    { label:'Compte',    type:'text',   get:d=>d.compte||'Compte Perso' },
-  paiement:  { label:'Paiement',  type:'text',   get:d=>d.modePaiement==='Echelonne'?'Échelonné':(d.modePaiement==='Previsionnelle'?'Prévisionnelle':'En une fois') },
-  montant:   { label:'Montant',   type:'number', get:d=>Number(d.montant)||0 },
-};
-
-function depensesFilterState(){
-  if(!state.depensesFilter || !state.depensesFilter.selected){
-    state.depensesFilter = { sortCol:null, sortDir:'asc', selected:{} };
+function tableFilterState(table){
+  if(!state.tableFilters) state.tableFilters = {};
+  if(!state.tableFilters[table] || !state.tableFilters[table].selected){
+    state.tableFilters[table] = { sortCol:null, sortDir:'asc', selected:{} };
   }
-  return state.depensesFilter;
+  return state.tableFilters[table];
 }
-function depensesFilterActive(){
-  const f = depensesFilterState();
+function tableFilterActive(table){
+  const f = tableFilterState(table);
   return Object.values(f.selected).some(v=>v!==null && v!==undefined);
 }
-function applyDepensesFilterAndSort(arr){
-  const f = depensesFilterState();
-  let out = arr.filter(d=>{
+function applyTableFilterAndSort(table, columns, arr){
+  const f = tableFilterState(table);
+  let out = arr.filter(item=>{
     for(const col in f.selected){
       const sel = f.selected[col];
-      if(sel && !sel.includes(String(DEP_COLUMNS[col].get(d)))) return false;
+      if(sel && columns[col] && !sel.includes(String(columns[col].get(item)))) return false;
     }
     return true;
   });
-  if(f.sortCol && DEP_COLUMNS[f.sortCol]){
-    const {type, get} = DEP_COLUMNS[f.sortCol];
+  if(f.sortCol && columns[f.sortCol]){
+    const {type, get} = columns[f.sortCol];
     out = [...out].sort((a,b)=>{
       let va=get(a), vb=get(b);
       if(type==='text'){ va=String(va).toLowerCase(); vb=String(vb).toLowerCase(); }
@@ -1385,26 +1428,27 @@ function applyDepensesFilterAndSort(arr){
   }
   return out;
 }
-function colDistinctValues(col, arr){
-  return Array.from(new Set(arr.map(d=>String(DEP_COLUMNS[col].get(d))))).sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
+function colDistinctValues(table, columns, col, arr){
+  return Array.from(new Set(arr.map(item=>String(columns[col].get(item))))).sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
 }
-function colFilterHeaderHTML(col, arr){
-  const c = DEP_COLUMNS[col];
-  const f = depensesFilterState();
+function colFilterHeaderHTML(table, columns, col, arr){
+  const c = columns[col];
+  const f = tableFilterState(table);
   const active = !!f.selected[col] || f.sortCol===col;
-  return `<th><span class="th-filter-wrap">${c.label}<button class="th-filter-btn ${active?'active':''}" data-action="toggle-col-filter" data-col="${col}">${icon('filterDown')}</button>${colFilterOpen===col ? colFilterPanelHTML(col, arr) : ''}</span></th>`;
+  const isOpen = colFilterOpen && colFilterOpen.table===table && colFilterOpen.col===col;
+  return `<th><span class="th-filter-wrap">${c.label}<button class="th-filter-btn ${active?'active':''}" data-action="toggle-col-filter" data-table="${table}" data-col="${col}">${icon('filterDown')}</button>${isOpen ? colFilterPanelHTML(table, columns, col, arr) : ''}</span></th>`;
 }
-function colFilterPanelHTML(col, arr){
-  const c = DEP_COLUMNS[col];
-  const values = colDistinctValues(col, arr);
+function colFilterPanelHTML(table, columns, col, arr){
+  const c = columns[col];
+  const values = colDistinctValues(table, columns, col, arr);
   const shown = colFilterSearch ? values.filter(v=>v.toLowerCase().includes(colFilterSearch.toLowerCase())) : values;
   const allChecked = shown.length>0 && shown.every(v=>colFilterPending.has(v));
   const isNumeric = c.type==='number';
   return `
-    <div class="col-filter-panel" data-col="${col}">
+    <div class="col-filter-panel" data-table="${table}" data-col="${col}">
       <div class="cf-sort-row">
-        <button data-action="col-sort" data-col="${col}" data-dir="asc">${icon('sortAsc')}${isNumeric?'Croissant':'A à Z'}</button>
-        <button data-action="col-sort" data-col="${col}" data-dir="desc">${icon('sortDesc')}${isNumeric?'Décroissant':'Z à A'}</button>
+        <button data-action="col-sort" data-table="${table}" data-col="${col}" data-dir="asc">${icon('sortAsc')}${isNumeric?'Croissant':'A à Z'}</button>
+        <button data-action="col-sort" data-table="${table}" data-col="${col}" data-dir="desc">${icon('sortDesc')}${isNumeric?'Décroissant':'Z à A'}</button>
       </div>
       <input type="text" class="cf-search" data-action="col-filter-search" placeholder="Rechercher…" value="${colFilterSearch.replace(/"/g,'&quot;')}">
       <div class="cf-list">
@@ -1417,13 +1461,33 @@ function colFilterPanelHTML(col, arr){
       </div>
     </div>`;
 }
+function tableRegistry(){
+  return {
+    depenses: { columns: DEP_COLUMNS, getArray: ()=> mine(state.depenses).filter(d=>d.modePaiement!=='Previsionnelle') },
+    revrec: { columns: REVREC_COLUMNS, getArray: ()=> mine(state.revenusRecurrents) },
+    revexc: { columns: REVEXC_COLUMNS, getArray: ()=> mine(state.revenusExceptionnels) },
+    abonnements: { columns: ABO_COLUMNS, getArray: ()=> mine(state.abonnements) },
+    charges: { columns: CHARGE_COLUMNS, getArray: ()=> mine(state.charges) },
+    versements: { columns: VERS_COLUMNS, getArray: ()=> mine(state.versements) },
+    echeances: { columns: ECH_COLUMNS, getArray: ()=> mine(state.depenses).filter(d=>d.modePaiement==='Echelonne') },
+  };
+}
+function tableSpec(table){ return tableRegistry()[table]; }
+
+const DEP_COLUMNS = {
+  libelle:   { label:'Libellé',   type:'text',   get:d=>d.libelle },
+  categorie: { label:'Catégorie', type:'text',   get:d=>d.categorie },
+  compte:    { label:'Compte',    type:'text',   get:d=>d.compte||'Compte Perso' },
+  paiement:  { label:'Paiement',  type:'text',   get:d=>d.modePaiement==='Echelonne'?'Échelonné':(d.modePaiement==='Previsionnelle'?'Prévisionnelle':'En une fois') },
+  montant:   { label:'Montant',   type:'number', get:d=>Number(d.montant)||0 },
+};
 function renderDepenses(){
   const all = mine(state.depenses);
-  const list = applyDepensesFilterAndSort(all.filter(d=>d.modePaiement!=='Previsionnelle'));
+  const filtrableArr = all.filter(d=>d.modePaiement!=='Previsionnelle');
+  const list = applyTableFilterAndSort('depenses', DEP_COLUMNS, filtrableArr);
   const previsionnelles = all.filter(d=>d.modePaiement==='Previsionnelle')
     .sort((a,b)=> PRIORITE_ORDER[a.priorite||'Basse'] - PRIORITE_ORDER[b.priorite||'Basse']);
   const key = state.selectedMonth;
-  const filtrableArr = all.filter(d=>d.modePaiement!=='Previsionnelle');
   return `
     <div class="page-head"><div><div class="page-title">Dépenses</div><div class="page-sub">Achats et frais, payés en une fois, échelonnés, ou prévisionnels</div></div>
       <button class="btn btn-primary" data-action="add-depense">${icon('plus')}Ajouter une dépense</button></div>
@@ -1444,16 +1508,16 @@ function renderDepenses(){
     </div>` : ''}
 
     <div class="card">
-      ${depensesFilterActive() ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-depenses-filter">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
+      ${tableFilterActive('depenses') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="depenses">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
       ${filtrableArr.length===0 ? emptyState('wallet','Aucune dépense','Un achat, une réparation, un imprévu… ajoutez-les ici.','add-depense','Ajouter une dépense') :
-        (list.length===0 ? emptyState('wallet','Aucun résultat','Aucune dépense ne correspond à ces filtres.','clear-depenses-filter','Réinitialiser les filtres') : `
+        (list.length===0 ? emptyState('wallet','Aucun résultat','Aucune dépense ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
       <div class="table-wrap"><table>
         <thead><tr>
-          ${colFilterHeaderHTML('libelle', filtrableArr)}
-          ${colFilterHeaderHTML('categorie', filtrableArr)}
-          ${colFilterHeaderHTML('compte', filtrableArr)}
-          ${colFilterHeaderHTML('paiement', filtrableArr)}
-          ${colFilterHeaderHTML('montant', filtrableArr)}
+          ${colFilterHeaderHTML('depenses', DEP_COLUMNS, 'libelle', filtrableArr)}
+          ${colFilterHeaderHTML('depenses', DEP_COLUMNS, 'categorie', filtrableArr)}
+          ${colFilterHeaderHTML('depenses', DEP_COLUMNS, 'compte', filtrableArr)}
+          ${colFilterHeaderHTML('depenses', DEP_COLUMNS, 'paiement', filtrableArr)}
+          ${colFilterHeaderHTML('depenses', DEP_COLUMNS, 'montant', filtrableArr)}
           <th>Ce mois</th><th></th>
         </tr></thead>
         <tbody>${list.map(d=>{
@@ -1465,7 +1529,7 @@ function renderDepenses(){
           <td class="num">${fmtEURPrecise(depenseMensualiteDuMois(d,key))}</td>
           <td class="row-actions"><button class="icon-btn" data-action="edit-depense" data-id="${d.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}">${icon('trash')}</button></td>
         </tr>`;}).join('')}</tbody>
-        <tfoot><tr><td colspan="5">${depensesFilterActive()?'Total (filtré)':'Total'} ${monthLabel(key)}</td><td class="num">${fmtEUR(list.reduce((s,d)=>s+depenseMensualiteDuMois(d,key),0))}</td><td></td></tr></tfoot>
+        <tfoot><tr><td colspan="5">${tableFilterActive('depenses')?'Total (filtré)':'Total'} ${monthLabel(key)}</td><td class="num">${fmtEUR(list.reduce((s,d)=>s+depenseMensualiteDuMois(d,key),0))}</td><td></td></tr></tfoot>
       </table></div>`)}
     </div>
   `;
@@ -1529,15 +1593,31 @@ function setupDepenseFormToggle(){
 }
 
 /* ============================== ÉCHÉANCES (vue calculée, à partir des dépenses échelonnées) ============================== */
+const ECH_COLUMNS = {
+  libelle: { label:'Achat', type:'text', get:d=>d.libelle },
+  compte: { label:'Compte', type:'text', get:d=>d.compte||'Compte Perso' },
+  montant: { label:'Montant total', type:'number', get:d=>Number(d.montant)||0 },
+  statut: { label:'Statut', type:'text', get:d=>depenseResteAPayer(d)<=0.01?'Soldé':'En cours' },
+};
 function renderEcheances(){
-  const list = mine(state.depenses).filter(d=>d.modePaiement==='Echelonne');
+  const all = mine(state.depenses).filter(d=>d.modePaiement==='Echelonne');
+  const list = applyTableFilterAndSort('echeances', ECH_COLUMNS, all);
   const key = state.selectedMonth;
   return `
     <div class="page-head"><div><div class="page-title">Échéances</div><div class="page-sub">Calculées automatiquement à partir des dépenses échelonnées</div></div></div>
     <div class="card">
-      ${list.length===0 ? emptyState('calendar','Aucune échéance en cours','Marque une dépense comme "Échelonnée" dans l\u2019onglet Dépenses pour la voir apparaître ici.','goto-depenses','Aller à Dépenses') : `
+      ${tableFilterActive('echeances') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="echeances">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
+      ${all.length===0 ? emptyState('calendar','Aucune échéance en cours','Marque une dépense comme "Échelonnée" dans l\u2019onglet Dépenses pour la voir apparaître ici.','goto-depenses','Aller à Dépenses') :
+        (list.length===0 ? emptyState('calendar','Aucun résultat','Aucune échéance ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
       <div class="table-wrap"><table>
-        <thead><tr><th>Achat</th><th>Compte</th><th>Montant total</th><th>Mensualité</th><th>Progression</th><th>Ce mois</th><th>Reste à payer</th><th>Statut</th><th></th></tr></thead>
+        <thead><tr>
+          ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'libelle', all)}
+          ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'compte', all)}
+          ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'montant', all)}
+          <th>Mensualité</th><th>Progression</th><th>Ce mois</th><th>Reste à payer</th>
+          ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'statut', all)}
+          <th></th>
+        </tr></thead>
         <tbody>${list.map(d=>{
           const nb = depenseNbMensualites(d);
           const payees = Math.min(d.mensualitesPayees||0, nb);
@@ -1558,14 +1638,22 @@ function renderEcheances(){
           </td>
         </tr>`;}).join('')}</tbody>
         <tfoot><tr><td colspan="5">Total ${monthLabel(key)} / Reste à payer</td><td class="num">${fmtEUR(depensesTotalMois(key))}</td><td class="num">${fmtEUR(depensesEchelonneesResteAPayerTotal())}</td><td colspan="2"></td></tr></tfoot>
-      </table></div>`}
+      </table></div>`)}
     </div>
   `;
 }
 
 /* ============================== OBJECTIFS ============================== */
+const VERS_COLUMNS = {
+  date: { label:'Date', type:'text', get:v=>v.date||'' },
+  objectifNom: { label:'Objectif', type:'text', get:v=>v.objectifNom },
+  montant: { label:'Montant', type:'number', get:v=>Number(v.montant)||0 },
+};
 function renderObjectifs(){
   const list = mine(state.objectifs);
+  const versAll = mine(state.versements);
+  const versFiltered = applyTableFilterAndSort('versements', VERS_COLUMNS, versAll);
+  const versList = tableFilterState('versements').sortCol ? versFiltered : [...versFiltered].sort((a,b)=>new Date(b.date)-new Date(a.date));
   return `
     <div class="page-head"><div><div class="page-title">Objectifs</div><div class="page-sub">Épargne progressive vers vos projets</div></div>
       <button class="btn btn-primary" data-action="add-obj">${icon('plus')}Ajouter un objectif</button></div>
@@ -1599,16 +1687,23 @@ function renderObjectifs(){
 
     <div class="section-head"><h3 style="font-size:15px;font-weight:600;">Historique des versements</h3></div>
     <div class="card">
-      ${mine(state.versements).length===0 ? emptyState('wallet','Aucun versement','Chaque somme mise de côté apparaîtra ici.','add-obj','Créer un objectif') : `
+      ${tableFilterActive('versements') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="versements">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
+      ${mine(state.versements).length===0 ? emptyState('wallet','Aucun versement','Chaque somme mise de côté apparaîtra ici.','add-obj','Créer un objectif') :
+        (versList.length===0 ? emptyState('wallet','Aucun résultat','Aucun versement ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
       <div class="table-wrap"><table>
-        <thead><tr><th>Date</th><th>Objectif</th><th>Montant</th><th>Note</th><th></th></tr></thead>
-        <tbody>${[...mine(state.versements)].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(v=>`<tr>
+        <thead><tr>
+          ${colFilterHeaderHTML('versements', VERS_COLUMNS, 'date', mine(state.versements))}
+          ${colFilterHeaderHTML('versements', VERS_COLUMNS, 'objectifNom', mine(state.versements))}
+          ${colFilterHeaderHTML('versements', VERS_COLUMNS, 'montant', mine(state.versements))}
+          <th>Note</th><th></th>
+        </tr></thead>
+        <tbody>${versList.map(v=>`<tr>
           <td>${fmtDate(v.date)}</td><td><span class="pill pill-dim">${v.objectifNom}</span></td>
           <td class="num" style="color:var(--teal)">${fmtEUR(v.montant)}</td><td class="wrap">${v.note||'—'}</td>
           <td class="row-actions"><button class="icon-btn del" data-action="del-versement" data-id="${v.id}">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
         <tfoot><tr><td colspan="2">Total versé</td><td class="num" style="color:var(--teal)">${fmtEUR(mine(state.versements).reduce((s,v)=>s+Number(v.montant),0))}</td><td colspan="2"></td></tr></tfoot>
-      </table></div>`}
+      </table></div>`)}
     </div>
   `;
 }
@@ -1627,16 +1722,32 @@ const VERS_FIELDS_BASE = [
 ];
 
 /* ============================== CHARGES ============================== */
+const CHARGE_COLUMNS = {
+  categorie: { label:'Catégorie', type:'text', get:c=>c.categorie },
+  type: { label:'Type', type:'text', get:c=>c.type },
+  budget: { label:'Budget / mois', type:'number', get:c=>Number(c.budget)||0 },
+  compte: { label:'Compte', type:'text', get:c=>c.compte },
+};
 function renderCharges(){
-  const list = mine(state.charges);
+  const all = mine(state.charges);
+  const list = applyTableFilterAndSort('charges', CHARGE_COLUMNS, all);
   const key = state.selectedMonth;
   return `
     <div class="page-head"><div><div class="page-title">Budget Charges</div><div class="page-sub">Dépenses fixes ou temporaires</div></div>
       <button class="btn btn-primary" data-action="add-charge">${icon('plus')}Ajouter une charge</button></div>
     <div class="card">
-      ${list.length===0 ? emptyState('home','Aucune charge','Loyer, courses, factures… ajoutez vos charges ici.','add-charge','Ajouter une charge') : `
+      ${tableFilterActive('charges') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="charges">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
+      ${all.length===0 ? emptyState('home','Aucune charge','Loyer, courses, factures… ajoutez vos charges ici.','add-charge','Ajouter une charge') :
+        (list.length===0 ? emptyState('home','Aucun résultat','Aucune charge ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
       <div class="table-wrap"><table>
-        <thead><tr><th>Catégorie</th><th>Type</th><th>Description</th><th>Budget / mois</th><th>Compte</th><th>Active ${monthLabel(key)}</th><th></th></tr></thead>
+        <thead><tr>
+          ${colFilterHeaderHTML('charges', CHARGE_COLUMNS, 'categorie', all)}
+          ${colFilterHeaderHTML('charges', CHARGE_COLUMNS, 'type', all)}
+          <th>Description</th>
+          ${colFilterHeaderHTML('charges', CHARGE_COLUMNS, 'budget', all)}
+          ${colFilterHeaderHTML('charges', CHARGE_COLUMNS, 'compte', all)}
+          <th>Active ${monthLabel(key)}</th><th></th>
+        </tr></thead>
         <tbody>${list.map(c=>{
           const active = inRangeMonth(key, c.dateDebut, c.dateFin);
           return `<tr>
@@ -1646,7 +1757,7 @@ function renderCharges(){
           <td class="row-actions"><button class="icon-btn" data-action="edit-charge" data-id="${c.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-charge" data-id="${c.id}">${icon('trash')}</button></td>
         </tr>`;}).join('')}</tbody>
         <tfoot><tr><td colspan="3">Total actif ${monthLabel(key)}</td><td class="num">${fmtEUR(chargesTotalMois(key))}</td><td colspan="3"></td></tr></tfoot>
-      </table></div>`}
+      </table></div>`)}
     </div>
   `;
 }
@@ -1932,28 +2043,30 @@ async function handleAction(action, id, el){
       setTimeout(setupDepenseFormToggle, 0); break;
     case 'del-depense': { const item=find(mine(state.depenses)); confirmDelete(item.libelle, async ()=>{ state.depenses = state.depenses.filter(x=>x.id!==id); await persist(); await render(); toast('Dépense supprimée'); }); break; }
     case 'goto-depenses': currentView = 'depenses'; await render(); break;
-    case 'clear-depenses-filter': state.depensesFilter = { sortCol:null, sortDir:'asc', selected:{} }; await persist(); await render(); break;
+    case 'clear-table-filter': state.tableFilters[el.dataset.table] = { sortCol:null, sortDir:'asc', selected:{} }; await persist(); await render(); break;
     case 'toggle-col-filter': {
-      const col = el.dataset.col;
-      if(colFilterOpen===col){ colFilterOpen = null; }
+      const table = el.dataset.table, col = el.dataset.col;
+      if(colFilterOpen && colFilterOpen.table===table && colFilterOpen.col===col){ colFilterOpen = null; }
       else{
-        colFilterOpen = col;
+        colFilterOpen = { table, col };
         colFilterSearch = '';
-        const f = depensesFilterState();
-        const arr = mine(state.depenses).filter(d=>d.modePaiement!=='Previsionnelle');
-        const all = colDistinctValues(col, arr);
+        const spec = tableSpec(table);
+        const f = tableFilterState(table);
+        const arr = spec.getArray();
+        const all = colDistinctValues(table, spec.columns, col, arr);
         colFilterPending = new Set(f.selected[col] || all);
       }
       await render(); break; }
     case 'col-sort': {
-      const f = depensesFilterState();
+      const f = tableFilterState(el.dataset.table);
       f.sortCol = el.dataset.col; f.sortDir = el.dataset.dir;
       colFilterOpen = null;
       await persist(); await render(); break; }
     case 'col-filter-toggle-all': {
-      const col = colFilterOpen;
-      const arr = mine(state.depenses).filter(d=>d.modePaiement!=='Previsionnelle');
-      const shown = colFilterSearch ? colDistinctValues(col, arr).filter(v=>v.toLowerCase().includes(colFilterSearch.toLowerCase())) : colDistinctValues(col, arr);
+      const { table, col } = colFilterOpen;
+      const spec = tableSpec(table);
+      const arr = spec.getArray();
+      const shown = colFilterSearch ? colDistinctValues(table, spec.columns, col, arr).filter(v=>v.toLowerCase().includes(colFilterSearch.toLowerCase())) : colDistinctValues(table, spec.columns, col, arr);
       const allChecked = shown.every(v=>colFilterPending.has(v));
       shown.forEach(v=>{ if(allChecked) colFilterPending.delete(v); else colFilterPending.add(v); });
       await render(); break; }
@@ -1962,10 +2075,11 @@ async function handleAction(action, id, el){
       if(colFilterPending.has(v)) colFilterPending.delete(v); else colFilterPending.add(v);
       await render(); break; }
     case 'col-filter-ok': {
-      const col = colFilterOpen;
-      const arr = mine(state.depenses).filter(d=>d.modePaiement!=='Previsionnelle');
-      const all = colDistinctValues(col, arr);
-      const f = depensesFilterState();
+      const { table, col } = colFilterOpen;
+      const spec = tableSpec(table);
+      const arr = spec.getArray();
+      const all = colDistinctValues(table, spec.columns, col, arr);
+      const f = tableFilterState(table);
       // Si tout est coché, ça revient à "pas de filtre" sur cette colonne.
       f.selected[col] = (colFilterPending.size===all.length) ? null : Array.from(colFilterPending);
       colFilterOpen = null; colFilterPending = null; colFilterSearch = '';
