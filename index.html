@@ -474,6 +474,7 @@ function defaultState(){
     selectedYear: now.getFullYear(),
     analyseYear: now.getFullYear(),
     analyseTerm: '',
+    depensesFilter: { categorie:'', compte:'', mode:'' },
     revenusRecurrents: [],
     revenusExceptionnels: [],
     abonnements: [],
@@ -1317,15 +1318,59 @@ function abo_fields(){
 
 /* ============================== ÉCHÉANCES ============================== */
 /* ============================== DÉPENSES ============================== */
+function depensesFilterState(){
+  return state.depensesFilter || {categorie:'', compte:'', mode:''};
+}
+function applyDepensesFilter(arr){
+  const f = depensesFilterState();
+  return arr.filter(d=>
+    (!f.categorie || d.categorie===f.categorie) &&
+    (!f.compte || (d.compte||'Compte Perso')===f.compte) &&
+    (!f.mode || d.modePaiement===f.mode)
+  );
+}
+function depensesFilterActive(){
+  const f = depensesFilterState();
+  return !!(f.categorie || f.compte || f.mode);
+}
 function renderDepenses(){
   const all = mine(state.depenses);
-  const list = all.filter(d=>d.modePaiement!=='Previsionnelle');
-  const previsionnelles = all.filter(d=>d.modePaiement==='Previsionnelle')
+  const allCats = Array.from(new Set(all.map(d=>d.categorie))).sort((a,b)=>a.localeCompare(b));
+  const list = applyDepensesFilter(all.filter(d=>d.modePaiement!=='Previsionnelle'));
+  const previsionnelles = applyDepensesFilter(all.filter(d=>d.modePaiement==='Previsionnelle'))
     .sort((a,b)=> PRIORITE_ORDER[a.priorite||'Basse'] - PRIORITE_ORDER[b.priorite||'Basse']);
   const key = state.selectedMonth;
+  const f = depensesFilterState();
   return `
     <div class="page-head"><div><div class="page-title">Dépenses</div><div class="page-sub">Achats et frais, payés en une fois, échelonnés, ou prévisionnels</div></div>
       <button class="btn btn-primary" data-action="add-depense">${icon('plus')}Ajouter une dépense</button></div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div class="filter-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div class="field" style="flex:1;min-width:140px;margin-bottom:0;"><label>Catégorie</label>
+          <select data-filter="categorie">
+            <option value="">Toutes</option>
+            ${allCats.map(c=>`<option value="${c}" ${f.categorie===c?'selected':''}>${c}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field" style="flex:1;min-width:140px;margin-bottom:0;"><label>Compte</label>
+          <select data-filter="compte">
+            <option value="">Tous</option>
+            <option value="Compte Perso" ${f.compte==='Compte Perso'?'selected':''}>Compte Perso</option>
+            <option value="Compte Joint" ${f.compte==='Compte Joint'?'selected':''}>Compte Joint</option>
+          </select>
+        </div>
+        <div class="field" style="flex:1;min-width:140px;margin-bottom:0;"><label>Paiement</label>
+          <select data-filter="mode">
+            <option value="">Tous</option>
+            <option value="Unique" ${f.mode==='Unique'?'selected':''}>En une fois</option>
+            <option value="Echelonne" ${f.mode==='Echelonne'?'selected':''}>Échelonné</option>
+            <option value="Previsionnelle" ${f.mode==='Previsionnelle'?'selected':''}>Prévisionnelle</option>
+          </select>
+        </div>
+        ${depensesFilterActive() ? `<button class="btn btn-ghost btn-sm" data-action="clear-depenses-filter">${icon('x')}Réinitialiser</button>` : ''}
+      </div>
+    </div>
 
     ${previsionnelles.length>0 ? `
     <div class="card" style="margin-bottom:16px;">
@@ -1343,7 +1388,9 @@ function renderDepenses(){
     </div>` : ''}
 
     <div class="card">
-      ${list.length===0 ? emptyState('wallet','Aucune dépense','Un achat, une réparation, un imprévu… ajoutez-les ici.','add-depense','Ajouter une dépense') : `
+      ${list.length===0 ? (depensesFilterActive()
+          ? emptyState('wallet','Aucun résultat','Aucune dépense ne correspond à ces filtres.','clear-depenses-filter','Réinitialiser les filtres')
+          : emptyState('wallet','Aucune dépense','Un achat, une réparation, un imprévu… ajoutez-les ici.','add-depense','Ajouter une dépense')) : `
       <div class="table-wrap"><table>
         <thead><tr><th>Libellé</th><th>Catégorie</th><th>Compte</th><th>Paiement</th><th>Montant</th><th>Ce mois</th><th></th></tr></thead>
         <tbody>${list.map(d=>{
@@ -1355,7 +1402,7 @@ function renderDepenses(){
           <td class="num">${fmtEURPrecise(depenseMensualiteDuMois(d,key))}</td>
           <td class="row-actions"><button class="icon-btn" data-action="edit-depense" data-id="${d.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}">${icon('trash')}</button></td>
         </tr>`;}).join('')}</tbody>
-        <tfoot><tr><td colspan="5">Total ${monthLabel(key)}</td><td class="num">${fmtEUR(depensesTotalMois(key))}</td><td></td></tr></tfoot>
+        <tfoot><tr><td colspan="5">${depensesFilterActive()?'Total (filtré)':'Total'} ${monthLabel(key)}</td><td class="num">${fmtEUR(list.reduce((s,d)=>s+depenseMensualiteDuMois(d,key),0))}</td><td></td></tr></tfoot>
       </table></div>`}
     </div>
   `;
@@ -1704,8 +1751,13 @@ function afterRender(){
   }catch(e){ console.error('afterRender: erreur non bloquante', e); }
 }
 
-document.addEventListener('change', (e)=>{
+document.addEventListener('change', async (e)=>{
   if(e.target.id==='import-file-input' && e.target.files[0]){ importDataFile(e.target.files[0]); }
+  if(e.target.dataset && e.target.dataset.filter){
+    state.depensesFilter = depensesFilterState();
+    state.depensesFilter[e.target.dataset.filter] = e.target.value;
+    await persist(); await render();
+  }
 });
 
 document.addEventListener('click', async (e)=>{
@@ -1801,6 +1853,7 @@ async function handleAction(action, id, el){
       setTimeout(setupDepenseFormToggle, 0); break;
     case 'del-depense': { const item=find(mine(state.depenses)); confirmDelete(item.libelle, async ()=>{ state.depenses = state.depenses.filter(x=>x.id!==id); await persist(); await render(); toast('Dépense supprimée'); }); break; }
     case 'goto-depenses': currentView = 'depenses'; await render(); break;
+    case 'clear-depenses-filter': state.depensesFilter = {categorie:'', compte:'', mode:''}; await persist(); await render(); break;
     case 'run-analyse': {
       const val = document.getElementById('analyse-search').value;
       state.analyseTerm = val; await persist(); await render(); break; }
