@@ -118,6 +118,13 @@ a{color:inherit;}
 }
 .nav-item.drop-before::before{top:-4px;}
 .nav-item.drop-after::after{bottom:-4px;}
+.nav-drag-ghost{
+  position:fixed;z-index:200;pointer-events:none;
+  transform:translate(12px,-50%) rotate(-2deg);
+  box-shadow:0 16px 36px rgba(0,0,0,0.55);
+  background:var(--panel-2);border:1px solid var(--border);border-radius:12px;
+  opacity:0.96;
+}
 .nav-item.active{background:rgba(255,255,255,0.10);color:var(--text);}
 .nav-spacer{flex:1;}
 .sidebar-foot{padding:10px 12px;font-size:11px;color:var(--text-faint);border-top:1px solid var(--border);margin-top:8px;padding-top:14px;}
@@ -956,7 +963,7 @@ function orderedNavItems(){
   NAV.forEach(n=>{ if(!order.includes(n.id)) ordered.push(n); }); // tout nouvel onglet non encore rangé va à la fin
   return ordered;
 }
-let dragNavId = null, dragOverId = null, dragOverPos = null;
+let dragNavId = null, dragOverId = null, dragOverPos = null, dragGhostEl = null;
 function setupNavDragAndDrop(){
   const items = document.querySelectorAll('#sidebar .nav-item[data-nav]');
   items.forEach(el=>{
@@ -966,17 +973,35 @@ function setupNavDragAndDrop(){
       e.preventDefault();
       dragNavId = el.dataset.nav;
       el.classList.add('nav-dragging');
-    });
-    el.addEventListener('mousemove', (e)=>{
-      if(!dragNavId) return;
-      const rect = el.getBoundingClientRect();
-      const midpoint = rect.top + rect.height/2;
-      dragOverId = el.dataset.nav;
-      dragOverPos = e.clientY < midpoint ? 'before' : 'after';
-      updateNavDropIndicators();
+      createNavDragGhost(el, e.clientX, e.clientY);
     });
   });
 }
+function createNavDragGhost(el, x, y){
+  const rect = el.getBoundingClientRect();
+  dragGhostEl = el.cloneNode(true);
+  dragGhostEl.classList.remove('nav-dragging');
+  dragGhostEl.classList.add('nav-drag-ghost');
+  dragGhostEl.style.width = rect.width+'px';
+  dragGhostEl.style.left = x+'px';
+  dragGhostEl.style.top = y+'px';
+  document.body.appendChild(dragGhostEl);
+}
+document.addEventListener('mousemove', (e)=>{
+  if(!dragNavId) return;
+  if(dragGhostEl){ dragGhostEl.style.left = e.clientX+'px'; dragGhostEl.style.top = e.clientY+'px'; }
+  let found = null;
+  document.querySelectorAll('#sidebar .nav-item[data-nav]').forEach(el=>{
+    const rect = el.getBoundingClientRect();
+    if(e.clientX>=rect.left && e.clientX<=rect.right && e.clientY>=rect.top && e.clientY<=rect.bottom) found = el;
+  });
+  if(found){
+    const rect = found.getBoundingClientRect();
+    dragOverId = found.dataset.nav;
+    dragOverPos = e.clientY < rect.top + rect.height/2 ? 'before' : 'after';
+    updateNavDropIndicators();
+  }
+});
 function updateNavDropIndicators(){
   document.querySelectorAll('#sidebar .nav-item').forEach(el=>{
     el.classList.remove('drop-before','drop-after');
@@ -989,6 +1014,7 @@ document.addEventListener('mouseup', async ()=>{
   if(!dragNavId) return;
   const from = dragNavId, overId = dragOverId, pos = dragOverPos;
   dragNavId = null; dragOverId = null; dragOverPos = null;
+  if(dragGhostEl){ dragGhostEl.remove(); dragGhostEl = null; }
   if(overId && overId!==from){
     const items = orderedNavItems().map(n=>n.id);
     const fromIdx = items.indexOf(from);
@@ -2205,14 +2231,6 @@ async function handleAction(action, id, el){
     /* Auth / users */
     case 'logout': stopPolling(); clearSession(); await boot(); toast('Déconnecté'); break;
     case 'toggle-sidebar-collapse': state.navCollapsed = !state.navCollapsed; await persist(); await render(); break;
-    case 'nav-move-up': case 'nav-move-down': {
-      const items = orderedNavItems().map(n=>n.id);
-      const idx = items.indexOf(id);
-      const swapWith = action==='nav-move-up' ? idx-1 : idx+1;
-      if(swapWith<0 || swapWith>=items.length) break;
-      [items[idx], items[swapWith]] = [items[swapWith], items[idx]];
-      state.navOrder = items;
-      await persist(); await render(); break; }
     case 'reset-nav-order': state.navOrder = null; await persist(); await render(); break;
     case 'add-user': openModal('Ajouter un compte', userFieldsAdmin(null).concat([{key:'password', label:'Mot de passe', type:'password'}]), {role:'membre'}, async (data)=>{
       if(authState.users.some(u=>u.username===data.username.trim().toLowerCase())){ toast('Cet identifiant existe déjà'); return false; }
@@ -2693,23 +2711,16 @@ function drawAnalyseChart(){
 
 function renderParametres(){
   const me = currentUser();
-  const navItemsOrdered = orderedNavItems();
   return `
     <div class="page-head"><div><div class="page-title">Paramètres</div><div class="page-sub">Comptes, synchronisation et assistant</div></div></div>
 
     <div class="card settings-block">
       <h3>Navigation</h3>
-      <div class="sub">Réordonne les onglets (clic droit maintenu directement dans la barre, ou boutons ci-dessous), ou masque la barre de navigation pour gagner de la place à l'écran.</div>
-      <div class="row-actions" style="justify-content:flex-start;margin:12px 0 14px;">
+      <div class="sub">Réordonne les onglets directement dans la barre de navigation (maintiens le clic droit sur un onglet et glisse-le à sa nouvelle place).</div>
+      <div class="row-actions" style="justify-content:flex-start;margin:12px 0 0;">
         <button class="btn btn-ghost btn-sm" data-action="toggle-sidebar-collapse">${icon(state.navCollapsed?'eye':'eyeOff')}${state.navCollapsed?'Afficher la barre de navigation':'Masquer la barre de navigation'}</button>
         ${state.navOrder ? `<button class="btn btn-ghost btn-sm" data-action="reset-nav-order">${icon('refresh')}Réinitialiser l'ordre</button>` : ''}
       </div>
-      ${navItemsOrdered.map((n,i)=>`
-        <div class="user-row">
-          <div class="info" style="display:flex;align-items:center;gap:10px;flex-direction:row;">${icon(n.icon)}<div class="name">${n.label}</div></div>
-          <button class="icon-btn" data-action="nav-move-up" data-id="${n.id}" ${i===0?'disabled':''} title="Monter">${icon('chevU')}</button>
-          <button class="icon-btn" data-action="nav-move-down" data-id="${n.id}" ${i===navItemsOrdered.length-1?'disabled':''} title="Descendre">${icon('chevD')}</button>
-        </div>`).join('')}
     </div>
 
     <div class="card settings-block">
