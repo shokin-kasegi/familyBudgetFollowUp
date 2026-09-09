@@ -964,16 +964,15 @@ function orderedNavItems(){
   return ordered;
 }
 let dragNavId = null, dragOverId = null, dragOverPos = null, dragGhostEl = null;
+let dragPending = null;      // { id, el, startX, startY } — clic maintenu, pas encore un vrai glissement
+let dragJustHappened = false; // empêche le clic de navigation juste après un glissement réel
+const NAV_DRAG_THRESHOLD = 6; // px de mouvement avant de considérer que c'est un glissement, pas un clic
 function setupNavDragAndDrop(){
   const items = document.querySelectorAll('#sidebar .nav-item[data-nav]');
   items.forEach(el=>{
-    el.addEventListener('contextmenu', (e)=>{ e.preventDefault(); });
     el.addEventListener('mousedown', (e)=>{
-      if(e.button!==2) return; // uniquement le clic droit maintenu
-      e.preventDefault();
-      dragNavId = el.dataset.nav;
-      el.classList.add('nav-dragging');
-      createNavDragGhost(el, e.clientX, e.clientY);
+      if(e.button!==0) return; // clic gauche uniquement
+      dragPending = { id: el.dataset.nav, el, startX: e.clientX, startY: e.clientY };
     });
   });
 }
@@ -988,6 +987,15 @@ function createNavDragGhost(el, x, y){
   document.body.appendChild(dragGhostEl);
 }
 document.addEventListener('mousemove', (e)=>{
+  if(dragPending && !dragNavId){
+    const dx = e.clientX-dragPending.startX, dy = e.clientY-dragPending.startY;
+    if(Math.sqrt(dx*dx+dy*dy) > NAV_DRAG_THRESHOLD){
+      // le mouvement dépasse le seuil : ce n'est plus un simple clic, on démarre le glissement
+      dragNavId = dragPending.id;
+      dragPending.el.classList.add('nav-dragging');
+      createNavDragGhost(dragPending.el, e.clientX, e.clientY);
+    }
+  }
   if(!dragNavId) return;
   if(dragGhostEl){ dragGhostEl.style.left = e.clientX+'px'; dragGhostEl.style.top = e.clientY+'px'; }
   let found = null;
@@ -1011,9 +1019,11 @@ function updateNavDropIndicators(){
   });
 }
 document.addEventListener('mouseup', async ()=>{
+  dragPending = null;
   if(!dragNavId) return;
   const from = dragNavId, overId = dragOverId, pos = dragOverPos;
   dragNavId = null; dragOverId = null; dragOverPos = null;
+  dragJustHappened = true; // le 'click' qui va suivre ce mouseup ne doit pas déclencher de navigation
   if(dragGhostEl){ dragGhostEl.remove(); dragGhostEl = null; }
   if(overId && overId!==from){
     const items = orderedNavItems().map(n=>n.id);
@@ -2051,6 +2061,7 @@ document.addEventListener('change', async (e)=>{
 });
 
 document.addEventListener('click', async (e)=>{
+  if(dragJustHappened){ dragJustHappened = false; return; } // évite de naviguer juste après un glisser-déposer d'onglet
   if(notifOpen && !e.target.closest('#notif-panel') && !e.target.closest('[data-action="toggle-notif-panel"]')){ toggleNotifPanel(false); }
   if(colFilterOpen && !e.target.closest('.col-filter-panel') && !e.target.closest('[data-action="toggle-col-filter"]')){
     colFilterOpen = null; colFilterPending = null; colFilterSearch = '';
@@ -2716,7 +2727,7 @@ function renderParametres(){
 
     <div class="card settings-block">
       <h3>Navigation</h3>
-      <div class="sub">Réordonne les onglets directement dans la barre de navigation (maintiens le clic droit sur un onglet et glisse-le à sa nouvelle place).</div>
+      <div class="sub">Réordonne les onglets directement dans la barre de navigation (maintiens le clic sur un onglet et glisse-le à sa nouvelle place).</div>
       <div class="row-actions" style="justify-content:flex-start;margin:12px 0 0;">
         <button class="btn btn-ghost btn-sm" data-action="toggle-sidebar-collapse">${icon(state.navCollapsed?'eye':'eyeOff')}${state.navCollapsed?'Afficher la barre de navigation':'Masquer la barre de navigation'}</button>
         ${state.navOrder ? `<button class="btn btn-ghost btn-sm" data-action="reset-nav-order">${icon('refresh')}Réinitialiser l'ordre</button>` : ''}
