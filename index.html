@@ -597,7 +597,7 @@ async function loadState(){
     state.abonnements.forEach(a=>{
       state.depenses.push({
         id: a.id, ownerId: a.ownerId, libelle: a.nom, categorie: a.categorie, compte: a.compte||'Compte Perso',
-        montant: a.montant, modePaiement:'Recurrent', frequence: a.frequence||'Mensuel', prochain: a.prochain,
+        montant: a.montant, modePaiement:'Recurrent', frequence: a.frequence||'Mensuel',
         statut: a.statut||'Actif', notes: a.notes||''
       });
     });
@@ -715,6 +715,7 @@ function monthlyCost(ab){
     case 'Annuel': return m/12;
     case 'Trimestriel': return m/3;
     case 'Hebdomadaire': return m*4.345;
+    case 'Journalier': return m*30.44;
     default: return m;
   }
 }
@@ -1577,7 +1578,7 @@ function renderDepenses(){
           ${colFilterHeaderHTML('recurrentes', REC_COLUMNS, 'categorie', recurrentesAll)}
           ${colFilterHeaderHTML('recurrentes', REC_COLUMNS, 'montant', recurrentesAll)}
           ${colFilterHeaderHTML('recurrentes', REC_COLUMNS, 'frequence', recurrentesAll)}
-          <th>Coût mensualisé</th><th>Prochain</th>
+          <th>Coût mensualisé</th>
           ${colFilterHeaderHTML('recurrentes', REC_COLUMNS, 'compte', recurrentesAll)}
           ${colFilterHeaderHTML('recurrentes', REC_COLUMNS, 'statut', recurrentesAll)}
           <th></th>
@@ -1585,12 +1586,12 @@ function renderDepenses(){
         <tbody>${recurrentes.map(d=>`<tr>
           <td>${d.libelle}</td><td><span class="pill pill-dim">${d.categorie}</span></td>
           <td class="num">${fmtEURPrecise(d.montant)}</td><td>${d.frequence}</td>
-          <td class="num">${fmtEURPrecise(monthlyCost(d))}</td><td>${fmtDate(d.prochain)}</td>
+          <td class="num">${fmtEURPrecise(monthlyCost(d))}</td>
           <td>${d.compte}</td>
           <td><button class="pill ${d.statut==='Actif'?'pill-teal':'pill-dim'}" data-action="toggle-depense-statut" data-id="${d.id}" style="cursor:pointer;">${d.statut}</button></td>
           <td class="row-actions"><button class="icon-btn" data-action="edit-depense" data-id="${d.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
-        <tfoot><tr><td colspan="2">Total mensuel (actives)</td><td class="num" style="color:var(--violet)">${fmtEUR(abonnementsTotalMensuel())}</td><td colspan="5"></td></tr></tfoot>
+        <tfoot><tr><td colspan="2">Total mensuel (actives)</td><td class="num" style="color:var(--violet)">${fmtEUR(abonnementsTotalMensuel())}</td><td colspan="4"></td></tr></tfoot>
       </table></div>`}
     </div>` : ''}
 
@@ -1662,8 +1663,7 @@ function depense_fields(){
     {key:'dateDebut', label:'Date de début (échelonné)', type:'date'},
     {key:'dateFin', label:'Date de fin (échelonné)', type:'date'},
     {key:'priorite', label:'Priorité', type:'select', options:['Haute','Moyenne','Basse']},
-    {key:'frequence', label:'Fréquence', type:'select', options:['Mensuel','Trimestriel','Annuel','Hebdomadaire']},
-    {key:'prochain', label:'Prochain prélèvement', type:'date'},
+    {key:'frequence', label:'Fréquence', type:'select', options:['Mensuel','Hebdomadaire','Journalier','Trimestriel','Annuel']},
     {key:'statut', label:'Statut', type:'select', options:['Actif','Inactif']},
   ];
 }
@@ -1675,7 +1675,6 @@ function setupDepenseFormToggle(){
   const finField = document.getElementById('f_dateFin')?.closest('.field');
   const prioriteField = document.getElementById('f_priorite')?.closest('.field');
   const frequenceField = document.getElementById('f_frequence')?.closest('.field');
-  const prochainField = document.getElementById('f_prochain')?.closest('.field');
   const statutField = document.getElementById('f_statut')?.closest('.field');
   const montantEl = document.getElementById('f_montant');
   const debutEl = document.getElementById('f_dateDebut');
@@ -1702,7 +1701,6 @@ function setupDepenseFormToggle(){
     if(finField) finField.style.display = echelonne ? '' : 'none';
     if(prioriteField) prioriteField.style.display = previsionnelle ? '' : 'none';
     if(frequenceField) frequenceField.style.display = recurrent ? '' : 'none';
-    if(prochainField) prochainField.style.display = recurrent ? '' : 'none';
     if(statutField) statutField.style.display = recurrent ? '' : 'none';
     updatePreview();
   }
@@ -2133,11 +2131,11 @@ async function handleAction(action, id, el){
     case 'del-revexc': { const item=find(mine(state.revenusExceptionnels)); confirmDelete(item.libelle, async ()=>{ state.revenusExceptionnels = state.revenusExceptionnels.filter(x=>x.id!==id); await persist(); await render(); toast('Rentrée supprimée'); }); break; }
 
     /* Dépenses (uniques, échelonnées, récurrentes/abonnements, ou prévisionnelles) */
-    case 'add-depense': openModal('Ajouter une dépense', depense_fields(), {categorie:'Achat', compte: jointPartner()?'Compte Perso':'Compte Perso', modePaiement:'Unique', date:new Date().toISOString().slice(0,10), priorite:'Moyenne', frequence:'Mensuel', prochain:new Date().toISOString().slice(0,10), statut:'Actif'}, async (data)=>{
+    case 'add-depense': openModal('Ajouter une dépense', depense_fields(), {categorie:'Achat', compte: jointPartner()?'Compte Perso':'Compte Perso', modePaiement:'Unique', date:new Date().toISOString().slice(0,10), priorite:'Moyenne', frequence:'Mensuel', statut:'Actif'}, async (data)=>{
       const dep = {id:uid(), ownerId:currentUser().id, libelle:data.libelle, categorie:data.categorie, compte:data.compte, montant:data.montant, modePaiement:data.modePaiement, notes:''};
       if(data.modePaiement==='Echelonne'){ dep.dateDebut=data.dateDebut; dep.dateFin=data.dateFin; dep.mensualitesPayees=0; }
       else if(data.modePaiement==='Previsionnelle'){ dep.priorite=data.priorite; }
-      else if(data.modePaiement==='Recurrent'){ dep.frequence=data.frequence; dep.prochain=data.prochain; dep.statut=data.statut; }
+      else if(data.modePaiement==='Recurrent'){ dep.frequence=data.frequence; dep.statut=data.statut; }
       else{ dep.date=data.date; }
       state.depenses.push(dep); await persist(); await render(); toast(data.modePaiement==='Previsionnelle' ? 'Dépense prévisionnelle ajoutée' : (data.modePaiement==='Recurrent' ? 'Dépense récurrente ajoutée' : 'Dépense ajoutée')); },
       '<div id="depense-preview" class="field-note" style="margin-top:-8px;margin-bottom:14px;min-height:16px;"></div>');
@@ -2147,10 +2145,10 @@ async function handleAction(action, id, el){
       const wasEchelonne = dep.modePaiement==='Echelonne', prevMensualitesPayees = dep.mensualitesPayees;
       const wasPrevisionnelle = dep.modePaiement==='Previsionnelle';
       dep.libelle=data.libelle; dep.categorie=data.categorie; dep.compte=data.compte; dep.montant=data.montant; dep.modePaiement=data.modePaiement;
-      delete dep.date; delete dep.dateDebut; delete dep.dateFin; delete dep.mensualitesPayees; delete dep.priorite; delete dep.frequence; delete dep.prochain; delete dep.statut;
+      delete dep.date; delete dep.dateDebut; delete dep.dateFin; delete dep.mensualitesPayees; delete dep.priorite; delete dep.frequence; delete dep.statut;
       if(data.modePaiement==='Echelonne'){ dep.dateDebut=data.dateDebut; dep.dateFin=data.dateFin; dep.mensualitesPayees = wasEchelonne ? (prevMensualitesPayees||0) : 0; }
       else if(data.modePaiement==='Previsionnelle'){ dep.priorite=data.priorite; }
-      else if(data.modePaiement==='Recurrent'){ dep.frequence=data.frequence; dep.prochain=data.prochain; dep.statut=data.statut; }
+      else if(data.modePaiement==='Recurrent'){ dep.frequence=data.frequence; dep.statut=data.statut; }
       else{ dep.date=data.date; }
       const justPlanned = wasPrevisionnelle && data.modePaiement!=='Previsionnelle';
       await persist(); await render(); toast(justPlanned ? 'Dépense planifiée' : 'Dépense mise à jour'); },
