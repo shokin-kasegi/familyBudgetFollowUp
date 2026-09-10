@@ -803,28 +803,34 @@ function depenseMensualiteDuMois(dep, key){
   if(!dep.date) return 0;
   return dep.date.slice(0,7)===key ? (Number(dep.montant)||0) : 0;
 }
-function depenseResteAPayer(dep){
-  if(dep.modePaiement!=='Echelonne') return 0;
-  // Reste à payer = mensualité actuelle × nombre de mensualités encore à venir
-  // (à partir d'aujourd'hui inclus), y compris celles reportées.
-  if(!dep.dateDebut) return 0;
-  const today = new Date(); today.setHours(0,0,0,0);
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
+/* Deux notions distinctes de "reste à payer", pour ne jamais confondre
+   "ce qu'il est prévu qu'il te reste" et "ce que tu dois vraiment encore" :
+   - RÉEL : ce que tu dois vraiment, ne bouge qu'avec un versement
+     exceptionnel déclaré (le montant lui-même EST le réel, un retrait
+     de mensualité ne change rien à ce que tu dois réellement, juste à
+     quand tu le payes).
+   - PRÉVISIONNEL : ce qu'il resterait, selon le planning, en te plaçant
+     au mois consulté — même si ce mois n'est pas encore passé et même
+     si tu n'as rien saisi. Ex. 4x 400€ à partir d'octobre : vu depuis
+     novembre, le prévisionnel affiche 300€ (une mensualité "consommée"
+     par le planning), qu'on ait payé ou non. */
+function depenseResteAPayerReel(dep){
+  return dep.modePaiement==='Echelonne' ? Math.max(Number(dep.montant)||0, 0) : 0;
+}
+function depenseResteAPayerPrevisionnel(dep, key){
+  if(dep.modePaiement!=='Echelonne' || !dep.dateDebut) return 0;
+  const [y0,m0] = dep.dateDebut.split('-').map(Number);
+  const [ky,km] = key.split('-').map(Number);
+  const idx = (ky-y0)*12 + (km-m0); // index du mois consulté dans le planning (0 = mois de dateDebut)
   const nb = depenseNbMensualites(dep);
-  let [y,m] = dep.dateDebut.split('-').map(Number);
-  let restantes = 0;
-  for(let i=0;i<nb;i++){
-    const key = `${y}-${String(m).padStart(2,'0')}`;
-    if(key >= todayKey) restantes++;
-    m++; if(m>12){ m=1; y++; }
-  }
-  return Math.max(restantes * depenseMensualite(dep), 0);
+  const moisEcoules = Math.max(Math.min(idx, nb), 0); // mensualités déjà "consommées" par le planning AVANT ce mois
+  return Math.max((Number(dep.montant)||0) - moisEcoules*depenseMensualite(dep), 0);
 }
 function depensesTotalMois(key, excludeCompte){
   return mine(state.depenses).filter(d=> d.modePaiement!=='Recurrent' && (excludeCompte ? d.compte!==excludeCompte : true)).reduce((s,d)=>s+depenseMensualiteDuMois(d,key),0);
 }
-function depensesEchelonneesResteAPayerTotal(){
-  return mine(state.depenses).filter(d=>d.modePaiement==='Echelonne').reduce((s,d)=>s+depenseResteAPayer(d),0);
+function depensesEchelonneesResteAPayerTotal(key){
+  return mine(state.depenses).filter(d=>d.modePaiement==='Echelonne').reduce((s,d)=>s+depenseResteAPayerReel(d),0);
 }
 
 function chargesActivesMois(key, excludeCompte){
@@ -1246,7 +1252,7 @@ function renderDashboard(){
   const positive = d.solde >= 0;
   const gaugePct = d.revenu>0 ? Math.max(0, Math.min(1, 1 - Math.abs(d.solde)/d.revenu)) : (positive?1:0);
 
-  const echEnCours = mine(state.depenses).filter(d=>d.modePaiement==='Echelonne' && depenseResteAPayer(d)>0.01);
+  const echEnCours = mine(state.depenses).filter(d=>d.modePaiement==='Echelonne' && depenseResteAPayerReel(d)>0.01);
   const objEnCours = mine(state.objectifs).filter(o=>objectifCalc(o).statut!=='Atteint').length;
   const objAtteints = mine(state.objectifs).filter(o=>objectifCalc(o).statut==='Atteint').length;
 
@@ -1761,7 +1767,7 @@ const ECH_COLUMNS = {
   libelle: { label:'Achat', type:'text', get:d=>d.libelle },
   compte: { label:'Compte', type:'text', get:d=>d.compte||'Compte Perso' },
   montant: { label:'Montant total', type:'number', get:d=>Number(d.montant)||0 },
-  statut: { label:'Statut', type:'text', get:d=>depenseResteAPayer(d)<=0.01?'Soldé':'En cours' },
+  statut: { label:'Statut', type:'text', get:d=>depenseResteAPayerReel(d)<=0.01?'Soldé':'En cours' },
 };
 function renderEcheances(){
   const key = state.selectedMonth;
@@ -1778,15 +1784,16 @@ function renderEcheances(){
           ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'libelle', all)}
           ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'compte', all)}
           ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'montant', all)}
-          <th>Mensualité</th><th>Mensualités</th><th>Ce mois</th><th>Reste à payer</th><th>Fin prévue</th>
+          <th>Mensualité</th><th>Mensualités</th><th>Ce mois</th><th>Reste prévisionnel</th><th>Reste réel</th><th>Fin prévue</th>
           ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'statut', all)}
           <th></th>
         </tr></thead>
         <tbody>${list.map(d=>{
           const nb = depenseNbMensualites(d);
           const dateFin = depenseDateFin(d);
-          const reste = depenseResteAPayer(d);
-          const done = reste<=0.01;
+          const resteReel = depenseResteAPayerReel(d);
+          const restePrev = depenseResteAPayerPrevisionnel(d, key);
+          const done = resteReel<=0.01;
           const retireCeMois = (d.moisRetires||[]).includes(key);
           // "consommées" : mois entre le début et le mois consulté (inclus), hors mois retirés
           const [y0,m0] = d.dateDebut.split('-').map(Number);
@@ -1797,7 +1804,8 @@ function renderEcheances(){
           <td class="num">${fmtEURPrecise(depenseMensualite(d))}</td>
           <td><span style="font-size:12.5px;color:var(--text-dim);">${consommees}/${nb}</span></td>
           <td class="num">${retireCeMois ? '—' : fmtEUR(depenseMensualiteDuMois(d,key))}</td>
-          <td class="num">${fmtEUR(reste)}</td>
+          <td class="num" style="color:var(--text-dim);" title="Ce qu'il resterait selon le planning, vu depuis ${monthLabel(key)}">${fmtEUR(restePrev)}</td>
+          <td class="num" title="Ce que tu dois vraiment, ne bouge qu'avec un versement">${fmtEUR(resteReel)}</td>
           <td style="font-size:12px;color:var(--text-dim);">${fmtDate(dateFin)}</td>
           <td><span class="pill ${done?'pill-teal':(retireCeMois?'pill-coral':'pill-amber')}">${done?'Soldé':(retireCeMois?'Ce mois retiré':'En cours')}</span></td>
           <td class="row-actions">
@@ -1808,7 +1816,7 @@ function renderEcheances(){
             <button class="icon-btn" data-action="edit-depense" data-id="${d.id}">${icon('edit')}</button>
           </td>
         </tr>`;}).join('')}</tbody>
-        <tfoot><tr><td colspan="5">Total ${monthLabel(key)} / Reste à payer</td><td class="num">${fmtEUR(depensesTotalMois(key))}</td><td class="num">${fmtEUR(depensesEchelonneesResteAPayerTotal())}</td><td colspan="3"></td></tr></tfoot>
+        <tfoot><tr><td colspan="5">Total ${monthLabel(key)} / Reste réel</td><td class="num">${fmtEUR(depensesTotalMois(key))}</td><td></td><td class="num">${fmtEUR(depensesEchelonneesResteAPayerTotal())}</td><td colspan="3"></td></tr></tfoot>
       </table></div>`)}
     </div>
   `;
