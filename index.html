@@ -89,8 +89,19 @@ a{color:inherit;}
 @media(max-width:880px){ .sidebar-expand-btn{display:none !important;visibility:hidden !important;} }
 .brand{
   display:flex;align-items:center;gap:10px;
-  padding:6px 10px 26px 10px;
+  padding:6px 10px 14px 10px;
 }
+.space-switch{
+  display:flex;gap:4px;padding:4px;margin-bottom:16px;
+  background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px;
+}
+.space-switch-btn{
+  flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
+  padding:8px 6px;border-radius:9px;font-size:12.5px;font-weight:600;color:var(--text-dim);
+}
+.space-switch-btn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.9;}
+.space-switch-btn:hover{color:var(--text);}
+.space-switch-btn.active{background:#FFFFFF;color:#0A0C10;}
 .brand-mark{
   width:34px;height:34px;border-radius:10px;
   background:linear-gradient(135deg,#FFFFFF,#C7C7CE);
@@ -605,6 +616,13 @@ async function loadState(){
     needsPersist = true;
   }
 
+  // Migration : l'ancien navOrder (tableau plat, un seul espace) devient un objet
+  // par espace, suite à la séparation Finance / Groupes.
+  if(Array.isArray(state.navOrder)){
+    state.navOrder = { finance: state.navOrder.filter(id=>id!=='parametres') };
+    needsPersist = true;
+  }
+
   // Migration : les dépenses échelonnées de l'ancien modèle (dateFin saisie,
   // progression via mensualitesPayees) passent au nouveau modèle (nbMensualites
   // calculée automatiquement, mensualités considérées payées par défaut au fil
@@ -1009,7 +1027,12 @@ function analyseYearsWithData(term){
 }
 
 /* ============================== SIDEBAR / NAV ============================== */
-const NAV = [
+const SPACES = [
+  { id:'finance', label:'Finance', icon:'wallet' },
+  { id:'groupes', label:'Groupes', icon:'users' },
+];
+var currentSpace = 'finance'; // espace actif, non persisté (comme currentView) — repart sur Finance à chaque connexion
+const NAV_FINANCE = [
   {id:'dashboard', label:'Tableau de bord', icon:'dashboard'},
   {id:'revenus', label:'Revenus', icon:'income'},
   {id:'depenses', label:'Dépenses', icon:'wallet'},
@@ -1019,13 +1042,21 @@ const NAV = [
   {id:'compteJoint', label:'Compte joint', icon:'users'},
   {id:'annuelle', label:'Vue annuelle', icon:'chart'},
   {id:'analyse', label:'Analyse', icon:'search'},
-  {id:'parametres', label:'Paramètres', icon:'settings'},
 ];
-function orderedNavItems(){
-  const order = (state.navOrder && state.navOrder.length) ? state.navOrder : NAV.map(n=>n.id);
-  const byId = {}; NAV.forEach(n=>byId[n.id]=n);
+const NAV_GROUPES = [
+  {id:'groupesListe', label:'Mes groupes', icon:'users'},
+];
+function navForSpace(space){ return space==='groupes' ? NAV_GROUPES : NAV_FINANCE; }
+function defaultViewForSpace(space){ return space==='groupes' ? 'groupesListe' : 'dashboard'; }
+function spaceOfView(view){ return NAV_GROUPES.some(n=>n.id===view) ? 'groupes' : 'finance'; }
+function orderedNavItems(space){
+  space = space || currentSpace;
+  const nav = navForSpace(space);
+  const savedOrder = (state.navOrder && state.navOrder[space]) || [];
+  const order = savedOrder.length ? savedOrder : nav.map(n=>n.id);
+  const byId = {}; nav.forEach(n=>byId[n.id]=n);
   const ordered = order.filter(id=>byId[id]).map(id=>byId[id]);
-  NAV.forEach(n=>{ if(!order.includes(n.id)) ordered.push(n); }); // tout nouvel onglet non encore rangé va à la fin
+  nav.forEach(n=>{ if(!order.includes(n.id)) ordered.push(n); }); // tout nouvel onglet non encore rangé va à la fin
   return ordered;
 }
 let dragNavId = null, dragOverId = null, dragOverPos = null, dragGhostEl = null;
@@ -1033,7 +1064,8 @@ let dragPending = null;      // { id, el, startX, startY } — clic maintenu, pa
 let dragJustHappened = false; // empêche le clic de navigation juste après un glissement réel
 const NAV_DRAG_THRESHOLD = 6; // px de mouvement avant de considérer que c'est un glissement, pas un clic
 function setupNavDragAndDrop(){
-  const items = document.querySelectorAll('#sidebar .nav-item[data-nav]');
+  const draggableIds = new Set(navForSpace(currentSpace).map(n=>n.id));
+  const items = Array.from(document.querySelectorAll('#sidebar .nav-item[data-nav]')).filter(el=>draggableIds.has(el.dataset.nav));
   items.forEach(el=>{
     el.addEventListener('mousedown', (e)=>{
       if(e.button!==0) return; // clic gauche uniquement
@@ -1064,7 +1096,9 @@ document.addEventListener('mousemove', (e)=>{
   if(!dragNavId) return;
   if(dragGhostEl){ dragGhostEl.style.left = e.clientX+'px'; dragGhostEl.style.top = e.clientY+'px'; }
   let found = null;
+  const draggableIds = new Set(navForSpace(currentSpace).map(n=>n.id));
   document.querySelectorAll('#sidebar .nav-item[data-nav]').forEach(el=>{
+    if(!draggableIds.has(el.dataset.nav)) return;
     const rect = el.getBoundingClientRect();
     if(e.clientX>=rect.left && e.clientX<=rect.right && e.clientY>=rect.top && e.clientY<=rect.bottom) found = el;
   });
@@ -1097,7 +1131,8 @@ document.addEventListener('mouseup', async ()=>{
     let toIdx = items.indexOf(overId);
     if(pos==='after') toIdx += 1;
     items.splice(toIdx,0,from);
-    state.navOrder = items;
+    if(!state.navOrder) state.navOrder = {};
+    state.navOrder[currentSpace] = items;
     await persist();
   }
   await render();
@@ -1114,8 +1149,12 @@ function renderSidebar(){
       <div><div class="brand-name">Solde</div><div class="brand-sub">Budget personnel</div></div>
       <button class="icon-btn" data-action="toggle-sidebar-collapse" title="Masquer la navigation" style="margin-left:auto;">${icon('chevL')}</button>
     </div>
+    <div class="space-switch">
+      ${SPACES.map(s=>`<button class="space-switch-btn ${currentSpace===s.id?'active':''}" data-action="switch-space" data-space="${s.id}">${icon(s.icon)}${s.label}</button>`).join('')}
+    </div>
     ${orderedNavItems().map(n=>`<button class="nav-item ${currentView===n.id?'active':''}" data-nav="${n.id}">${icon(n.icon)}<span>${n.label}</span></button>`).join('')}
     <div class="nav-spacer"></div>
+    <button class="nav-item ${currentView==='parametres'?'active':''}" data-nav="parametres">${icon('settings')}<span>Paramètres</span></button>
     <button class="nav-item" data-action="toggle-notif-panel" style="position:relative;">${icon('bell')}<span>Notifications</span>${badge>0?`<span class="notif-badge">${badge}</span>`:''}</button>
     <div class="sidebar-user">
       <div class="avatar" style="background:${avatarColor(me)}">${initials(me)}</div>
@@ -1124,7 +1163,7 @@ function renderSidebar(){
     </div>
     <div class="sidebar-foot">Données stockées sur cet appareil, synchronisées via GitHub si connecté.</div>
   `;
-  document.getElementById('mobile-title').textContent = orderedNavItems().find(n=>n.id===currentView)?.label || 'Solde';
+  document.getElementById('mobile-title').textContent = currentView==='parametres' ? 'Paramètres' : (orderedNavItems().find(n=>n.id===currentView)?.label || 'Solde');
   setupNavDragAndDrop();
 }
 function initials(u){ if(!u) return '?'; return (u.displayName||u.username||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
@@ -1215,7 +1254,8 @@ async function render(){
   const renderers = {
     dashboard: renderDashboard, revenus: renderRevenus,
     depenses: renderDepenses, echeances: renderEcheances, objectifs: renderObjectifs, charges: renderCharges,
-    compteJoint: renderCompteJoint, annuelle: renderAnnuelle, analyse: renderAnalyse, parametres: renderParametres
+    compteJoint: renderCompteJoint, annuelle: renderAnnuelle, analyse: renderAnalyse, parametres: renderParametres,
+    groupesListe: renderGroupesListe,
   };
   view.innerHTML = renderers[currentView] ? renderers[currentView]() : '';
   afterRender();
@@ -2129,7 +2169,7 @@ document.addEventListener('click', async (e)=>{
   }
 
   const navBtn = e.target.closest('[data-nav]');
-  if(navBtn){ currentView = navBtn.dataset.nav; closeSidebarMobile(); await render(); return; }
+  if(navBtn){ currentView = navBtn.dataset.nav; if(currentView!=='parametres') currentSpace = spaceOfView(currentView); closeSidebarMobile(); await render(); return; }
 
   const stepBtn = e.target.closest('[data-stepper]');
   if(stepBtn){ state.selectedMonth = addMonths(state.selectedMonth, Number(stepBtn.dataset.dir)); await persist(); await render(); return; }
@@ -2219,6 +2259,7 @@ async function handleAction(action, id, el){
     case 'del-depense': { const item=find(mine(state.depenses)); confirmDelete(item.libelle, async ()=>{ state.depenses = state.depenses.filter(x=>x.id!==id); await persist(); await render(); toast('Dépense supprimée'); }); break; }
     case 'toggle-depense-statut': { const item=find(mine(state.depenses)); item.statut = item.statut==='Actif'?'Inactif':'Actif'; await persist(); await render(); toast('Statut mis à jour'); break; }
     case 'goto-depenses': currentView = 'depenses'; await render(); break;
+    case 'switch-space': currentSpace = el.dataset.space; currentView = defaultViewForSpace(currentSpace); await render(); break;
     case 'clear-table-filter': state.tableFilters[el.dataset.table] = { sortCol:null, sortDir:'asc', selected:{} }; await persist(); await render(); break;
     case 'toggle-col-filter': {
       const table = el.dataset.table, col = el.dataset.col;
@@ -2328,7 +2369,7 @@ async function handleAction(action, id, el){
     /* Auth / users */
     case 'logout': stopPolling(); clearSession(); await boot(); toast('Déconnecté'); break;
     case 'toggle-sidebar-collapse': state.navCollapsed = !state.navCollapsed; await persist(); await render(); break;
-    case 'reset-nav-order': state.navOrder = null; await persist(); await render(); break;
+    case 'reset-nav-order': if(state.navOrder) state.navOrder[el.dataset.space||currentSpace] = null; await persist(); await render(); break;
     case 'add-user': openModal('Ajouter un compte', userFieldsAdmin(null).concat([{key:'password', label:'Mot de passe', type:'password'}]), {role:'membre'}, async (data)=>{
       if(authState.users.some(u=>u.username===data.username.trim().toLowerCase())){ toast('Cet identifiant existe déjà'); return false; }
       const salt = randomSalt();
@@ -2806,6 +2847,14 @@ function drawAnalyseChart(){
   });
 }
 
+function renderGroupesListe(){
+  return `
+    <div class="page-head"><div><div class="page-title">Mes groupes</div><div class="page-sub">Dépenses partagées à plusieurs, façon Tricount</div></div></div>
+    <div class="card">
+      ${emptyState('users','Bientôt disponible','Les groupes partagés arrivent dans une prochaine mise à jour — tu pourras créer un groupe, inviter des proches (avec ou sans compte), et répartir vos dépenses communes.', null, null)}
+    </div>
+  `;
+}
 function renderParametres(){
   const me = currentUser();
   return `
@@ -2813,10 +2862,11 @@ function renderParametres(){
 
     <div class="card settings-block">
       <h3>Navigation</h3>
-      <div class="sub">Réordonne les onglets directement dans la barre de navigation (maintiens le clic sur un onglet et glisse-le à sa nouvelle place).</div>
-      <div class="row-actions" style="justify-content:flex-start;margin:12px 0 0;">
+      <div class="sub">Réordonne les onglets directement dans la barre de navigation (maintiens le clic sur un onglet et glisse-le à sa nouvelle place). Chaque espace (Finance, Groupes) garde son propre ordre.</div>
+      <div class="row-actions" style="justify-content:flex-start;margin:12px 0 0;flex-wrap:wrap;">
         <button class="btn btn-ghost btn-sm" data-action="toggle-sidebar-collapse">${icon(state.navCollapsed?'eye':'eyeOff')}${state.navCollapsed?'Afficher la barre de navigation':'Masquer la barre de navigation'}</button>
-        ${state.navOrder ? `<button class="btn btn-ghost btn-sm" data-action="reset-nav-order">${icon('refresh')}Réinitialiser l'ordre</button>` : ''}
+        ${state.navOrder?.finance ? `<button class="btn btn-ghost btn-sm" data-action="reset-nav-order" data-space="finance">${icon('refresh')}Réinitialiser l'ordre — Finance</button>` : ''}
+        ${state.navOrder?.groupes ? `<button class="btn btn-ghost btn-sm" data-action="reset-nav-order" data-space="groupes">${icon('refresh')}Réinitialiser l'ordre — Groupes</button>` : ''}
       </div>
     </div>
 
@@ -3491,6 +3541,7 @@ async function boot(){
   const ok = await renderAuthGate();
   if(!ok) return;
   currentView = 'dashboard';
+  currentSpace = 'finance';
   await render();
   updateFab();
   if(ghConfigured()) startPolling();
