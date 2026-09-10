@@ -498,9 +498,8 @@ function icon(name){ return `<svg viewBox="0 0 24 24">${ICONS[name]||''}</svg>`;
 
 /* ============================== STATE ============================== */
 const MONTH_NAMES = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
-const CATS_ABO = ['Internet','Transport','Mobile','Divertissement','Stockage','Gestion','Finance','Autre'];
+const CATS_DEP = ['Achat','Réparation','Santé','Loisirs','Cadeau','Voyage','Imprévu','Internet','Transport','Mobile','Divertissement','Stockage','Gestion','Finance','Autre'];
 const CATS_REV = ['Salaire','Remboursement','Prime','Cadeau','Autre'];
-const CATS_DEP = ['Achat','Réparation','Santé','Loisirs','Cadeau','Voyage','Imprévu','Autre'];
 const COMPTES = ['Compte Joint','Compte Perso'];
 
 var state = null;
@@ -522,10 +521,9 @@ function defaultState(){
     selectedYear: now.getFullYear(),
     analyseYear: now.getFullYear(),
     analyseTerm: '',
-    depensesFilter: { categorie:'', compte:'', mode:'' },
+    tableFilters: {},
     revenusRecurrents: [],
     revenusExceptionnels: [],
-    abonnements: [],
     depenses: [],
     objectifs: [],
     versements: [],
@@ -591,6 +589,22 @@ async function loadState(){
     needsPersist = true;
   }
 
+  // Migration : l'ancien tableau "Abonnements" séparé devient une dépense
+  // "Récurrente" dans le même onglet Dépenses (un abonnement reste une dépense,
+  // juste avec une fréquence et un statut).
+  if(Array.isArray(state.abonnements) && state.abonnements.length>0){
+    if(!state.depenses) state.depenses = [];
+    state.abonnements.forEach(a=>{
+      state.depenses.push({
+        id: a.id, ownerId: a.ownerId, libelle: a.nom, categorie: a.categorie, compte: a.compte||'Compte Perso',
+        montant: a.montant, modePaiement:'Recurrent', frequence: a.frequence||'Mensuel', prochain: a.prochain,
+        statut: a.statut||'Actif', notes: a.notes||''
+      });
+    });
+    delete state.abonnements;
+    needsPersist = true;
+  }
+
   // Migration : les revenus exceptionnels négatifs (ancien "bricolage" pour noter une
   // dépense ponctuelle, avant l'existence de l'onglet Dépenses) deviennent de vraies
   // dépenses "En une fois", avec un montant positif comme il se doit.
@@ -631,7 +645,7 @@ async function loadState(){
   if(needsPersistAuth) await persistAuth();
   if(needsPersistSocial) await persistSocial();
 }
-const OWNED_ARRAYS = ['revenusRecurrents','revenusExceptionnels','abonnements','depenses','objectifs','versements','charges'];
+const OWNED_ARRAYS = ['revenusRecurrents','revenusExceptionnels','depenses','objectifs','versements','charges'];
 function mine(arr){
   const me = currentUser();
   return me ? (arr||[]).filter(e=>e.ownerId===me.id) : [];
@@ -724,7 +738,7 @@ function revenusDuMoisForOwner(ownerId, key){
   });
   return total;
 }
-function abonnementsActifs(){ return mine(state.abonnements).filter(a=>a.statut==='Actif'); }
+function abonnementsActifs(){ return mine(state.depenses).filter(d=>d.modePaiement==='Recurrent' && d.statut==='Actif'); }
 function abonnementsTotalMensuel(excludeCompte){
   return abonnementsActifs().filter(a=> excludeCompte ? a.compte!==excludeCompte : true).reduce((s,a)=>s+monthlyCost(a),0);
 }
@@ -745,6 +759,10 @@ function depenseMensualiteDuMois(dep, key){
     if(!dep.dateDebut || !dep.dateFin) return 0;
     return inRangeMonth(key, dep.dateDebut, dep.dateFin) ? depenseMensualite(dep) : 0;
   }
+  if(dep.modePaiement==='Recurrent'){
+    return dep.statut==='Actif' ? monthlyCost(dep) : 0;
+  }
+  if(dep.modePaiement==='Previsionnelle') return 0;
   if(!dep.date) return 0;
   return dep.date.slice(0,7)===key ? (Number(dep.montant)||0) : 0;
 }
@@ -755,7 +773,7 @@ function depenseResteAPayer(dep){
   return Math.max((Number(dep.montant)||0) - payees*depenseMensualite(dep), 0);
 }
 function depensesTotalMois(key, excludeCompte){
-  return mine(state.depenses).filter(d=> excludeCompte ? d.compte!==excludeCompte : true).reduce((s,d)=>s+depenseMensualiteDuMois(d,key),0);
+  return mine(state.depenses).filter(d=> d.modePaiement!=='Recurrent' && (excludeCompte ? d.compte!==excludeCompte : true)).reduce((s,d)=>s+depenseMensualiteDuMois(d,key),0);
 }
 function depensesEchelonneesResteAPayerTotal(){
   return mine(state.depenses).filter(d=>d.modePaiement==='Echelonne').reduce((s,d)=>s+depenseResteAPayer(d),0);
@@ -798,19 +816,18 @@ function jointPartner(){
   return authState.users.find(u=>u.id===me.jointWith) || null;
 }
 function jointAboTotalFor(ownerId){
-  return forOwner(state.abonnements, ownerId).filter(a=>a.statut==='Actif' && a.compte==='Compte Joint').reduce((s,a)=>s+monthlyCost(a),0);
+  return forOwner(state.depenses, ownerId).filter(d=>d.modePaiement==='Recurrent' && d.statut==='Actif' && d.compte==='Compte Joint').reduce((s,d)=>s+monthlyCost(d),0);
 }
 function jointChargesTotalFor(ownerId, key){
   return forOwner(state.charges, ownerId).filter(c=>c.compte==='Compte Joint' && inRangeMonth(key, c.dateDebut, c.dateFin)).reduce((s,c)=>s+(Number(c.budget)||0),0);
 }
 function jointDepensesTotalFor(ownerId, key){
-  return forOwner(state.depenses, ownerId).filter(d=>d.compte==='Compte Joint').reduce((s,d)=>s+depenseMensualiteDuMois(d,key),0);
+  return forOwner(state.depenses, ownerId).filter(d=>d.compte==='Compte Joint' && d.modePaiement!=='Recurrent').reduce((s,d)=>s+depenseMensualiteDuMois(d,key),0);
 }
 function jointDetailFor(ownerId, key){
-  const abo = forOwner(state.abonnements, ownerId).filter(a=>a.statut==='Actif' && a.compte==='Compte Joint').map(a=>({id:a.id, itemType:'abonnements', nom:a.nom, montant:monthlyCost(a), cat:a.categorie}));
   const ch = forOwner(state.charges, ownerId).filter(c=>c.compte==='Compte Joint' && inRangeMonth(key, c.dateDebut, c.dateFin)).map(c=>({id:c.id, itemType:'charges', nom:c.categorie, montant:Number(c.budget), cat:c.description||c.type}));
-  const dep = forOwner(state.depenses, ownerId).filter(d=>d.compte==='Compte Joint' && depenseMensualiteDuMois(d,key)>0).map(d=>({id:d.id, itemType:'depenses', nom:d.libelle, montant:depenseMensualiteDuMois(d,key), cat:d.modePaiement==='Echelonne'?'Dépense échelonnée':'Dépense'}));
-  return [...abo, ...ch, ...dep];
+  const dep = forOwner(state.depenses, ownerId).filter(d=>d.compte==='Compte Joint' && depenseMensualiteDuMois(d,key)>0).map(d=>({id:d.id, itemType:'depenses', nom:d.libelle, montant:depenseMensualiteDuMois(d,key), cat:d.modePaiement==='Echelonne'?'Dépense échelonnée':(d.modePaiement==='Recurrent'?'Abonnement':'Dépense')}));
+  return [...ch, ...dep];
 }
 /* Répartition du compte joint au prorata des revenus de chacun.
    Si personne n'a de revenu déclaré ce mois-là, on retombe sur un 50/50.
@@ -876,12 +893,10 @@ function anneeData(year){
    (abonnements, charges, dépenses). */
 function analyseSearchableTerms(){
   const terms = new Set();
-  mine(state.abonnements).forEach(a=>terms.add(a.nom));
   mine(state.charges).forEach(c=>{ terms.add(c.categorie); if(c.description) terms.add(c.description); });
   mine(state.depenses).forEach(d=>terms.add(d.libelle));
   const partner = jointPartner();
   if(partner){
-    forOwner(state.abonnements, partner.id).filter(a=>a.compte==='Compte Joint').forEach(a=>terms.add(a.nom));
     forOwner(state.charges, partner.id).filter(c=>c.compte==='Compte Joint').forEach(c=>{ terms.add(c.categorie); if(c.description) terms.add(c.description); });
     forOwner(state.depenses, partner.id).filter(d=>d.compte==='Compte Joint').forEach(d=>terms.add(d.libelle));
   }
@@ -891,14 +906,12 @@ function analyseMatchingEntries(term){
   const t = (term||'').trim().toLowerCase();
   if(!t) return [];
   const out = [];
-  mine(state.abonnements).forEach(a=>{ if(a.nom.toLowerCase().includes(t)) out.push({type:'abonnement', item:a, mine:true}); });
   mine(state.charges).forEach(c=>{ if((c.categorie||'').toLowerCase().includes(t) || (c.description||'').toLowerCase().includes(t)) out.push({type:'charge', item:c, mine:true}); });
   mine(state.depenses).forEach(d=>{ if(d.libelle.toLowerCase().includes(t)) out.push({type:'depense', item:d, mine:true}); });
   // Les saisies jointes du/de la partenaire comptent aussi, même si on n'en est
   // pas à l'origine — c'est bien une dépense commune, on doit la voir dans le total.
   const partner = jointPartner();
   if(partner){
-    forOwner(state.abonnements, partner.id).filter(a=>a.compte==='Compte Joint').forEach(a=>{ if(a.nom.toLowerCase().includes(t)) out.push({type:'abonnement', item:a, mine:false}); });
     forOwner(state.charges, partner.id).filter(c=>c.compte==='Compte Joint').forEach(c=>{ if((c.categorie||'').toLowerCase().includes(t) || (c.description||'').toLowerCase().includes(t)) out.push({type:'charge', item:c, mine:false}); });
     forOwner(state.depenses, partner.id).filter(d=>d.compte==='Compte Joint').forEach(d=>{ if(d.libelle.toLowerCase().includes(t)) out.push({type:'depense', item:d, mine:false}); });
   }
@@ -912,8 +925,7 @@ function analyseMonthlyTotals(term, year){
     let total = 0, totalMine = 0, totalPartner = 0;
     matches.forEach(({type,item,mine:isMine})=>{
       let v = 0;
-      if(type==='abonnement'){ if(item.statut==='Actif') v = monthlyCost(item); }
-      else if(type==='charge'){ if(inRangeMonth(key, item.dateDebut, item.dateFin)) v = Number(item.budget)||0; }
+      if(type==='charge'){ if(inRangeMonth(key, item.dateDebut, item.dateFin)) v = Number(item.budget)||0; }
       else if(type==='depense'){ v = depenseMensualiteDuMois(item, key); }
       total += v; if(isMine) totalMine += v; else totalPartner += v;
     });
@@ -927,13 +939,13 @@ function analyseYearsWithData(term){
   const now = new Date();
   years.add(now.getFullYear());
   matches.forEach(({type,item})=>{
-    if(type==='abonnement'){ years.add(now.getFullYear()); } // pas d'historique de date sur les abonnements
     if(type==='charge'){
       if(item.dateDebut) years.add(Number(item.dateDebut.slice(0,4)));
       if(item.dateFin) years.add(Number(item.dateFin.slice(0,4)));
       if(!item.dateDebut && !item.dateFin) years.add(now.getFullYear());
     }
     if(type==='depense'){
+      if(item.modePaiement==='Recurrent') years.add(now.getFullYear()); // pas d'historique de date sur les dépenses récurrentes
       if(item.date) years.add(Number(item.date.slice(0,4)));
       if(item.dateDebut) years.add(Number(item.dateDebut.slice(0,4)));
       if(item.dateFin) years.add(Number(item.dateFin.slice(0,4)));
@@ -946,7 +958,6 @@ function analyseYearsWithData(term){
 const NAV = [
   {id:'dashboard', label:'Tableau de bord', icon:'dashboard'},
   {id:'revenus', label:'Revenus', icon:'income'},
-  {id:'abonnements', label:'Abonnements', icon:'repeat'},
   {id:'depenses', label:'Dépenses', icon:'wallet'},
   {id:'echeances', label:'Échéances', icon:'calendar'},
   {id:'objectifs', label:'Objectifs', icon:'target'},
@@ -1148,7 +1159,7 @@ async function render(){
   renderSidebar();
   const view = document.getElementById('view');
   const renderers = {
-    dashboard: renderDashboard, revenus: renderRevenus, abonnements: renderAbonnements,
+    dashboard: renderDashboard, revenus: renderRevenus,
     depenses: renderDepenses, echeances: renderEcheances, objectifs: renderObjectifs, charges: renderCharges,
     compteJoint: renderCompteJoint, annuelle: renderAnnuelle, analyse: renderAnalyse, parametres: renderParametres
   };
@@ -1443,60 +1454,7 @@ function revexcFields(){
 }
 
 /* ============================== ABONNEMENTS ============================== */
-const ABO_COLUMNS = {
-  nom: { label:'Nom', type:'text', get:a=>a.nom },
-  categorie: { label:'Catégorie', type:'text', get:a=>a.categorie },
-  montant: { label:'Montant', type:'number', get:a=>Number(a.montant)||0 },
-  frequence: { label:'Fréquence', type:'text', get:a=>a.frequence },
-  compte: { label:'Compte', type:'text', get:a=>a.compte },
-  statut: { label:'Statut', type:'text', get:a=>a.statut },
-};
-function renderAbonnements(){
-  const all = mine(state.abonnements);
-  const list = applyTableFilterAndSort('abonnements', ABO_COLUMNS, all);
-  return `
-    <div class="page-head"><div><div class="page-title">Abonnements</div><div class="page-sub">Tous vos abonnements récurrents</div></div>
-      <button class="btn btn-primary" data-action="add-abo">${icon('plus')}Ajouter un abonnement</button></div>
-    <div class="card">
-      ${tableFilterActive('abonnements') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="abonnements">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
-      ${all.length===0 ? emptyState('repeat','Aucun abonnement','Streaming, mobile, logiciels… suivez-les tous ici.','add-abo','Ajouter un abonnement') :
-        (list.length===0 ? emptyState('repeat','Aucun résultat','Aucun abonnement ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
-      <div class="table-wrap"><table>
-        <thead><tr>
-          ${colFilterHeaderHTML('abonnements', ABO_COLUMNS, 'nom', all)}
-          ${colFilterHeaderHTML('abonnements', ABO_COLUMNS, 'categorie', all)}
-          ${colFilterHeaderHTML('abonnements', ABO_COLUMNS, 'montant', all)}
-          ${colFilterHeaderHTML('abonnements', ABO_COLUMNS, 'frequence', all)}
-          <th>Coût mensualisé</th><th>Prochain</th>
-          ${colFilterHeaderHTML('abonnements', ABO_COLUMNS, 'compte', all)}
-          ${colFilterHeaderHTML('abonnements', ABO_COLUMNS, 'statut', all)}
-          <th></th>
-        </tr></thead>
-        <tbody>${list.map(a=>`<tr>
-          <td>${a.nom}</td><td><span class="pill pill-dim">${a.categorie}</span></td>
-          <td class="num">${fmtEURPrecise(a.montant)}</td><td>${a.frequence}</td>
-          <td class="num">${fmtEURPrecise(monthlyCost(a))}</td><td>${fmtDate(a.prochain)}</td>
-          <td>${a.compte}</td>
-          <td><button class="pill ${a.statut==='Actif'?'pill-teal':'pill-dim'}" data-action="toggle-abo" data-id="${a.id}" style="cursor:pointer;">${a.statut}</button></td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-abo" data-id="${a.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-abo" data-id="${a.id}">${icon('trash')}</button></td>
-        </tr>`).join('')}</tbody>
-        <tfoot><tr><td colspan="4">Total mensuel (actifs)</td><td class="num" style="color:var(--violet)">${fmtEUR(abonnementsTotalMensuel())}</td><td colspan="4"></td></tr></tfoot>
-      </table></div>`)}
-    </div>
-  `;
-}
 function compteOptions(){ return jointPartner() ? COMPTES : ['Compte Perso']; }
-function abo_fields(){
-  return [
-    {key:'nom', label:'Nom', placeholder:'Netflix'},
-    {key:'categorie', label:'Catégorie', type:'select', options:CATS_ABO},
-    {key:'montant', label:'Montant (€)', type:'number', step:'0.01'},
-    {key:'frequence', label:'Fréquence', type:'select', options:['Mensuel','Trimestriel','Annuel','Hebdomadaire']},
-    {key:'prochain', label:'Prochain prélèvement', type:'date'},
-    {key:'compte', label:'Compte / moyen de paiement', type:'select', options:compteOptions()},
-    {key:'statut', label:'Statut', type:'select', options:['Actif','Inactif']},
-  ];
-}
 
 /* ============================== ÉCHÉANCES ============================== */
 /* ============================== FILTRE GÉNÉRIQUE (façon Excel) ============================== */
@@ -1577,10 +1535,10 @@ function colFilterPanelHTML(table, columns, col, arr){
 }
 function tableRegistry(){
   return {
-    depenses: { columns: DEP_COLUMNS, getArray: ()=> mine(state.depenses).filter(d=>d.modePaiement!=='Previsionnelle') },
+    depenses: { columns: DEP_COLUMNS, getArray: ()=> mine(state.depenses).filter(d=>d.modePaiement!=='Previsionnelle' && d.modePaiement!=='Recurrent') },
     revrec: { columns: REVREC_COLUMNS, getArray: ()=> mine(state.revenusRecurrents) },
     revexc: { columns: REVEXC_COLUMNS, getArray: ()=> mine(state.revenusExceptionnels) },
-    abonnements: { columns: ABO_COLUMNS, getArray: ()=> mine(state.abonnements) },
+    recurrentes: { columns: REC_COLUMNS, getArray: ()=> mine(state.depenses).filter(d=>d.modePaiement==='Recurrent') },
     charges: { columns: CHARGE_COLUMNS, getArray: ()=> mine(state.charges) },
     versements: { columns: VERS_COLUMNS, getArray: ()=> mine(state.versements) },
     echeances: { columns: ECH_COLUMNS, getArray: ()=> mine(state.depenses).filter(d=>d.modePaiement==='Echelonne') },
@@ -1597,14 +1555,44 @@ const DEP_COLUMNS = {
 };
 function renderDepenses(){
   const all = mine(state.depenses);
-  const filtrableArr = all.filter(d=>d.modePaiement!=='Previsionnelle');
+  const filtrableArr = all.filter(d=>d.modePaiement!=='Previsionnelle' && d.modePaiement!=='Recurrent');
   const list = applyTableFilterAndSort('depenses', DEP_COLUMNS, filtrableArr);
+  const recurrentesAll = all.filter(d=>d.modePaiement==='Recurrent');
+  const recurrentes = applyTableFilterAndSort('recurrentes', REC_COLUMNS, recurrentesAll);
   const previsionnelles = all.filter(d=>d.modePaiement==='Previsionnelle')
     .sort((a,b)=> PRIORITE_ORDER[a.priorite||'Basse'] - PRIORITE_ORDER[b.priorite||'Basse']);
   const key = state.selectedMonth;
   return `
-    <div class="page-head"><div><div class="page-title">Dépenses</div><div class="page-sub">Achats et frais, payés en une fois, échelonnés, ou prévisionnels</div></div>
+    <div class="page-head"><div><div class="page-title">Dépenses</div><div class="page-sub">Achats, abonnements et frais — en une fois, échelonnés, récurrents, ou prévisionnels</div></div>
       <button class="btn btn-primary" data-action="add-depense">${icon('plus')}Ajouter une dépense</button></div>
+
+    ${recurrentesAll.length>0 ? `
+    <div class="card" style="margin-bottom:16px;">
+      <div class="section-head" style="margin-bottom:10px;"><h3 style="font-size:14px;font-weight:600;">Dépenses récurrentes (abonnements)</h3></div>
+      ${tableFilterActive('recurrentes') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="recurrentes">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
+      ${recurrentes.length===0 ? emptyState('repeat','Aucun résultat','Aucune dépense récurrente ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
+      <div class="table-wrap"><table>
+        <thead><tr>
+          ${colFilterHeaderHTML('recurrentes', REC_COLUMNS, 'libelle', recurrentesAll)}
+          ${colFilterHeaderHTML('recurrentes', REC_COLUMNS, 'categorie', recurrentesAll)}
+          ${colFilterHeaderHTML('recurrentes', REC_COLUMNS, 'montant', recurrentesAll)}
+          ${colFilterHeaderHTML('recurrentes', REC_COLUMNS, 'frequence', recurrentesAll)}
+          <th>Coût mensualisé</th><th>Prochain</th>
+          ${colFilterHeaderHTML('recurrentes', REC_COLUMNS, 'compte', recurrentesAll)}
+          ${colFilterHeaderHTML('recurrentes', REC_COLUMNS, 'statut', recurrentesAll)}
+          <th></th>
+        </tr></thead>
+        <tbody>${recurrentes.map(d=>`<tr>
+          <td>${d.libelle}</td><td><span class="pill pill-dim">${d.categorie}</span></td>
+          <td class="num">${fmtEURPrecise(d.montant)}</td><td>${d.frequence}</td>
+          <td class="num">${fmtEURPrecise(monthlyCost(d))}</td><td>${fmtDate(d.prochain)}</td>
+          <td>${d.compte}</td>
+          <td><button class="pill ${d.statut==='Actif'?'pill-teal':'pill-dim'}" data-action="toggle-depense-statut" data-id="${d.id}" style="cursor:pointer;">${d.statut}</button></td>
+          <td class="row-actions"><button class="icon-btn" data-action="edit-depense" data-id="${d.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}">${icon('trash')}</button></td>
+        </tr>`).join('')}</tbody>
+        <tfoot><tr><td colspan="2">Total mensuel (actives)</td><td class="num" style="color:var(--violet)">${fmtEUR(abonnementsTotalMensuel())}</td><td colspan="5"></td></tr></tfoot>
+      </table></div>`}
+    </div>` : ''}
 
     ${previsionnelles.length>0 ? `
     <div class="card" style="margin-bottom:16px;">
@@ -1622,6 +1610,7 @@ function renderDepenses(){
     </div>` : ''}
 
     <div class="card">
+      <div class="section-head" style="margin-bottom:10px;"><h3 style="font-size:14px;font-weight:600;">Dépenses ponctuelles ou échelonnées</h3></div>
       ${tableFilterActive('depenses') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="depenses">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
       ${filtrableArr.length===0 ? emptyState('wallet','Aucune dépense','Un achat, une réparation, un imprévu… ajoutez-les ici.','add-depense','Ajouter une dépense') :
         (list.length===0 ? emptyState('wallet','Aucun résultat','Aucune dépense ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
@@ -1648,6 +1637,14 @@ function renderDepenses(){
     </div>
   `;
 }
+const REC_COLUMNS = {
+  libelle: { label:'Nom', type:'text', get:d=>d.libelle },
+  categorie: { label:'Catégorie', type:'text', get:d=>d.categorie },
+  montant: { label:'Montant', type:'number', get:d=>Number(d.montant)||0 },
+  frequence: { label:'Fréquence', type:'text', get:d=>d.frequence },
+  compte: { label:'Compte', type:'text', get:d=>d.compte },
+  statut: { label:'Statut', type:'text', get:d=>d.statut },
+};
 const PRIORITE_ORDER = {'Haute':0, 'Moyenne':1, 'Basse':2};
 function prioritePillClass(p){
   if(p==='Haute') return 'pill-coral';
@@ -1656,15 +1653,18 @@ function prioritePillClass(p){
 }
 function depense_fields(){
   return [
-    {key:'libelle', label:'Libellé', placeholder:'Canapé, restaurant, réparation...'},
+    {key:'libelle', label:'Libellé', placeholder:'Canapé, restaurant, réparation, Netflix...'},
     {key:'categorie', label:'Catégorie', type:'select', options:CATS_DEP},
     {key:'compte', label:'Compte', type:'select', options:compteOptions()},
-    {key:'montant', label:'Montant total (€)', type:'number', step:'0.01'},
-    {key:'modePaiement', label:'Paiement', type:'select', options:[{value:'Unique',label:'En une fois'},{value:'Echelonne',label:'Plusieurs fois (échelonné)'},{value:'Previsionnelle',label:'Prévisionnelle (pas encore datée)'}]},
+    {key:'montant', label:'Montant (€)', type:'number', step:'0.01'},
+    {key:'modePaiement', label:'Type', type:'select', options:[{value:'Unique',label:'En une fois'},{value:'Echelonne',label:'Plusieurs fois (échelonné)'},{value:'Recurrent',label:'Récurrente (abonnement)'},{value:'Previsionnelle',label:'Prévisionnelle (pas encore datée)'}]},
     {key:'date', label:'Date de la dépense', type:'date'},
     {key:'dateDebut', label:'Date de début (échelonné)', type:'date'},
     {key:'dateFin', label:'Date de fin (échelonné)', type:'date'},
     {key:'priorite', label:'Priorité', type:'select', options:['Haute','Moyenne','Basse']},
+    {key:'frequence', label:'Fréquence', type:'select', options:['Mensuel','Trimestriel','Annuel','Hebdomadaire']},
+    {key:'prochain', label:'Prochain prélèvement', type:'date'},
+    {key:'statut', label:'Statut', type:'select', options:['Actif','Inactif']},
   ];
 }
 function setupDepenseFormToggle(){
@@ -1674,6 +1674,9 @@ function setupDepenseFormToggle(){
   const debutField = document.getElementById('f_dateDebut')?.closest('.field');
   const finField = document.getElementById('f_dateFin')?.closest('.field');
   const prioriteField = document.getElementById('f_priorite')?.closest('.field');
+  const frequenceField = document.getElementById('f_frequence')?.closest('.field');
+  const prochainField = document.getElementById('f_prochain')?.closest('.field');
+  const statutField = document.getElementById('f_statut')?.closest('.field');
   const montantEl = document.getElementById('f_montant');
   const debutEl = document.getElementById('f_dateDebut');
   const finEl = document.getElementById('f_dateFin');
@@ -1693,10 +1696,14 @@ function setupDepenseFormToggle(){
   function update(){
     const echelonne = sel.value==='Echelonne';
     const previsionnelle = sel.value==='Previsionnelle';
-    if(dateField) dateField.style.display = (echelonne || previsionnelle) ? 'none' : '';
-    if(debutField) debutField.style.display = (echelonne && !previsionnelle) ? '' : 'none';
-    if(finField) finField.style.display = (echelonne && !previsionnelle) ? '' : 'none';
+    const recurrent = sel.value==='Recurrent';
+    if(dateField) dateField.style.display = (echelonne || previsionnelle || recurrent) ? 'none' : '';
+    if(debutField) debutField.style.display = echelonne ? '' : 'none';
+    if(finField) finField.style.display = echelonne ? '' : 'none';
     if(prioriteField) prioriteField.style.display = previsionnelle ? '' : 'none';
+    if(frequenceField) frequenceField.style.display = recurrent ? '' : 'none';
+    if(prochainField) prochainField.style.display = recurrent ? '' : 'none';
+    if(statutField) statutField.style.display = recurrent ? '' : 'none';
     updatePreview();
   }
   sel.addEventListener('change', update);
@@ -2002,8 +2009,8 @@ function drawJointCompareChart(){
   if(!chartLibReady()){ chartUnavailableNote('chartJointCompare'); return; }
   destroyChart('jointCmp');
   const key = state.selectedMonth;
-  const myTotal = jointAboTotalFor(me.id) + jointChargesTotalFor(me.id, key);
-  const partnerTotal = jointAboTotalFor(partner.id) + jointChargesTotalFor(partner.id, key);
+  const myTotal = jointAboTotalFor(me.id) + jointChargesTotalFor(me.id, key) + jointDepensesTotalFor(me.id, key);
+  const partnerTotal = jointAboTotalFor(partner.id) + jointChargesTotalFor(partner.id, key) + jointDepensesTotalFor(partner.id, key);
   charts.jointCmp = new Chart(ctx, {
     type:'bar',
     data:{ labels:[me.displayName, partner.displayName], datasets:[{ data:[myTotal, partnerTotal], backgroundColor:[avatarSolid(me), avatarSolid(partner)], borderRadius:8, maxBarThickness:60 }]},
@@ -2053,11 +2060,6 @@ document.addEventListener('input', (e)=>{
 });
 document.addEventListener('change', async (e)=>{
   if(e.target.id==='import-file-input' && e.target.files[0]){ importDataFile(e.target.files[0]); }
-  if(e.target.dataset && e.target.dataset.filter){
-    state.depensesFilter = depensesFilterState();
-    state.depensesFilter[e.target.dataset.filter] = e.target.value;
-    await persist(); await render();
-  }
 });
 
 document.addEventListener('click', async (e)=>{
@@ -2130,33 +2132,32 @@ async function handleAction(action, id, el){
       Object.assign(find(mine(state.revenusExceptionnels)), data); await persist(); await render(); toast('Rentrée mise à jour'); }); break;
     case 'del-revexc': { const item=find(mine(state.revenusExceptionnels)); confirmDelete(item.libelle, async ()=>{ state.revenusExceptionnels = state.revenusExceptionnels.filter(x=>x.id!==id); await persist(); await render(); toast('Rentrée supprimée'); }); break; }
 
-    /* Abonnements */
-    case 'add-abo': openModal('Ajouter un abonnement', abo_fields(), {categorie:'Divertissement', frequence:'Mensuel', compte:'Compte Perso', statut:'Actif', prochain:new Date().toISOString().slice(0,10)}, async (data)=>{
-      state.abonnements.push({id:uid(), ownerId:currentUser().id, notes:'', ...data}); await persist(); await render(); toast('Abonnement ajouté'); }); break;
-    case 'edit-abo': openModal('Modifier l\u2019abonnement', abo_fields(), find(mine(state.abonnements)), async (data)=>{
-      Object.assign(find(mine(state.abonnements)), data); await persist(); await render(); toast('Abonnement mis à jour'); }); break;
-    case 'del-abo': { const item=find(mine(state.abonnements)); confirmDelete(item.nom, async ()=>{ state.abonnements = state.abonnements.filter(x=>x.id!==id); await persist(); await render(); toast('Abonnement supprimé'); }); break; }
-    case 'toggle-abo': { const item=find(mine(state.abonnements)); item.statut = item.statut==='Actif'?'Inactif':'Actif'; await persist(); await render(); toast('Statut mis à jour'); break; }
-
-    /* Dépenses */
-    case 'add-depense': openModal('Ajouter une dépense', depense_fields(), {categorie:'Achat', compte: jointPartner()?'Compte Perso':'Compte Perso', modePaiement:'Unique', date:new Date().toISOString().slice(0,10), priorite:'Moyenne'}, async (data)=>{
+    /* Dépenses (uniques, échelonnées, récurrentes/abonnements, ou prévisionnelles) */
+    case 'add-depense': openModal('Ajouter une dépense', depense_fields(), {categorie:'Achat', compte: jointPartner()?'Compte Perso':'Compte Perso', modePaiement:'Unique', date:new Date().toISOString().slice(0,10), priorite:'Moyenne', frequence:'Mensuel', prochain:new Date().toISOString().slice(0,10), statut:'Actif'}, async (data)=>{
       const dep = {id:uid(), ownerId:currentUser().id, libelle:data.libelle, categorie:data.categorie, compte:data.compte, montant:data.montant, modePaiement:data.modePaiement, notes:''};
       if(data.modePaiement==='Echelonne'){ dep.dateDebut=data.dateDebut; dep.dateFin=data.dateFin; dep.mensualitesPayees=0; }
       else if(data.modePaiement==='Previsionnelle'){ dep.priorite=data.priorite; }
+      else if(data.modePaiement==='Recurrent'){ dep.frequence=data.frequence; dep.prochain=data.prochain; dep.statut=data.statut; }
       else{ dep.date=data.date; }
-      state.depenses.push(dep); await persist(); await render(); toast(data.modePaiement==='Previsionnelle' ? 'Dépense prévisionnelle ajoutée' : 'Dépense ajoutée'); },
+      state.depenses.push(dep); await persist(); await render(); toast(data.modePaiement==='Previsionnelle' ? 'Dépense prévisionnelle ajoutée' : (data.modePaiement==='Recurrent' ? 'Dépense récurrente ajoutée' : 'Dépense ajoutée')); },
       '<div id="depense-preview" class="field-note" style="margin-top:-8px;margin-bottom:14px;min-height:16px;"></div>');
       setTimeout(setupDepenseFormToggle, 0); break;
     case 'edit-depense': openModal('Modifier la dépense', depense_fields(), find(mine(state.depenses)), async (data)=>{
       const dep = find(mine(state.depenses));
+      const wasEchelonne = dep.modePaiement==='Echelonne', prevMensualitesPayees = dep.mensualitesPayees;
+      const wasPrevisionnelle = dep.modePaiement==='Previsionnelle';
       dep.libelle=data.libelle; dep.categorie=data.categorie; dep.compte=data.compte; dep.montant=data.montant; dep.modePaiement=data.modePaiement;
-      if(data.modePaiement==='Echelonne'){ dep.dateDebut=data.dateDebut; dep.dateFin=data.dateFin; if(dep.mensualitesPayees===undefined) dep.mensualitesPayees=0; delete dep.date; delete dep.priorite; }
-      else if(data.modePaiement==='Previsionnelle'){ dep.priorite=data.priorite; delete dep.date; delete dep.dateDebut; delete dep.dateFin; delete dep.mensualitesPayees; }
-      else{ dep.date=data.date; delete dep.dateDebut; delete dep.dateFin; delete dep.mensualitesPayees; delete dep.priorite; }
-      await persist(); await render(); toast(data.modePaiement==='Previsionnelle' ? 'Dépense mise à jour' : 'Dépense planifiée'); },
+      delete dep.date; delete dep.dateDebut; delete dep.dateFin; delete dep.mensualitesPayees; delete dep.priorite; delete dep.frequence; delete dep.prochain; delete dep.statut;
+      if(data.modePaiement==='Echelonne'){ dep.dateDebut=data.dateDebut; dep.dateFin=data.dateFin; dep.mensualitesPayees = wasEchelonne ? (prevMensualitesPayees||0) : 0; }
+      else if(data.modePaiement==='Previsionnelle'){ dep.priorite=data.priorite; }
+      else if(data.modePaiement==='Recurrent'){ dep.frequence=data.frequence; dep.prochain=data.prochain; dep.statut=data.statut; }
+      else{ dep.date=data.date; }
+      const justPlanned = wasPrevisionnelle && data.modePaiement!=='Previsionnelle';
+      await persist(); await render(); toast(justPlanned ? 'Dépense planifiée' : 'Dépense mise à jour'); },
       '<div id="depense-preview" class="field-note" style="margin-top:-8px;margin-bottom:14px;min-height:16px;"></div>');
       setTimeout(setupDepenseFormToggle, 0); break;
     case 'del-depense': { const item=find(mine(state.depenses)); confirmDelete(item.libelle, async ()=>{ state.depenses = state.depenses.filter(x=>x.id!==id); await persist(); await render(); toast('Dépense supprimée'); }); break; }
+    case 'toggle-depense-statut': { const item=find(mine(state.depenses)); item.statut = item.statut==='Actif'?'Inactif':'Actif'; await persist(); await render(); toast('Statut mis à jour'); break; }
     case 'goto-depenses': currentView = 'depenses'; await render(); break;
     case 'clear-table-filter': state.tableFilters[el.dataset.table] = { sortCol:null, sortDir:'asc', selected:{} }; await persist(); await render(); break;
     case 'toggle-col-filter': {
@@ -2951,7 +2952,6 @@ function myPendingExpenseDeleteRequestsReceived(){
   return socialState.expenseDeleteRequests.filter(r=>r.toId===me.id && r.status==='pending');
 }
 function itemArrayFor(itemType){
-  if(itemType==='abonnements') return state.abonnements;
   if(itemType==='charges') return state.charges;
   if(itemType==='depenses') return state.depenses;
   return [];
