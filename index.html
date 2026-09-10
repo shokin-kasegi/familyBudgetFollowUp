@@ -1374,12 +1374,14 @@ const REVEXC_COLUMNS = {
   montant: { label:'Montant', type:'number', get:r=>Number(r.montant)||0 },
 };
 function renderRevenus(){
-  const rrAll = mine(state.revenusRecurrents), reAll = mine(state.revenusExceptionnels);
+  const key = state.selectedMonth;
+  const rrAll = mine(state.revenusRecurrents).filter(r=>inRangeMonth(key, r.dateDebut, r.dateFin));
+  const reAll = mine(state.revenusExceptionnels).filter(r=>r.date && r.date.slice(0,7)===key);
   const rr = applyTableFilterAndSort('revrec', REVREC_COLUMNS, rrAll);
   const reFiltered = applyTableFilterAndSort('revexc', REVEXC_COLUMNS, reAll);
   const re = tableFilterState('revexc').sortCol ? reFiltered : [...reFiltered].sort((a,b)=>new Date(b.date)-new Date(a.date));
   return `
-    <div class="page-head"><div><div class="page-title">Revenus</div><div class="page-sub">Sources fixes et rentrées ponctuelles</div></div></div>
+    <div class="page-head"><div><div class="page-title">Revenus</div><div class="page-sub">Sources fixes et rentrées ponctuelles — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}</div>
 
     <div class="section-head"><h3 style="font-size:15px;font-weight:600;">Revenus récurrents</h3>
       <button class="btn btn-primary btn-sm" data-action="add-revrec">${icon('plus')}Ajouter un revenu</button></div>
@@ -1555,16 +1557,16 @@ const DEP_COLUMNS = {
   montant:   { label:'Montant',   type:'number', get:d=>Number(d.montant)||0 },
 };
 function renderDepenses(){
+  const key = state.selectedMonth;
   const all = mine(state.depenses);
-  const filtrableArr = all.filter(d=>d.modePaiement!=='Previsionnelle' && d.modePaiement!=='Recurrent');
+  const filtrableArr = all.filter(d=>d.modePaiement!=='Previsionnelle' && d.modePaiement!=='Recurrent' && depenseMensualiteDuMois(d,key)>0);
   const list = applyTableFilterAndSort('depenses', DEP_COLUMNS, filtrableArr);
   const recurrentesAll = all.filter(d=>d.modePaiement==='Recurrent');
   const recurrentes = applyTableFilterAndSort('recurrentes', REC_COLUMNS, recurrentesAll);
   const previsionnelles = all.filter(d=>d.modePaiement==='Previsionnelle')
     .sort((a,b)=> PRIORITE_ORDER[a.priorite||'Basse'] - PRIORITE_ORDER[b.priorite||'Basse']);
-  const key = state.selectedMonth;
   return `
-    <div class="page-head"><div><div class="page-title">Dépenses</div><div class="page-sub">Achats, abonnements et frais — en une fois, échelonnés, récurrents, ou prévisionnels</div></div>
+    <div class="page-head"><div><div class="page-title">Dépenses</div><div class="page-sub">Achats, abonnements et frais — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}
       <button class="btn btn-primary" data-action="add-depense">${icon('plus')}Ajouter une dépense</button></div>
 
     ${recurrentesAll.length>0 ? `
@@ -1613,7 +1615,7 @@ function renderDepenses(){
     <div class="card">
       <div class="section-head" style="margin-bottom:10px;"><h3 style="font-size:14px;font-weight:600;">Dépenses ponctuelles ou échelonnées</h3></div>
       ${tableFilterActive('depenses') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="depenses">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
-      ${filtrableArr.length===0 ? emptyState('wallet','Aucune dépense','Un achat, une réparation, un imprévu… ajoutez-les ici.','add-depense','Ajouter une dépense') :
+      ${filtrableArr.length===0 ? emptyState('wallet','Aucune dépense ce mois-ci','Un achat, une réparation, un imprévu… ajoutez-les ici, ou change de mois si tu en cherches une ailleurs.','add-depense','Ajouter une dépense') :
         (list.length===0 ? emptyState('wallet','Aucun résultat','Aucune dépense ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
       <div class="table-wrap"><table>
         <thead><tr>
@@ -1719,14 +1721,14 @@ const ECH_COLUMNS = {
   statut: { label:'Statut', type:'text', get:d=>depenseResteAPayer(d)<=0.01?'Soldé':'En cours' },
 };
 function renderEcheances(){
-  const all = mine(state.depenses).filter(d=>d.modePaiement==='Echelonne');
-  const list = applyTableFilterAndSort('echeances', ECH_COLUMNS, all);
   const key = state.selectedMonth;
+  const all = mine(state.depenses).filter(d=>d.modePaiement==='Echelonne' && depenseMensualiteDuMois(d,key)>0);
+  const list = applyTableFilterAndSort('echeances', ECH_COLUMNS, all);
   return `
-    <div class="page-head"><div><div class="page-title">Échéances</div><div class="page-sub">Calculées automatiquement à partir des dépenses échelonnées</div></div></div>
+    <div class="page-head"><div><div class="page-title">Échéances</div><div class="page-sub">Calculées automatiquement à partir des dépenses échelonnées — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}</div>
     <div class="card">
       ${tableFilterActive('echeances') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="echeances">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
-      ${all.length===0 ? emptyState('calendar','Aucune échéance en cours','Marque une dépense comme "Échelonnée" dans l\u2019onglet Dépenses pour la voir apparaître ici.','goto-depenses','Aller à Dépenses') :
+      ${all.length===0 ? emptyState('calendar','Aucune échéance ce mois-ci','Marque une dépense comme "Échelonnée" dans l\u2019onglet Dépenses pour la voir apparaître ici, ou change de mois si tu en cherches une ailleurs.','goto-depenses','Aller à Dépenses') :
         (list.length===0 ? emptyState('calendar','Aucun résultat','Aucune échéance ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
       <div class="table-wrap"><table>
         <thead><tr>
@@ -1769,12 +1771,13 @@ const VERS_COLUMNS = {
   montant: { label:'Montant', type:'number', get:v=>Number(v.montant)||0 },
 };
 function renderObjectifs(){
+  const key = state.selectedMonth;
   const list = mine(state.objectifs);
-  const versAll = mine(state.versements);
+  const versAll = mine(state.versements).filter(v=>v.date && v.date.slice(0,7)===key);
   const versFiltered = applyTableFilterAndSort('versements', VERS_COLUMNS, versAll);
   const versList = tableFilterState('versements').sortCol ? versFiltered : [...versFiltered].sort((a,b)=>new Date(b.date)-new Date(a.date));
   return `
-    <div class="page-head"><div><div class="page-title">Objectifs</div><div class="page-sub">Épargne progressive vers vos projets</div></div>
+    <div class="page-head"><div><div class="page-title">Objectifs</div><div class="page-sub">Épargne progressive vers vos projets</div></div>${monthStepperHTML(key,'dashboard')}
       <button class="btn btn-primary" data-action="add-obj">${icon('plus')}Ajouter un objectif</button></div>
     ${list.length===0 ? `<div class="card">${emptyState('target','Aucun objectif','Créez un objectif d\u2019épargne pour un projet qui compte pour vous.','add-obj','Ajouter un objectif')}</div>` : `
     <div class="grid g2" style="margin-bottom:24px;">
@@ -1804,10 +1807,10 @@ function renderObjectifs(){
       }).join('')}
     </div>`}
 
-    <div class="section-head"><h3 style="font-size:15px;font-weight:600;">Historique des versements</h3></div>
+    <div class="section-head"><h3 style="font-size:15px;font-weight:600;">Versements — ${monthLabel(key)}</h3></div>
     <div class="card">
       ${tableFilterActive('versements') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="versements">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
-      ${mine(state.versements).length===0 ? emptyState('wallet','Aucun versement','Chaque somme mise de côté apparaîtra ici.','add-obj','Créer un objectif') :
+      ${versAll.length===0 ? emptyState('wallet','Aucun versement ce mois-ci','Chaque somme mise de côté ce mois apparaîtra ici.','add-obj','Créer un objectif') :
         (versList.length===0 ? emptyState('wallet','Aucun résultat','Aucun versement ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
       <div class="table-wrap"><table>
         <thead><tr>
@@ -1821,7 +1824,7 @@ function renderObjectifs(){
           <td class="num" style="color:var(--teal)">${fmtEUR(v.montant)}</td><td class="wrap">${v.note||'—'}</td>
           <td class="row-actions"><button class="icon-btn del" data-action="del-versement" data-id="${v.id}">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
-        <tfoot><tr><td colspan="2">Total versé</td><td class="num" style="color:var(--teal)">${fmtEUR(mine(state.versements).reduce((s,v)=>s+Number(v.montant),0))}</td><td colspan="2"></td></tr></tfoot>
+        <tfoot><tr><td colspan="2">Total versé ce mois</td><td class="num" style="color:var(--teal)">${fmtEUR(versAll.reduce((s,v)=>s+Number(v.montant),0))}</td><td colspan="2"></td></tr></tfoot>
       </table></div>`)}
     </div>
   `;
@@ -1848,15 +1851,15 @@ const CHARGE_COLUMNS = {
   compte: { label:'Compte', type:'text', get:c=>c.compte },
 };
 function renderCharges(){
-  const all = mine(state.charges);
-  const list = applyTableFilterAndSort('charges', CHARGE_COLUMNS, all);
   const key = state.selectedMonth;
+  const all = mine(state.charges).filter(c=>inRangeMonth(key, c.dateDebut, c.dateFin));
+  const list = applyTableFilterAndSort('charges', CHARGE_COLUMNS, all);
   return `
-    <div class="page-head"><div><div class="page-title">Budget Charges</div><div class="page-sub">Dépenses fixes ou temporaires</div></div>
+    <div class="page-head"><div><div class="page-title">Budget Charges</div><div class="page-sub">Dépenses fixes ou temporaires — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}
       <button class="btn btn-primary" data-action="add-charge">${icon('plus')}Ajouter une charge</button></div>
     <div class="card">
       ${tableFilterActive('charges') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="charges">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
-      ${all.length===0 ? emptyState('home','Aucune charge','Loyer, courses, factures… ajoutez vos charges ici.','add-charge','Ajouter une charge') :
+      ${all.length===0 ? emptyState('home','Aucune charge active ce mois','Loyer, courses, factures… ajoutez vos charges ici.','add-charge','Ajouter une charge') :
         (list.length===0 ? emptyState('home','Aucun résultat','Aucune charge ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
       <div class="table-wrap"><table>
         <thead><tr>
@@ -1865,14 +1868,13 @@ function renderCharges(){
           <th>Description</th>
           ${colFilterHeaderHTML('charges', CHARGE_COLUMNS, 'budget', all)}
           ${colFilterHeaderHTML('charges', CHARGE_COLUMNS, 'compte', all)}
-          <th>Active ${monthLabel(key)}</th><th></th>
+          <th>Période</th><th></th>
         </tr></thead>
         <tbody>${list.map(c=>{
-          const active = inRangeMonth(key, c.dateDebut, c.dateFin);
           return `<tr>
           <td>${c.categorie}</td><td><span class="pill pill-dim">${c.type}</span></td><td class="wrap">${c.description||'—'}</td>
           <td class="num">${fmtEUR(c.budget)}</td><td>${c.compte}</td>
-          <td><span class="pill ${active?'pill-teal':'pill-dim'}">${active?'Oui':'Non'}</span></td>
+          <td style="font-size:12px;color:var(--text-dim);">${c.dateDebut?fmtDate(c.dateDebut):'—'} → ${c.dateFin?fmtDate(c.dateFin):'Illimité'}</td>
           <td class="row-actions"><button class="icon-btn" data-action="edit-charge" data-id="${c.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-charge" data-id="${c.id}">${icon('trash')}</button></td>
         </tr>`;}).join('')}</tbody>
         <tfoot><tr><td colspan="3">Total actif ${monthLabel(key)}</td><td class="num">${fmtEUR(chargesTotalMois(key))}</td><td colspan="3"></td></tr></tfoot>
@@ -1913,7 +1915,7 @@ function renderCompteJoint(){
   const partnerDetail = jointDetailFor(partner.id, key);
 
   return `
-    <div class="page-head"><div><div class="page-title">Compte joint</div><div class="page-sub">Comparatif avec ${partner.displayName} — ${monthLabel(key)}</div></div>
+    <div class="page-head"><div><div class="page-title">Compte joint</div><div class="page-sub">Comparatif avec ${partner.displayName} — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}
       <button class="btn btn-ghost" data-action="refresh-joint">${icon('refresh')}Actualiser</button></div>
 
     <div class="grid g3" style="margin-bottom:16px;">
