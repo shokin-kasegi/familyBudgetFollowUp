@@ -1267,16 +1267,15 @@ async function render(){
 /* ============================== DASHBOARD ============================== */
 var charts = {};
 function destroyChart(id){ if(charts[id]){ charts[id].destroy(); delete charts[id]; } }
-// Filet de sécurité : certains navigateurs ne redéclenchent pas toujours le
-// ResizeObserver interne de Chart.js correctement après un rétrécissement
-// puis agrandissement rapide de la fenêtre — on force un resize explicite,
-// avec un léger anti-rebond pour ne pas spammer pendant un redimensionnement continu.
+// Filet de sécurité : le resize() interne de Chart.js n'est pas toujours fiable
+// selon les navigateurs (notamment en rétrécissant une fenêtre non plein écran)
+// — plutôt que de compter dessus, on détruit et reconstruit entièrement les
+// graphiques de la page courante après un redimensionnement, avec un léger
+// anti-rebond pour ne pas spammer pendant un redimensionnement continu.
 let resizeChartsTimer = null;
 window.addEventListener('resize', ()=>{
   clearTimeout(resizeChartsTimer);
-  resizeChartsTimer = setTimeout(()=>{
-    Object.values(charts).forEach(c=>{ try{ c.resize(); }catch(e){} });
-  }, 150);
+  resizeChartsTimer = setTimeout(()=>{ redrawCurrentCharts(); }, 150);
 });
 
 function gaugeSVG(pct, positive){
@@ -2140,15 +2139,12 @@ function afterRender(){
   // Un souci ponctuel de graphique (ex. bibliothèque externe indisponible) ne
   // doit jamais interrompre le reste de l'application (notifications, sync...).
   try{
-    if(currentView==='dashboard') drawDashboardCharts();
-    if(currentView==='annuelle') drawAnnuelleChart();
+    redrawCurrentCharts();
     if(currentView==='analyse'){
-      drawAnalyseChart();
       const input = document.getElementById('analyse-search');
       if(input) input.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); handleAction('run-analyse'); } });
     }
     if(currentView==='compteJoint'){
-      drawJointCompareChart();
       markMessagesRead();
       const input = document.getElementById('msg-input');
       if(input) input.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); handleAction('send-message'); } });
@@ -2156,6 +2152,14 @@ function afterRender(){
       if(list) list.scrollTop = list.scrollHeight;
     }
   }catch(e){ console.error('afterRender: erreur non bloquante', e); }
+}
+function redrawCurrentCharts(){
+  try{
+    if(currentView==='dashboard') drawDashboardCharts();
+    if(currentView==='annuelle') drawAnnuelleChart();
+    if(currentView==='analyse') drawAnalyseChart();
+    if(currentView==='compteJoint') drawJointCompareChart();
+  }catch(e){ console.error('redrawCurrentCharts: erreur non bloquante', e); }
 }
 
 document.addEventListener('input', (e)=>{
