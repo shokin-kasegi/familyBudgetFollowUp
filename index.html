@@ -2438,7 +2438,7 @@ async function handleAction(action, id, el){
       const salt = randomSalt();
       const passwordHash = await hashPassword(data.password||'changeme', salt);
       authState.users.push({id:uid(), username:data.username.trim().toLowerCase(), displayName:data.displayName, role:data.role, jointWith:null, salt, passwordHash});
-      await persistAuth(); await render(); toast('Compte créé'); }); break;
+      await persistAuth(); await render(); toast('Compte créé — pense à transmettre le jeton d\u2019accès à cette personne par email, il lui sera demandé à sa première connexion.'); }); break;
     case 'edit-user': {
       const u = find(authState.users);
       const fields = (isAdmin() ? userFieldsAdmin(u.id) : userFieldsSelf(u.id)).concat([{key:'password', label:'Nouveau mot de passe (optionnel)', type:'password'}]);
@@ -2635,6 +2635,7 @@ async function handleAction(action, id, el){
     case 'gh-connect': {
       const token = document.getElementById('gh-token').value.trim();
       if(!token) return toast('Renseigne le jeton d\u2019accès');
+      if(!(await isValidGhToken(token))) return toast('Ce jeton ne correspond pas au jeton attendu pour ce budget');
       try{
         await ghTestAndConnect(token);
         await ghPush(); // crée le fichier avec les données actuelles si le dépôt était vide
@@ -2717,25 +2718,39 @@ async function renderAuthGate(){
 const SETUP_CODE_HASH = '17dbbea7724c1a34655b5c3569f90b8d8b7709506e444754a8baa3b5ac6c272d';
 function renderSetupScreen(){
   const root = document.getElementById('auth-root');
+  const syncOptionHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--text-faint);font-size:11.5px;">
+      <div style="flex:1;height:1px;background:var(--border);"></div>OU<div style="flex:1;height:1px;background:var(--border);"></div>
+    </div>
+    <button type="button" class="btn btn-ghost" id="sync-token-btn" style="width:100%;justify-content:center;margin-bottom:10px;">${icon('cloud')}J'ai déjà un compte — entrer mon jeton d'accès</button>
+    <div id="sync-token-fields" style="display:none;">
+      <div class="field"><label>Jeton d'accès</label><div class="pw-wrap"><input id="sy-token" type="password" placeholder="github_pat_..."><button type="button" class="pw-toggle" data-toggle-pw="sy-token">${icon('eye')}</button></div></div>
+      <div class="field-note" style="margin-top:-8px;margin-bottom:14px;">Ce jeton t'a été envoyé par email par la personne qui administre ce budget.</div>
+      <button type="button" class="btn btn-primary" id="sy-connect" style="width:100%;justify-content:center;">${icon('check')}Synchroniser et me connecter</button>
+    </div>`;
   if(authState.setupCodeUsed){
     root.innerHTML = `
       <div class="auth-card">
         <div class="auth-brand"><div class="brand-mark">${icon('logo')}</div><div><div class="brand-name">Solde</div></div></div>
         <div class="auth-title">Compte administrateur déjà créé</div>
-        <div class="auth-sub">Le code d'accès à usage unique a déjà été utilisé. Si tu dois te connecter, utilise l'écran de connexion habituel — ce budget est relié à un seul site, il n'y a pas d'auto-inscription possible.</div>
+        <div class="auth-sub">Le code d'accès à usage unique a déjà été utilisé sur ce budget. Si tu as déjà un compte, synchronise-toi ci-dessous pour accéder à l'écran de connexion.</div>
+        <div id="auth-error-slot"></div>
+        ${syncOptionHTML}
       </div>`;
+    setupSyncTokenHandlers();
     return;
   }
   root.innerHTML = `
     <div class="auth-card">
       <div class="auth-brand"><div class="brand-mark">${icon('logo')}</div><div><div class="brand-name">Solde</div></div></div>
       <div class="auth-title">Code d'accès requis</div>
-      <div class="auth-sub">Ce budget n'a pas encore de compte administrateur. La création est protégée par un code à usage unique — demande-le à la personne qui gère ce site.</div>
+      <div class="auth-sub">Ce budget n'a pas encore de compte administrateur sur cet appareil. Si tu as déjà un compte (créé sur un autre appareil), synchronise-toi ci-dessous. Sinon, la création est protégée par un code à usage unique — demande-le à la personne qui gère ce site.</div>
       <div id="auth-error-slot"></div>
       <form id="setup-code-form">
         <div class="field"><label>Code d'accès</label><input id="su-code" type="text" placeholder="XXXX-XXXX-XXXX" required autocomplete="off" style="letter-spacing:1px;text-transform:uppercase;"></div>
         <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Continuer</button>
       </form>
+      ${syncOptionHTML}
     </div>`;
   document.getElementById('setup-code-form').onsubmit = async (e)=>{
     e.preventDefault();
@@ -2743,6 +2758,33 @@ function renderSetupScreen(){
     const hash = await sha256(code);
     if(hash !== SETUP_CODE_HASH) return authError('Code invalide.');
     renderSetupAdminForm(code);
+  };
+  setupSyncTokenHandlers();
+}
+function setupSyncTokenHandlers(){
+  document.getElementById('sync-token-btn').onclick = ()=>{
+    document.getElementById('sync-token-fields').style.display = 'block';
+    document.getElementById('sync-token-btn').style.display = 'none';
+  };
+  document.getElementById('sy-connect').onclick = async ()=>{
+    const token = document.getElementById('sy-token').value.trim();
+    if(!token) return authError('Renseigne le jeton d\u2019accès.');
+    if(!(await isValidGhToken(token))) return authError('Ce jeton ne correspond pas au jeton attendu pour ce budget — vérifie l\u2019email que l\u2019administrateur t\u2019a envoyé.');
+    const btn = document.getElementById('sy-connect');
+    btn.disabled = true; btn.innerHTML = 'Synchronisation…';
+    try{
+      const found = await ghTestAndConnect(token);
+      if(found && authState.users && authState.users.length>0){
+        toast('Comptes trouvés — connecte-toi.');
+        await renderAuthGate();
+      } else {
+        authError('Connecté, mais aucun compte n\u2019a été trouvé sur ce dépôt. Vérifie ton jeton, ou demande le code d\u2019accès pour créer le premier compte.');
+        btn.disabled = false; btn.innerHTML = icon('check')+'Synchroniser et me connecter';
+      }
+    }catch(e){
+      authError('Connexion impossible — vérifie ton jeton.');
+      btn.disabled = false; btn.innerHTML = icon('check')+'Synchroniser et me connecter';
+    }
   };
 }
 function renderSetupAdminForm(verifiedCode){
@@ -3313,6 +3355,10 @@ function importDataFile(file){
 // uniquement en local sur l'appareil de chaque admin).
 const GH_OWNER = 'shokin-kasegi';
 const GH_REPO = 'familyBudgetFollowUp';
+// Empreinte du jeton d'accès correct — jamais le jeton lui-même. Sert à refuser
+// tout jeton différent de celui de l'admin, sans jamais l'exposer publiquement.
+const GH_TOKEN_HASH = '5eabad22feb3b5a72bb8e5b0c98db4aa1bcf61d16760fcae1140390c765707c7';
+async function isValidGhToken(token){ return (await sha256(token||'')) === GH_TOKEN_HASH; }
 function ghConfig(){
   let token = '';
   try{ token = JSON.parse(localStorage.getItem('github_sync_config')||'{}').token || ''; }catch(e){}
