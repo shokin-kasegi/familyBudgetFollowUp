@@ -1275,8 +1275,25 @@ function destroyChart(id){ if(charts[id]){ charts[id].destroy(); delete charts[i
 let resizeChartsTimer = null;
 window.addEventListener('resize', ()=>{
   clearTimeout(resizeChartsTimer);
-  resizeChartsTimer = setTimeout(()=>{ redrawCurrentCharts(); }, 150);
+  resizeChartsTimer = setTimeout(()=>{
+    // Un double requestAnimationFrame garantit qu'on attend un cycle de rendu
+    // complet du navigateur — le redimensionnement peut faire basculer la mise
+    // en page (barre latérale → barre mobile) de façon asynchrone, un peu après
+    // le setTimeout lui-même ; sans ça, le graphique se redessine parfois sur
+    // des dimensions transitoires, pas encore stabilisées.
+    requestAnimationFrame(()=>{ requestAnimationFrame(()=>{ redrawCurrentCharts(); }); });
+  }, 250);
 });
+// Filet supplémentaire, plus précis qu'un minuteur arbitraire : redessine
+// exactement au moment où le seuil mobile/desktop est franchi (correspond au
+// point où la barre latérale bascule vers la barre mobile), plutôt que de
+// deviner un délai qui couvre ce cas.
+if(window.matchMedia){
+  const mobileBreakpointQuery = window.matchMedia('(max-width: 880px)');
+  mobileBreakpointQuery.addEventListener('change', ()=>{
+    requestAnimationFrame(()=>{ requestAnimationFrame(()=>{ redrawCurrentCharts(); }); });
+  });
+}
 
 function gaugeSVG(pct, positive){
   const r = 92, c = 2*Math.PI*r;
