@@ -512,7 +512,7 @@ function icon(name){ return `<svg viewBox="0 0 24 24">${ICONS[name]||''}</svg>`;
 
 /* ============================== STATE ============================== */
 // Email de contact recevant les demandes de création de compte — à renseigner.
-const ADMIN_CONTACT_EMAIL = 'REMPLACE_PAR_TON_EMAIL';
+const ADMIN_CONTACT_EMAIL = 'saindouhamza@gmail.com';
 const MONTH_NAMES = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 const CATS_DEP = ['Achat','Réparation','Santé','Loisirs','Cadeau','Voyage','Imprévu','Internet','Transport','Mobile','Divertissement','Stockage','Gestion','Finance','Autre'];
 const CATS_REV = ['Salaire','Remboursement','Prime','Cadeau','Autre'];
@@ -2719,39 +2719,55 @@ const SETUP_CODE_HASH = '17dbbea7724c1a34655b5c3569f90b8d8b7709506e444754a8baa3b
 function renderSetupScreen(){
   const root = document.getElementById('auth-root');
   const syncOptionHTML = `
-    <div style="display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--text-faint);font-size:11.5px;">
-      <div style="flex:1;height:1px;background:var(--border);"></div>OU<div style="flex:1;height:1px;background:var(--border);"></div>
-    </div>
     <button type="button" class="btn btn-ghost" id="sync-token-btn" style="width:100%;justify-content:center;margin-bottom:10px;">${icon('cloud')}J'ai déjà un compte — entrer mon jeton d'accès</button>
     <div id="sync-token-fields" style="display:none;">
       <div class="field"><label>Jeton d'accès</label><div class="pw-wrap"><input id="sy-token" type="password" placeholder="github_pat_..."><button type="button" class="pw-toggle" data-toggle-pw="sy-token">${icon('eye')}</button></div></div>
       <div class="field-note" style="margin-top:-8px;margin-bottom:14px;">Ce jeton t'a été envoyé par email par la personne qui administre ce budget.</div>
       <button type="button" class="btn btn-primary" id="sy-connect" style="width:100%;justify-content:center;">${icon('check')}Synchroniser et me connecter</button>
     </div>`;
+  root.innerHTML = `
+    <div class="auth-card">
+      <div class="auth-brand"><div class="brand-mark">${icon('logo')}</div><div><div class="brand-name">Solde</div></div></div>
+      <div class="auth-title">Bienvenue</div>
+      <div class="auth-sub">Ce budget n'a pas encore de compte sur cet appareil. Si tu fais partie de la famille, demande la création d'un compte ci-dessous.</div>
+      <div id="auth-error-slot"></div>
+      <button type="button" class="btn btn-primary" id="ask-account-btn" style="width:100%;justify-content:center;margin-bottom:10px;">${icon('plus')}Demander la création d'un compte</button>
+      <div style="display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--text-faint);font-size:11.5px;">
+        <div style="flex:1;height:1px;background:var(--border);"></div>OU<div style="flex:1;height:1px;background:var(--border);"></div>
+      </div>
+      ${syncOptionHTML}
+      <button type="button" id="admin-code-link" style="display:block;width:100%;text-align:center;margin-top:18px;font-size:11.5px;color:var(--text-faint);">J'ai un code d'accès administrateur</button>
+    </div>`;
+  document.getElementById('ask-account-btn').onclick = renderAccountRequestScreen;
+  document.getElementById('admin-code-link').onclick = renderAdminCodeScreen;
+  setupSyncTokenHandlers();
+}
+function renderAdminCodeScreen(){
+  const root = document.getElementById('auth-root');
   if(authState.setupCodeUsed){
     root.innerHTML = `
       <div class="auth-card">
         <div class="auth-brand"><div class="brand-mark">${icon('logo')}</div><div><div class="brand-name">Solde</div></div></div>
         <div class="auth-title">Compte administrateur déjà créé</div>
-        <div class="auth-sub">Le code d'accès à usage unique a déjà été utilisé sur ce budget. Si tu as déjà un compte, synchronise-toi ci-dessous pour accéder à l'écran de connexion.</div>
-        <div id="auth-error-slot"></div>
-        ${syncOptionHTML}
+        <div class="auth-sub">Le code d'accès à usage unique a déjà été utilisé sur ce budget.</div>
+        <button type="button" class="btn btn-ghost" id="back-to-setup-btn" style="width:100%;justify-content:center;margin-top:10px;">Retour</button>
       </div>`;
-    setupSyncTokenHandlers();
+    document.getElementById('back-to-setup-btn').onclick = renderSetupScreen;
     return;
   }
   root.innerHTML = `
     <div class="auth-card">
       <div class="auth-brand"><div class="brand-mark">${icon('logo')}</div><div><div class="brand-name">Solde</div></div></div>
       <div class="auth-title">Code d'accès requis</div>
-      <div class="auth-sub">Ce budget n'a pas encore de compte administrateur sur cet appareil. Si tu as déjà un compte (créé sur un autre appareil), synchronise-toi ci-dessous. Sinon, la création est protégée par un code à usage unique — demande-le à la personne qui gère ce site.</div>
+      <div class="auth-sub">La création du compte administrateur est protégée par un code à usage unique.</div>
       <div id="auth-error-slot"></div>
       <form id="setup-code-form">
         <div class="field"><label>Code d'accès</label><input id="su-code" type="text" placeholder="XXXX-XXXX-XXXX" required autocomplete="off" style="letter-spacing:1px;text-transform:uppercase;"></div>
         <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Continuer</button>
       </form>
-      ${syncOptionHTML}
+      <button type="button" class="btn btn-ghost" id="back-to-setup-btn" style="width:100%;justify-content:center;margin-top:10px;">Retour</button>
     </div>`;
+  document.getElementById('back-to-setup-btn').onclick = renderSetupScreen;
   document.getElementById('setup-code-form').onsubmit = async (e)=>{
     e.preventDefault();
     const code = document.getElementById('su-code').value.trim().toUpperCase();
@@ -2759,7 +2775,6 @@ function renderSetupScreen(){
     if(hash !== SETUP_CODE_HASH) return authError('Code invalide.');
     renderSetupAdminForm(code);
   };
-  setupSyncTokenHandlers();
 }
 function setupSyncTokenHandlers(){
   document.getElementById('sync-token-btn').onclick = ()=>{
@@ -2890,9 +2905,9 @@ function renderAccountRequestScreen(){
         <div class="field"><label>Pourquoi ce compte ? (optionnel)</label><textarea id="ar-message" rows="3" placeholder="Ex. je fais partie de la famille, on veut partager le budget du foyer..."></textarea></div>
         <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Envoyer la demande</button>
       </form>
-      <button type="button" class="btn btn-ghost" id="back-to-login-btn" style="width:100%;justify-content:center;margin-top:10px;">Retour à la connexion</button>
+      <button type="button" class="btn btn-ghost" id="back-to-login-btn" style="width:100%;justify-content:center;margin-top:10px;">Retour</button>
     </div>`;
-  document.getElementById('back-to-login-btn').onclick = renderLoginScreen;
+  document.getElementById('back-to-login-btn').onclick = renderAuthGate;
   document.getElementById('account-request-form').onsubmit = (e)=>{
     e.preventDefault();
     const nom = document.getElementById('ar-nom').value.trim();
@@ -2907,9 +2922,9 @@ function renderAccountRequestScreen(){
         <div class="auth-brand"><div class="brand-mark">${icon('logo')}</div><div><div class="brand-name">Solde</div></div></div>
         <div class="auth-title">Demande envoyée</div>
         <div class="auth-sub">Un email pré-rempli avec ta demande vient de s'ouvrir dans ton logiciel de messagerie — il ne reste plus qu'à l'envoyer. Si rien ne s'est ouvert, vérifie que tu as bien une messagerie configurée sur cet appareil.</div>
-        <button type="button" class="btn btn-primary" id="back-to-login-btn2" style="width:100%;justify-content:center;margin-top:10px;">${icon('check')}Retour à la connexion</button>
+        <button type="button" class="btn btn-primary" id="back-to-login-btn2" style="width:100%;justify-content:center;margin-top:10px;">${icon('check')}Retour</button>
       </div>`;
-    document.getElementById('back-to-login-btn2').onclick = renderLoginScreen;
+    document.getElementById('back-to-login-btn2').onclick = renderAuthGate;
   };
 }
 function sendAccountRequestEmail({nom, email, username, message}){
