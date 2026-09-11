@@ -3369,10 +3369,10 @@ function importDataFile(file){
 // soit l'appareil. Seul le jeton reste à saisir (jamais publié, stocké
 // uniquement en local sur l'appareil de chaque admin).
 const GH_OWNER = 'shokin-kasegi';
-const GH_REPO = 'familyBudgetFollowUp';
+const GH_REPO = 'mon-budget-data'; // dépôt PRIVÉ dédié aux données — jamais le dépôt public qui héberge le site
 // Empreinte du jeton d'accès correct — jamais le jeton lui-même. Sert à refuser
 // tout jeton différent de celui de l'admin, sans jamais l'exposer publiquement.
-const GH_TOKEN_HASH = '5eabad22feb3b5a72bb8e5b0c98db4aa1bcf61d16760fcae1140390c765707c7';
+const GH_TOKEN_HASH = '679a45f1552062fc515be4aab52fbb6ba6f258a06f850cebec6165346876d63f';
 async function isValidGhToken(token){ return (await sha256(token||'')) === GH_TOKEN_HASH; }
 function ghConfig(){
   let token = '';
