@@ -511,6 +511,8 @@ const ICONS = {
 function icon(name){ return `<svg viewBox="0 0 24 24">${ICONS[name]||''}</svg>`; }
 
 /* ============================== STATE ============================== */
+// Email de contact recevant les demandes de création de compte — à renseigner.
+const ADMIN_CONTACT_EMAIL = 'REMPLACE_PAR_TON_EMAIL';
 const MONTH_NAMES = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 const CATS_DEP = ['Achat','Réparation','Santé','Loisirs','Cadeau','Voyage','Imprévu','Internet','Transport','Mobile','Divertissement','Stockage','Gestion','Finance','Autre'];
 const CATS_REV = ['Salaire','Remboursement','Prime','Cadeau','Autre'];
@@ -523,10 +525,10 @@ var currentView = 'dashboard';
 const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
 
 function defaultAuth(){
-  return { users: [] };
+  return { users: [], setupCodeUsed: false };
 }
 function defaultSocial(){
-  return { jointRequests: [], messages: [], accountRequests: [], expenseDeleteRequests: [] };
+  return { jointRequests: [], messages: [], accountRequests: [], expenseDeleteRequests: [], accountCreationRequests: [] };
 }
 function defaultState(){
   const now = new Date();
@@ -545,7 +547,31 @@ function defaultState(){
   };
 }
 
+// Remise à zéro forcée, une fois pour tous les appareils : si l'appareil n'a
+// pas encore vu cette version de remise à zéro, on efface tout son stockage
+// local avant même de charger quoi que ce soit — peu importe ce qu'il avait
+// avant (compte créé localement, jamais synchronisé...). Incrémenter
+// FORCE_RESET_VERSION déclenche une nouvelle purge générale sur tous les
+// appareils, à utiliser uniquement en cas de besoin exceptionnel.
+const FORCE_RESET_VERSION = 1;
+function applyForceResetIfNeeded(){
+  let seen = 0;
+  try{ seen = Number(localStorage.getItem('force_reset_version')||0); }catch(e){}
+  if(seen < FORCE_RESET_VERSION){
+    try{
+      localStorage.removeItem('budget_store');
+      localStorage.removeItem('budget_auth');
+      localStorage.removeItem('budget_social');
+      localStorage.removeItem('github_sync_config');
+      localStorage.removeItem('budget_session');
+      localStorage.removeItem('budget_session_remember');
+      sessionStorage.removeItem('budget_session');
+      localStorage.setItem('force_reset_version', String(FORCE_RESET_VERSION));
+    }catch(e){}
+  }
+}
 async function loadState(){
+  applyForceResetIfNeeded();
   let needsPersist = false, needsPersistAuth = false, needsPersistSocial = false;
 
   // Données du budget (partagées)
@@ -560,6 +586,7 @@ async function loadState(){
     if(rawAuth){ authState = JSON.parse(rawAuth); }
     else if(state.users){ authState = { users: state.users }; delete state.users; needsPersist = true; needsPersistAuth = true; }
     else{ authState = defaultAuth(); needsPersistAuth = true; }
+    if(authState.setupCodeUsed===undefined){ authState.setupCodeUsed = authState.users.length>0; needsPersistAuth = true; }
   }catch(e){ authState = defaultAuth(); needsPersistAuth = true; }
 
   // Données sociales (demandes de compte joint, messages) — fichier séparé aussi
@@ -568,6 +595,7 @@ async function loadState(){
     socialState = rawSocial ? JSON.parse(rawSocial) : defaultSocial();
     if(!socialState.accountRequests){ socialState.accountRequests = []; needsPersistSocial = true; }
     if(!socialState.expenseDeleteRequests){ socialState.expenseDeleteRequests = []; needsPersistSocial = true; }
+    if(!socialState.accountCreationRequests){ socialState.accountCreationRequests = []; needsPersistSocial = true; }
     if(!rawSocial) needsPersistSocial = true;
   }catch(e){ socialState = defaultSocial(); needsPersistSocial = true; }
 
@@ -2605,18 +2633,15 @@ async function handleAction(action, id, el){
 
     /* Synchronisation GitHub */
     case 'gh-connect': {
-      const owner = document.getElementById('gh-owner').value.trim();
-      const repo = document.getElementById('gh-repo').value.trim();
       const token = document.getElementById('gh-token').value.trim();
-      if(!owner || !repo || !token) return toast('Remplis les 3 champs');
+      if(!token) return toast('Renseigne le jeton d\u2019accès');
       try{
-        await ghTestAndConnect(owner, repo, token);
+        await ghTestAndConnect(token);
         await ghPush(); // crée le fichier avec les données actuelles si le dépôt était vide
         await render(); toast('GitHub connecté');
-      }catch(e){ toast('Connexion impossible — vérifie les informations'); }
+      }catch(e){ toast('Connexion impossible — vérifie le jeton'); }
       break; }
     case 'gh-sync-now': { const ok = await ghPull(); await ghPush(); await render(); toast(ok!==false ? 'Synchronisé' : 'Synchronisé (nouveau fichier créé)'); break; }
-    case 'gh-disconnect': ghClearConfig(); await render(); break;
     case 'export-data': exportData(); break;
     case 'import-data': document.getElementById('import-file-input').click(); break;
 
@@ -2689,63 +2714,60 @@ async function renderAuthGate(){
   return false;
 }
 
+const SETUP_CODE_HASH = '17dbbea7724c1a34655b5c3569f90b8d8b7709506e444754a8baa3b5ac6c272d';
 function renderSetupScreen(){
+  const root = document.getElementById('auth-root');
+  if(authState.setupCodeUsed){
+    root.innerHTML = `
+      <div class="auth-card">
+        <div class="auth-brand"><div class="brand-mark">${icon('logo')}</div><div><div class="brand-name">Solde</div></div></div>
+        <div class="auth-title">Compte administrateur déjà créé</div>
+        <div class="auth-sub">Le code d'accès à usage unique a déjà été utilisé. Si tu dois te connecter, utilise l'écran de connexion habituel — ce budget est relié à un seul site, il n'y a pas d'auto-inscription possible.</div>
+      </div>`;
+    return;
+  }
+  root.innerHTML = `
+    <div class="auth-card">
+      <div class="auth-brand"><div class="brand-mark">${icon('logo')}</div><div><div class="brand-name">Solde</div></div></div>
+      <div class="auth-title">Code d'accès requis</div>
+      <div class="auth-sub">Ce budget n'a pas encore de compte administrateur. La création est protégée par un code à usage unique — demande-le à la personne qui gère ce site.</div>
+      <div id="auth-error-slot"></div>
+      <form id="setup-code-form">
+        <div class="field"><label>Code d'accès</label><input id="su-code" type="text" placeholder="XXXX-XXXX-XXXX" required autocomplete="off" style="letter-spacing:1px;text-transform:uppercase;"></div>
+        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Continuer</button>
+      </form>
+    </div>`;
+  document.getElementById('setup-code-form').onsubmit = async (e)=>{
+    e.preventDefault();
+    const code = document.getElementById('su-code').value.trim().toUpperCase();
+    const hash = await sha256(code);
+    if(hash !== SETUP_CODE_HASH) return authError('Code invalide.');
+    renderSetupAdminForm(code);
+  };
+}
+function renderSetupAdminForm(verifiedCode){
   const root = document.getElementById('auth-root');
   root.innerHTML = `
     <div class="auth-card">
       <div class="auth-brand"><div class="brand-mark">${icon('logo')}</div><div><div class="brand-name">Solde</div></div></div>
       <div class="auth-title">Créer le compte administrateur</div>
-      <div class="auth-sub">Aucun compte trouvé sur cet appareil. Si tu rejoins un budget déjà créé, connecte-toi d'abord ci-dessous. Sinon, crée le premier compte.</div>
+      <div class="auth-sub">Code validé — crée maintenant l'unique compte administrateur de ce budget.</div>
       <div id="auth-error-slot"></div>
-
-      <button type="button" class="btn btn-ghost" id="join-github-btn" style="width:100%;justify-content:center;margin-bottom:10px;">${icon('cloud')}Rejoindre un budget existant (GitHub)</button>
-      <div id="join-github-fields" style="display:none;margin-bottom:10px;">
-        <div class="field"><label>Propriétaire du dépôt (username GitHub)</label><input id="jg-owner" type="text" placeholder="tonpseudo"></div>
-        <div class="field"><label>Nom du dépôt privé de données</label><input id="jg-repo" type="text" placeholder="mon-budget-data"></div>
-        <div class="field"><label>Jeton d'accès (Personal Access Token)</label><div class="pw-wrap"><input id="jg-token" type="password" placeholder="github_pat_..."><button type="button" class="pw-toggle" data-toggle-pw="jg-token">${icon('eye')}</button></div></div>
-        <button type="button" class="btn btn-primary" id="jg-connect" style="width:100%;justify-content:center;">${icon('check')}Se connecter</button>
-      </div>
-
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;color:var(--text-faint);font-size:11.5px;">
-        <div style="flex:1;height:1px;background:var(--border);"></div>OU<div style="flex:1;height:1px;background:var(--border);"></div>
-      </div>
       <form id="setup-form">
         <div class="field"><label>Nom affiché</label><input id="su-name" type="text" placeholder="Toi" required></div>
         <div class="field"><label>Identifiant</label><input id="su-username" type="text" placeholder="admin" required autocomplete="username"></div>
         <div class="field"><label>Mot de passe</label><div class="pw-wrap"><input id="su-pass" type="password" placeholder="••••••••" required autocomplete="new-password"><button type="button" class="pw-toggle" data-toggle-pw="su-pass">${icon('eye')}</button></div></div>
         <div class="field"><label>Confirmer le mot de passe</label><div class="pw-wrap"><input id="su-pass2" type="password" placeholder="••••••••" required autocomplete="new-password"><button type="button" class="pw-toggle" data-toggle-pw="su-pass2">${icon('eye')}</button></div></div>
         <div class="field" style="display:flex;align-items:center;gap:9px;"><input id="su-remember" type="checkbox" style="width:16px;height:16px;accent-color:#FFFFFF;"><label style="margin:0;font-size:13px;color:var(--text);">Rester connecté (${REMEMBER_DAYS} jours)</label></div>
-        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Créer mon compte (1ère fois)</button>
+        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Créer le compte administrateur</button>
       </form>
     </div>`;
-
-  document.getElementById('join-github-btn').onclick = ()=>{
-    document.getElementById('join-github-fields').style.display='block';
-    document.getElementById('join-github-btn').style.display='none';
-  };
-  document.getElementById('jg-connect').onclick = async ()=>{
-    const owner = document.getElementById('jg-owner').value.trim();
-    const repo = document.getElementById('jg-repo').value.trim();
-    const token = document.getElementById('jg-token').value.trim();
-    if(!owner || !repo || !token) return authError('Remplis les 3 champs.');
-    const btn = document.getElementById('jg-connect');
-    btn.disabled = true; btn.textContent = 'Connexion…';
-    try{
-      const found = await ghTestAndConnect(owner, repo, token);
-      if(found && authState.users && authState.users.length>0){
-        toast('Budget existant trouvé — connecte-toi.');
-        await renderAuthGate();
-      } else {
-        authError('Connecté au dépôt, mais aucun compte n\u2019y a été trouvé. Vérifie que la personne qui a créé le compte a bien synchronisé au moins une fois.');
-        btn.disabled = false; btn.innerHTML = icon('check')+'Se connecter';
-      }
-    }catch(e){
-      authError('Connexion impossible — vérifie le propriétaire, le nom du dépôt et le jeton.');
-      btn.disabled = false; btn.innerHTML = icon('check')+'Se connecter';
-    }
-  };
   document.getElementById('setup-form').onsubmit = async (e)=>{
     e.preventDefault();
+    // Re-vérification du code juste avant la création : une protection uniquement
+    // côté rendu ne suffit pas, on ne fait jamais confiance à l'état affiché seul.
+    const hash = await sha256(verifiedCode);
+    if(hash !== SETUP_CODE_HASH) return authError('Code invalide — recommence depuis le début.');
     const name = document.getElementById('su-name').value.trim();
     const username = document.getElementById('su-username').value.trim().toLowerCase();
     const pass = document.getElementById('su-pass').value;
@@ -2759,7 +2781,6 @@ function renderSetupScreen(){
       localStorage.removeItem('budget_store');
       localStorage.removeItem('budget_auth');
       localStorage.removeItem('budget_social');
-      localStorage.removeItem('github_sync_config');
       localStorage.removeItem('budget_session');
       localStorage.removeItem('budget_session_remember');
       sessionStorage.removeItem('budget_session');
@@ -2771,6 +2792,7 @@ function renderSetupScreen(){
     const passwordHash = await hashPassword(pass, salt);
     const user = {id:uid(), username, salt, passwordHash, displayName:name||username, role:'admin'};
     authState.users.push(user);
+    authState.setupCodeUsed = true; // le code ne pourra plus jamais resservir, même si ce compte est supprimé un jour
     await Promise.all([persist(), persistSocial(), persistAuth()]);
     setSession(user.id, document.getElementById('su-remember')?.checked);
     await boot();
@@ -2790,6 +2812,10 @@ function renderLoginScreen(){
         <div class="field" style="display:flex;align-items:center;gap:9px;"><input id="li-remember" type="checkbox" style="width:16px;height:16px;accent-color:#FFFFFF;"><label style="margin:0;font-size:13px;color:var(--text);">Rester connecté (${REMEMBER_DAYS} jours)</label></div>
         <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Se connecter</button>
       </form>
+      <div style="display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--text-faint);font-size:11.5px;">
+        <div style="flex:1;height:1px;background:var(--border);"></div>OU<div style="flex:1;height:1px;background:var(--border);"></div>
+      </div>
+      <button type="button" class="btn btn-ghost" id="ask-account-btn" style="width:100%;justify-content:center;">${icon('plus')}Pas encore de compte ? Demander une création</button>
     </div>`;
   document.getElementById('login-form').onsubmit = async (e)=>{
     e.preventDefault();
@@ -2805,6 +2831,56 @@ function renderLoginScreen(){
     setSession(user.id, remember);
     await boot();
   };
+  document.getElementById('ask-account-btn').onclick = renderAccountRequestScreen;
+}
+function renderAccountRequestScreen(){
+  const root = document.getElementById('auth-root');
+  root.innerHTML = `
+    <div class="auth-card">
+      <div class="auth-brand"><div class="brand-mark">${icon('logo')}</div><div><div class="brand-name">Solde</div></div></div>
+      <div class="auth-title">Demander la création d'un compte</div>
+      <div class="auth-sub">Remplis ces informations — la personne qui administre ce budget les recevra et pourra approuver ou refuser ta demande.</div>
+      <div id="auth-error-slot"></div>
+      <form id="account-request-form">
+        <div class="field"><label>Ton nom</label><input id="ar-nom" type="text" required></div>
+        <div class="field"><label>Ton email (pour qu'on puisse te recontacter)</label><input id="ar-email" type="email" required></div>
+        <div class="field"><label>Identifiant souhaité</label><input id="ar-username" type="text" placeholder="ex. julie"></div>
+        <div class="field"><label>Pourquoi ce compte ? (optionnel)</label><textarea id="ar-message" rows="3" placeholder="Ex. je fais partie de la famille, on veut partager le budget du foyer..."></textarea></div>
+        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Envoyer la demande</button>
+      </form>
+      <button type="button" class="btn btn-ghost" id="back-to-login-btn" style="width:100%;justify-content:center;margin-top:10px;">Retour à la connexion</button>
+    </div>`;
+  document.getElementById('back-to-login-btn').onclick = renderLoginScreen;
+  document.getElementById('account-request-form').onsubmit = (e)=>{
+    e.preventDefault();
+    const nom = document.getElementById('ar-nom').value.trim();
+    const email = document.getElementById('ar-email').value.trim();
+    const username = document.getElementById('ar-username').value.trim();
+    const message = document.getElementById('ar-message').value.trim();
+    if(!nom || !email) return authError('Nom et email sont obligatoires.');
+    sendAccountRequestEmail({nom, email, username, message});
+    const root2 = document.getElementById('auth-root');
+    root2.innerHTML = `
+      <div class="auth-card">
+        <div class="auth-brand"><div class="brand-mark">${icon('logo')}</div><div><div class="brand-name">Solde</div></div></div>
+        <div class="auth-title">Demande envoyée</div>
+        <div class="auth-sub">Un email pré-rempli avec ta demande vient de s'ouvrir dans ton logiciel de messagerie — il ne reste plus qu'à l'envoyer. Si rien ne s'est ouvert, vérifie que tu as bien une messagerie configurée sur cet appareil.</div>
+        <button type="button" class="btn btn-primary" id="back-to-login-btn2" style="width:100%;justify-content:center;margin-top:10px;">${icon('check')}Retour à la connexion</button>
+      </div>`;
+    document.getElementById('back-to-login-btn2').onclick = renderLoginScreen;
+  };
+}
+function sendAccountRequestEmail({nom, email, username, message}){
+  const subject = `[Solde] Demande de création de compte — ${nom}`;
+  const bodyLines = [
+    `Nom : ${nom}`,
+    `Email de contact : ${email}`,
+    username ? `Identifiant souhaité : ${username}` : null,
+    message ? `Message : ${message}` : null,
+  ].filter(Boolean);
+  const body = bodyLines.join('\n');
+  const mailto = `mailto:${ADMIN_CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.location.href = mailto;
 }
 function authError(msg){
   const slot = document.getElementById('auth-error-slot');
@@ -3232,10 +3308,19 @@ function importDataFile(file){
    navigateur et tout appareil (y compris mobile), contrairement au dossier
    partagé qui nécessite Chrome/Edge sur PC. Chaque personne renseigne son
    propre jeton d'accès (Personal Access Token) à privilèges restreints. */
-function ghConfig(){ try{ return JSON.parse(localStorage.getItem('github_sync_config')||'{}'); }catch(e){ return {}; } }
-function ghSaveConfig(cfg){ localStorage.setItem('github_sync_config', JSON.stringify(cfg)); }
+// Dépôt cible fixe — personne ne peut se connecter à un autre dépôt, quel que
+// soit l'appareil. Seul le jeton reste à saisir (jamais publié, stocké
+// uniquement en local sur l'appareil de chaque admin).
+const GH_OWNER = 'shokin-kasegi';
+const GH_REPO = 'familyBudgetFollowUp';
+function ghConfig(){
+  let token = '';
+  try{ token = JSON.parse(localStorage.getItem('github_sync_config')||'{}').token || ''; }catch(e){}
+  return { owner:GH_OWNER, repo:GH_REPO, token, path:'data.json', authPath:'auth.json', socialPath:'social.json' };
+}
+function ghSaveToken(token){ localStorage.setItem('github_sync_config', JSON.stringify({token})); }
 function ghClearConfig(){ localStorage.removeItem('github_sync_config'); }
-function ghConfigured(){ const c = ghConfig(); return !!(c.owner && c.repo && c.token); }
+function ghConfigured(){ return !!ghConfig().token; }
 let ghLastSync = null, ghSha = null, ghAuthSha = null, ghSocialSha = null;
 
 function b64EncodeUnicode(str){ return btoa(String.fromCharCode(...new TextEncoder().encode(str))); }
@@ -3355,8 +3440,8 @@ async function ghPutWithRetry(path, dataObj, message, attempt){
 async function ghPushBudget(){ return ghPutWithRetry(ghConfig().path||'data.json', state, 'Mise à jour budget'); }
 async function ghPushAuth(){ return ghPutWithRetry(ghConfig().authPath||'auth.json', authState, 'Mise à jour comptes'); }
 async function ghPushSocial(){ return ghPutWithRetry(ghConfig().socialPath||'social.json', socialState, 'Mise à jour social'); }
-async function ghTestAndConnect(owner, repo, token){
-  ghSaveConfig({owner, repo, token, path:'data.json', authPath:'auth.json', socialPath:'social.json'});
+async function ghTestAndConnect(token){
+  ghSaveToken(token);
   const found = await ghPull();
   return found;
 }
@@ -3365,17 +3450,15 @@ function renderGithubSection(){
   const cfg = ghConfig();
   if(!ghConfigured()){
     return `
-      <div class="field"><label>Propriétaire du dépôt (username GitHub)</label><input id="gh-owner" type="text" placeholder="tonpseudo"></div>
-      <div class="field"><label>Nom du dépôt privé de données</label><input id="gh-repo" type="text" placeholder="mon-budget-data"></div>
-      <div class="field"><label>Jeton d'accès (Personal Access Token)</label><div class="pw-wrap"><input id="gh-token" type="password" placeholder="github_pat_..."><button type="button" class="pw-toggle" data-toggle-pw="gh-token">${icon('eye')}</button></div></div>
+      <div class="field"><label>Jeton d'accès</label><div class="pw-wrap"><input id="gh-token" type="password" placeholder="github_pat_..."><button type="button" class="pw-toggle" data-toggle-pw="gh-token">${icon('eye')}</button></div></div>
+      <div class="field-note" style="margin-top:-8px;margin-bottom:14px;">Ce budget est relié à un seul dépôt fixe — seul le jeton d'accès est à saisir, sur chaque appareil.</div>
       <button class="btn btn-primary btn-sm" data-action="gh-connect">${icon('cloud')}Connecter</button>
       ${exportImportHTML()}`;
   }
   return `
-    <div class="status-row"><span class="status-dot" style="background:var(--teal);"></span>Connecté à ${cfg.owner}/${cfg.repo}${ghLastSync ? ' · synchronisé '+ghLastSync.toLocaleTimeString('fr-FR') : ''}</div>
+    <div class="status-row"><span class="status-dot" style="background:var(--teal);"></span>Connecté${ghLastSync ? ' · synchronisé '+ghLastSync.toLocaleTimeString('fr-FR') : ''}</div>
     <div class="row-actions" style="justify-content:flex-start;gap:10px;">
       <button class="btn btn-primary btn-sm" data-action="gh-sync-now">${icon('refresh')}Synchroniser maintenant</button>
-      <button class="btn btn-ghost btn-sm" data-action="gh-disconnect">Déconnecter</button>
     </div>
     ${exportImportHTML()}`;
 }
