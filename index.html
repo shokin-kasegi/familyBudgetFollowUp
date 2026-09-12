@@ -2789,7 +2789,8 @@ function setupSyncTokenHandlers(){
     btn.disabled = true; btn.innerHTML = 'Synchronisation…';
     try{
       const found = await ghTestAndConnect(token);
-      if(found && authState.users && authState.users.length>0){
+      await ghPush(); // publie tout compte local pas encore connu du dépôt (ex. admin tout juste créé)
+      if(authState.users && authState.users.length>0){
         toast('Comptes trouvés — connecte-toi.');
         await renderAuthGate();
       } else {
@@ -3434,6 +3435,16 @@ async function ghPullBudget(merge){
     return false;
   }catch(e){ console.error('GitHub pull error (budget)', e); return false; }
 }
+// Fusionne les comptes plutôt que d'écraser : un compte créé localement mais
+// pas encore poussé sur GitHub (ex. juste après la création admin, avant la
+// toute première synchro) ne doit JAMAIS disparaître simplement parce que le
+// dépôt distant ne le connaît pas encore.
+function mergeAuthUsers(localUsers, remoteUsers){
+  const byId = new Map();
+  (remoteUsers||[]).forEach(u=>byId.set(u.id, u));
+  (localUsers||[]).forEach(u=>{ if(!byId.has(u.id)) byId.set(u.id, u); });
+  return Array.from(byId.values());
+}
 async function ghPullAuth(){
   const cfg = ghConfig();
   if(!cfg.owner || !cfg.repo || !cfg.token) return false;
@@ -3445,7 +3456,13 @@ async function ghPullAuth(){
     ghAuthSha = data.sha;
     const text = b64DecodeUnicode(data.content);
     const remote = JSON.parse(text);
-    if(remote && remote.users){ authState = remote; localStorage.setItem('budget_auth', JSON.stringify(authState)); ghLastSync = new Date(); return true; }
+    if(remote && remote.users){
+      authState.users = mergeAuthUsers(authState.users, remote.users);
+      if(remote.setupCodeUsed) authState.setupCodeUsed = true; // une fois consommé quelque part, ça reste consommé partout
+      localStorage.setItem('budget_auth', JSON.stringify(authState));
+      ghLastSync = new Date();
+      return true;
+    }
     return false;
   }catch(e){ console.error('GitHub pull error (auth)', e); return false; }
 }
