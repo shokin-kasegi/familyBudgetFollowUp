@@ -553,7 +553,7 @@ function defaultState(){
 // avant (compte créé localement, jamais synchronisé...). Incrémenter
 // FORCE_RESET_VERSION déclenche une nouvelle purge générale sur tous les
 // appareils, à utiliser uniquement en cas de besoin exceptionnel.
-const FORCE_RESET_VERSION = 1;
+const FORCE_RESET_VERSION = 2;
 function applyForceResetIfNeeded(){
   let seen = 0;
   try{ seen = Number(localStorage.getItem('force_reset_version')||0); }catch(e){}
