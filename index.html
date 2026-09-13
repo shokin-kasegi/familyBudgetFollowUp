@@ -260,34 +260,14 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
 .empty p{font-size:13.5px;margin-bottom:16px;}
 
 /* ---------- Liste + détail (Objectifs) ---------- */
-.list-detail{display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:flex-start;}
+.list-detail{display:grid;grid-template-columns:420px 1fr;gap:20px;align-items:flex-start;}
+@media(max-width:1100px){.list-detail{grid-template-columns:340px 1fr;}}
 @media(max-width:880px){.list-detail{grid-template-columns:1fr;}}
-.ld-list-pane{display:flex;flex-direction:column;gap:14px;position:sticky;top:0;}
+.ld-list-pane{position:sticky;top:0;}
 @media(max-width:880px){.ld-list-pane{position:static;}}
-.ld-filters{display:flex;flex-wrap:wrap;gap:8px;}
-.ld-filter-chip{
-  display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;
-  font-size:12px;font-weight:600;color:var(--text-dim);background:rgba(255,255,255,0.04);
-  border:1px solid var(--border);transition:background .12s ease,color .12s ease;
-}
-.ld-filter-chip:hover{background:rgba(255,255,255,0.08);color:var(--text);}
-.ld-filter-chip.active{background:#FFFFFF;color:#000000;border-color:transparent;}
-.ld-filter-chip .count{font-size:10.5px;opacity:.65;}
-.ld-filter-chip.active .count{opacity:.55;}
-.ld-list{display:flex;flex-direction:column;gap:10px;max-height:calc(100vh - 260px);overflow-y:auto;padding-right:2px;}
-@media(max-width:880px){.ld-list{max-height:none;}}
-.ld-item{
-  display:block;width:100%;text-align:left;padding:16px;border-radius:var(--radius-lg);
-  background:linear-gradient(180deg, var(--panel-2), var(--panel));border:1px solid var(--border);
-  cursor:pointer;transition:border-color .12s ease,background .12s ease;
-}
-.ld-item:hover{border-color:var(--border-strong);}
-.ld-item.active{border-color:var(--text);background:rgba(255,255,255,0.06);}
-.ld-item-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px;}
-.ld-item-name{font-weight:600;font-size:14px;}
-.ld-item-meta{font-size:11.5px;color:var(--text-dim);margin-bottom:10px;}
-.ld-item-amounts{display:flex;align-items:baseline;gap:6px;margin-top:8px;font-size:12.5px;}
-.ld-item-amounts .dim{color:var(--text-dim);}
+.ld-row{cursor:pointer;}
+.ld-row.active{background:rgba(255,255,255,0.06);}
+.ld-row.active td:first-child{box-shadow:inset 3px 0 0 var(--text);}
 .ld-detail-pane{min-width:0;}
 
 /* ---------- Modal ---------- */
@@ -1905,6 +1885,7 @@ function tableRegistry(){
     charges: { columns: CHARGE_COLUMNS, getArray: ()=> mine(state.charges) },
     versements: { columns: VERS_COLUMNS, getArray: ()=> mine(state.versements) },
     echeances: { columns: ECH_COLUMNS, getArray: ()=> mine(state.depenses).filter(d=>d.modePaiement==='Echelonne') },
+    objectifs: { columns: OBJ_COLUMNS, getArray: ()=> mine(state.objectifs) },
   };
 }
 function tableSpec(table){ return tableRegistry()[table]; }
@@ -2194,47 +2175,55 @@ const VERS_COLUMNS = {
   objectifNom: { label:'Objectif', type:'text', get:v=>v.objectifNom },
   montant: { label:'Montant', type:'number', get:v=>Number(v.montant)||0 },
 };
+const OBJ_COLUMNS = {
+  nom: { label:'Nom', type:'text', get:o=>o.nom },
+  categorie: { label:'Catégorie', type:'text', get:o=>o.categorie },
+  priorite: { label:'Priorité', type:'text', get:o=>o.priorite },
+  statut: { label:'Statut', type:'text', get:o=>objectifCalc(o).statut },
+};
 let objSelectedId = null;
-let objStatutFilter = 'tous';
-const OBJ_STATUTS = ['tous','En cours','À venir','Atteint'];
 function renderObjectifs(){
   const key = state.selectedMonth;
-  const list = mine(state.objectifs);
-  if(list.length===0){
+  const all = mine(state.objectifs);
+  if(all.length===0){
     return `
       <div class="page-head"><div><div class="page-title">Objectifs</div><div class="page-sub">Épargne progressive vers vos projets</div></div>
         <button class="btn btn-primary" data-action="add-obj">${icon('plus')}Ajouter un objectif</button></div>
       <div class="card">${emptyState('target','Aucun objectif','Un objectif, c’est un projet à financer (voyage, apport, achat…). Créez-en un, puis enregistrez au fil des mois les sommes mises de côté pour l’atteindre.','add-obj','Créer mon premier objectif')}</div>
     `;
   }
-  const statutCounts = { tous:list.length };
-  OBJ_STATUTS.slice(1).forEach(s=>{ statutCounts[s] = list.filter(o=>objectifCalc(o).statut===s).length; });
-  let filtered = objStatutFilter==='tous' ? list : list.filter(o=>objectifCalc(o).statut===objStatutFilter);
-  if(filtered.length===0 && list.length>0) filtered = list;
-  if(!objSelectedId || !filtered.some(o=>o.id===objSelectedId)) objSelectedId = filtered[0].id;
-  const selected = filtered.find(o=>o.id===objSelectedId);
+  const list = applyTableFilterAndSort('objectifs', OBJ_COLUMNS, all);
+  if(!objSelectedId || !all.some(o=>o.id===objSelectedId)) objSelectedId = all[0].id;
+  if(list.length && !list.some(o=>o.id===objSelectedId)) objSelectedId = list[0].id;
+  const selected = (list.find(o=>o.id===objSelectedId)) || all.find(o=>o.id===objSelectedId);
 
   return `
     <div class="page-head"><div><div class="page-title">Objectifs</div><div class="page-sub">Épargne progressive vers vos projets</div></div>
       <button class="btn btn-primary" data-action="add-obj">${icon('plus')}Ajouter un objectif</button></div>
     <div class="list-detail">
       <div class="ld-list-pane">
-        <div class="ld-filters">
-          ${OBJ_STATUTS.map(s=>`<button class="ld-filter-chip ${objStatutFilter===s?'active':''}" data-action="obj-filter" data-statut="${s}">${s==='tous'?'Tous':s} <span class="count">${statutCounts[s]}</span></button>`).join('')}
-        </div>
-        <div class="ld-list">
-          ${filtered.map(o=>{
-            const c = objectifCalc(o);
-            return `<button class="ld-item ${o.id===objSelectedId?'active':''}" data-action="select-obj" data-id="${o.id}">
-              <div class="ld-item-head">
-                <div class="ld-item-name">${o.nom}</div>
-                <span class="pill ${c.statut==='Atteint'?'pill-teal':c.statut==='En cours'?'pill-amber':'pill-dim'}">${c.statut}</span>
-              </div>
-              <div class="ld-item-meta">${o.categorie} · priorité ${o.priorite}</div>
-              <div class="progress" style="width:100%;"><div style="width:${c.pct*100}%"></div></div>
-              <div class="ld-item-amounts"><strong>${fmtEUR(c.verse)}</strong><span class="dim">/ ${fmtEUR(o.montantCible)}</span></div>
-            </button>`;
-          }).join('')}
+        <div class="card" style="padding:0;">
+          ${tableFilterActive('objectifs') ? `<div class="row-actions" style="justify-content:flex-start;padding:14px 16px 0;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="objectifs">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
+          ${list.length===0 ? `<div style="padding:16px;">${emptyState('target','Aucun résultat','Aucun objectif ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres')}</div>` : `
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                ${colFilterHeaderHTML('objectifs', OBJ_COLUMNS, 'nom', all)}
+                ${colFilterHeaderHTML('objectifs', OBJ_COLUMNS, 'categorie', all)}
+                ${colFilterHeaderHTML('objectifs', OBJ_COLUMNS, 'priorite', all)}
+                ${colFilterHeaderHTML('objectifs', OBJ_COLUMNS, 'statut', all)}
+              </tr></thead>
+              <tbody>${list.map(o=>{
+                const c = objectifCalc(o);
+                return `<tr class="ld-row ${o.id===objSelectedId?'active':''}" data-action="select-obj" data-id="${o.id}">
+                  <td>${o.nom}</td>
+                  <td><span class="pill pill-dim">${o.categorie}</span></td>
+                  <td>${o.priorite}</td>
+                  <td><span class="pill ${c.statut==='Atteint'?'pill-teal':c.statut==='En cours'?'pill-amber':'pill-dim'}">${c.statut}</span></td>
+                </tr>`;
+              }).join('')}</tbody>
+            </table>
+          </div>`}
         </div>
       </div>
       <div class="ld-detail-pane">
@@ -2797,7 +2786,6 @@ async function handleAction(action, id, el){
 
     /* Objectifs */
     case 'select-obj': objSelectedId = id; await render(); break;
-    case 'obj-filter': objStatutFilter = el.dataset.statut; await render(); break;
     case 'add-obj': openModal('Ajouter un objectif', OBJ_FIELDS, {priorite:'Moyenne', dateDebut:new Date().toISOString().slice(0,10)}, async (data)=>{
       if(reportFieldErrors(fieldRequiredErrors(OBJ_FIELDS, data))) return false;
       const newObj = {id:uid(), ownerId:currentUser().id, ...data};
