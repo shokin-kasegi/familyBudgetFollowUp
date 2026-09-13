@@ -2218,12 +2218,12 @@ function depense_fields(){
     {key:'compte', label:'Compte', type:'select', options:compteOptions()},
     {key:'montant', label:'Montant (€)', type:'number', step:'0.01'},
     {key:'modePaiement', label:'Type', type:'select', options:[{value:'Unique',label:'En une fois'},{value:'Echelonne',label:'Plusieurs fois (échelonné)'},{value:'Recurrent',label:'Récurrente (abonnement)'},{value:'Previsionnelle',label:'Prévisionnelle (pas encore datée)'}]},
-    {key:'date', label:'Date de la dépense', type:'date'},
-    {key:'dateDebut', label:'Date de début (échelonné)', type:'date'},
-    {key:'nbMensualites', label:'Nombre de mensualités', type:'number', step:'1'},
-    {key:'priorite', label:'Priorité', type:'select', options:['Haute','Moyenne','Basse']},
-    {key:'frequence', label:'Fréquence', type:'select', options:['Mensuel','Hebdomadaire','Journalier','Trimestriel','Annuel']},
-    {key:'statut', label:'Statut', type:'select', options:['Actif','Inactif']},
+    {key:'date', label:'Date de la dépense', type:'date', showIf:(v)=>v.modePaiement==='Unique'},
+    {key:'dateDebut', label:'Date de début (échelonné)', type:'date', showIf:(v)=>v.modePaiement==='Echelonne'},
+    {key:'nbMensualites', label:'Nombre de mensualités', type:'number', step:'1', showIf:(v)=>v.modePaiement==='Echelonne'},
+    {key:'priorite', label:'Priorité', type:'select', options:['Haute','Moyenne','Basse'], showIf:(v)=>v.modePaiement==='Previsionnelle'},
+    {key:'frequence', label:'Fréquence', type:'select', options:['Mensuel','Hebdomadaire','Journalier','Trimestriel','Annuel'], showIf:(v)=>v.modePaiement==='Recurrent'},
+    {key:'statut', label:'Statut', type:'select', options:['Actif','Inactif'], showIf:(v)=>v.modePaiement==='Recurrent'},
   ];
 }
 function depenseValidationErrors(data){
@@ -2238,21 +2238,16 @@ function depenseValidationErrors(data){
   }
   return errors;
 }
-function setupDepenseFormToggle(){
+// Visibilité des champs (date/échelonné/priorité/fréquence/statut) gérée
+// génériquement via showIf dans depense_fields() ; il ne reste ici que le
+// calcul d'aperçu de la mensualité, propre à ce formulaire.
+function setupDepensePreview(){
   const sel = document.getElementById('f_modePaiement');
-  if(!sel) return;
-  const dateField = document.getElementById('f_date')?.closest('.field');
-  const debutField = document.getElementById('f_dateDebut')?.closest('.field');
-  const nbField = document.getElementById('f_nbMensualites')?.closest('.field');
-  const prioriteField = document.getElementById('f_priorite')?.closest('.field');
-  const frequenceField = document.getElementById('f_frequence')?.closest('.field');
-  const statutField = document.getElementById('f_statut')?.closest('.field');
   const montantEl = document.getElementById('f_montant');
   const nbEl = document.getElementById('f_nbMensualites');
   const preview = document.getElementById('depense-preview');
-
+  if(!sel || !preview) return;
   function updatePreview(){
-    if(!preview) return;
     if(sel.value!=='Echelonne'){ preview.innerHTML=''; return; }
     const montant = parseFloat(montantEl?.value)||0;
     const nb = parseInt(nbEl?.value)||0;
@@ -2260,22 +2255,10 @@ function setupDepenseFormToggle(){
     const mensualite = montant/nb;
     preview.innerHTML = `→ <strong style="color:var(--text);">${nb}</strong> mensualité${nb>1?'s':''} de <strong style="color:var(--text);">${fmtEURPrecise(mensualite)}</strong>`;
   }
-  function update(){
-    const echelonne = sel.value==='Echelonne';
-    const previsionnelle = sel.value==='Previsionnelle';
-    const recurrent = sel.value==='Recurrent';
-    if(dateField) dateField.style.display = (echelonne || previsionnelle || recurrent) ? 'none' : '';
-    if(debutField) debutField.style.display = echelonne ? '' : 'none';
-    if(nbField) nbField.style.display = echelonne ? '' : 'none';
-    if(prioriteField) prioriteField.style.display = previsionnelle ? '' : 'none';
-    if(frequenceField) frequenceField.style.display = recurrent ? '' : 'none';
-    if(statutField) statutField.style.display = recurrent ? '' : 'none';
-    updatePreview();
-  }
-  sel.addEventListener('change', update);
+  sel.addEventListener('change', updatePreview);
   montantEl?.addEventListener('input', updatePreview);
   nbEl?.addEventListener('input', updatePreview);
-  update();
+  updatePreview();
 }
 
 /* ============================== ÉCHÉANCES (vue calculée, à partir des dépenses échelonnées) ============================== */
@@ -2864,7 +2847,7 @@ async function handleAction(action, id, el){
       else{ dep.date=data.date; }
       state.depenses.push(dep); await persist(); await render(); toast(data.modePaiement==='Previsionnelle' ? 'Dépense prévisionnelle ajoutée' : (data.modePaiement==='Recurrent' ? 'Dépense récurrente ajoutée' : 'Dépense ajoutée')); },
       '<div id="depense-preview" class="field-note" style="margin-top:-8px;margin-bottom:14px;min-height:16px;"></div>');
-      setTimeout(setupDepenseFormToggle, 0); break;
+      setTimeout(setupDepensePreview, 0); break;
     case 'edit-depense': openModal('Modifier la dépense', depense_fields(), find(mine(state.depenses)), async (data)=>{
       const errors = depenseValidationErrors(data);
       if(errors.length){ errors.forEach(([key,msg])=>markFieldError(key,msg)); toast(errors[0][1]); return false; }
@@ -2880,7 +2863,7 @@ async function handleAction(action, id, el){
       const justPlanned = wasPrevisionnelle && data.modePaiement!=='Previsionnelle';
       await persist(); await render(); toast(justPlanned ? 'Dépense planifiée' : 'Dépense mise à jour'); },
       '<div id="depense-preview" class="field-note" style="margin-top:-8px;margin-bottom:14px;min-height:16px;"></div>');
-      setTimeout(setupDepenseFormToggle, 0); break;
+      setTimeout(setupDepensePreview, 0); break;
     case 'del-depense': { const item=find(mine(state.depenses)); confirmDelete(item.libelle, async ()=>{ state.depenses = state.depenses.filter(x=>x.id!==id); await persist(); await render(); toast('Dépense supprimée'); }); break; }
     case 'toggle-depense-statut': { const item=find(mine(state.depenses)); item.statut = item.statut==='Actif'?'Inactif':'Actif'; await persist(); await render(); toast('Statut mis à jour'); break; }
     case 'goto-depenses': currentView = 'depenses'; await render(); break;
