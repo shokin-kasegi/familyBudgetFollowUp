@@ -200,6 +200,8 @@ main{flex:1;min-width:0;padding:34px 40px 80px;}
 
 .chart-card canvas{max-height:230px;}
 .chart-card h3{font-size:14px;font-weight:600;margin-bottom:14px;}
+.chart-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;}
+.chart-head h3{margin-bottom:0;}
 .chart-wrap{position:relative;height:230px;}
 .chart-wrap.chart-wrap-lg{height:320px;}
 
@@ -372,6 +374,12 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
 .cf-item input{width:14px;height:14px;flex-shrink:0;accent-color:#FFFFFF;}
 .cf-actions{display:flex;gap:6px;}
 .cf-actions .btn{flex:1;justify-content:center;padding:6px;}
+.chart-filter-wrap{position:relative;display:inline-flex;}
+.chart-filter-panel{left:auto;right:0;}
+.cf-dim-row{display:flex;flex-direction:column;gap:2px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+.cf-dim-row button{padding:6px 8px;border-radius:7px;font-size:12.5px;color:var(--text-dim);text-align:left;}
+.cf-dim-row button:hover{background:rgba(255,255,255,0.06);}
+.cf-dim-row button.active{color:var(--text);background:rgba(255,255,255,0.09);font-weight:600;}
 
 /* ---------- Settings ---------- */
 .settings-block{margin-bottom:24px;}
@@ -599,6 +607,7 @@ function defaultState(){
     analyseYear: now.getFullYear(),
     analyseTerm: '',
     tableFilters: {},
+    chartFilters: {},
     revenusRecurrents: [],
     revenusExceptionnels: [],
     depenses: [],
@@ -1597,11 +1606,19 @@ function renderDashboard(){
 
     <div class="grid g2">
       <div class="card chart-card">
-        <h3>Répartition des dépenses — ${monthLabel(key)}</h3>
+        <div class="chart-head">
+          <h3>Répartition des dépenses — ${monthLabel(key)}</h3>
+          ${chartFilterButtonHTML('depRepartition', 'Nom de la dépense')}
+        </div>
+        ${chartFilterActive('depRepartition') ? chartFilterActiveBarHTML('depRepartition') : ''}
         <div class="chart-wrap"><canvas id="chartRepartition"></canvas></div>
       </div>
       <div class="card chart-card">
-        <h3>Revenus vs dépenses — ${state.selectedYear}</h3>
+        <div class="chart-head">
+          <h3>Revenus vs dépenses — ${state.selectedYear}</h3>
+          ${chartFilterButtonHTML('revAnnuel', 'Nom du revenu')}
+        </div>
+        ${chartFilterActive('revAnnuel') ? chartFilterActiveBarHTML('revAnnuel') : ''}
         <div class="chart-wrap"><canvas id="chartAnnuelMini"></canvas></div>
       </div>
     </div>
@@ -1628,23 +1645,124 @@ function chartUnavailableNote(canvasId){
   const ctx = document.getElementById(canvasId);
   if(ctx && ctx.parentElement) ctx.parentElement.insertAdjacentHTML('beforeend', '<div class="field-note" style="text-align:center;padding:20px 0;">Graphique indisponible pour le moment (bibliothèque non chargée) — réessaie de recharger la page.</div>');
 }
+
+/* ---------- Filtre des graphiques du tableau de bord ---------- */
+/* Permet de choisir la dimension de regroupement (catégorie ou nom) et
+   d'exclure certaines valeurs de cette dimension, indépendamment pour
+   chaque graphique. Même mécanique "Excel" (panneau à cases à cocher,
+   validé par OK) que le filtre des tableaux, mais l'état confirmé vit
+   dans state.chartFilters plutôt que state.tableFilters. */
+const CHART_PALETTE = ['#FFFFFF','#E3D3A9','#BFE9D2','#EFB6AC','#C7C7CE','#9FD8E3','#D8B4E2','#F4D58D','#A8C7FA','#F2A6B0'];
+function paletteColor(i){ return CHART_PALETTE[i % CHART_PALETTE.length]; }
+
+let chartFilterOpen = null;          // clé du graphique dont le panneau est ouvert ('depRepartition' | 'revAnnuel')
+let chartFilterPendingDim = null;    // dimension en cours d'édition dans le panneau ouvert
+let chartFilterPendingChecked = null; // Set des valeurs cochées (= incluses) pour cette dimension, en cours d'édition
+
+function chartFilterState(chartKey){
+  if(!state.chartFilters) state.chartFilters = {};
+  if(!state.chartFilters[chartKey]) state.chartFilters[chartKey] = { dim:'categorie', excluded:{categorie:[], libelle:[]} };
+  if(!state.chartFilters[chartKey].excluded) state.chartFilters[chartKey].excluded = {categorie:[], libelle:[]};
+  return state.chartFilters[chartKey];
+}
+function chartFilterActive(chartKey){
+  const f = chartFilterState(chartKey);
+  return (f.excluded[f.dim]||[]).length>0;
+}
+function chartValueLabel(item, dim){
+  const v = item[dim] && String(item[dim]).trim();
+  if(v) return v;
+  return dim==='categorie' ? 'Sans catégorie' : (item.libelle || 'Sans nom');
+}
+function depRepartitionItems(key){
+  return mine(state.depenses).filter(d=>d.modePaiement!=='Previsionnelle')
+    .map(d=>({ libelle:d.libelle, categorie:d.categorie, montant:depenseMensualiteDuMois(d,key) }))
+    .filter(it=>it.montant>0.01);
+}
+function revAnnuelItemsForMonth(key){
+  const items = [];
+  mine(state.revenusRecurrents).forEach(r=>{ if(inRangeMonth(key, r.dateDebut, r.dateFin)) items.push({libelle:r.libelle, categorie:r.categorie, montant:Number(r.montant)||0}); });
+  const {start,end} = monthBounds(key);
+  mine(state.revenusExceptionnels).forEach(r=>{
+    const d = r.date ? new Date(r.date+'T00:00:00') : null;
+    if(d && d>=start && d<=end) items.push({libelle:r.libelle, categorie:r.categorie, montant:Number(r.montant)||0});
+  });
+  return items;
+}
+function revAnnuelItemsForYear(year){
+  const items = [];
+  for(let m=1;m<=12;m++) items.push(...revAnnuelItemsForMonth(monthKey(year,m)));
+  return items;
+}
+function chartItemsFor(chartKey){
+  if(chartKey==='depRepartition') return depRepartitionItems(state.selectedMonth);
+  if(chartKey==='revAnnuel') return revAnnuelItemsForYear(state.selectedYear);
+  return [];
+}
+function chartDistinctValuesForDim(items, dim){
+  const set = new Set(items.map(it=>chartValueLabel(it, dim)));
+  return Array.from(set).sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
+}
+function chartFilteredGrouped(chartKey){
+  const f = chartFilterState(chartKey);
+  const excluded = new Set(f.excluded[f.dim]||[]);
+  const map = new Map();
+  chartItemsFor(chartKey).forEach(it=>{
+    const label = chartValueLabel(it, f.dim);
+    if(excluded.has(label)) return;
+    map.set(label, (map.get(label)||0) + it.montant);
+  });
+  return Array.from(map, ([label,value])=>({label,value})).filter(p=>p.value>0.01).sort((a,b)=>b.value-a.value);
+}
+function revAnnuelFilteredTotalForMonth(key){
+  const f = chartFilterState('revAnnuel');
+  const excluded = new Set(f.excluded[f.dim]||[]);
+  return revAnnuelItemsForMonth(key).reduce((s,it)=> excluded.has(chartValueLabel(it, f.dim)) ? s : s + it.montant, 0);
+}
+function chartFilterButtonHTML(chartKey, secondDimLabel){
+  const active = chartFilterActive(chartKey);
+  const isOpen = chartFilterOpen === chartKey;
+  return `<span class="th-filter-wrap chart-filter-wrap">
+    <button class="th-filter-btn ${active?'active':''}" data-action="toggle-chart-filter" data-chart="${chartKey}" title="Filtrer le graphique">${icon('filterDown')}</button>
+    ${isOpen ? chartFilterPanelHTML(chartKey, secondDimLabel) : ''}
+  </span>`;
+}
+function chartFilterPanelHTML(chartKey, secondDimLabel){
+  const dim = chartFilterPendingDim;
+  const values = chartDistinctValuesForDim(chartItemsFor(chartKey), dim);
+  const shown = colFilterSearch ? values.filter(v=>v.toLowerCase().includes(colFilterSearch.toLowerCase())) : values;
+  const allChecked = shown.length>0 && shown.every(v=>chartFilterPendingChecked.has(v));
+  return `
+    <div class="col-filter-panel chart-filter-panel" data-chart="${chartKey}">
+      <div class="cf-dim-row">
+        <button type="button" class="${dim==='categorie'?'active':''}" data-action="chart-filter-set-dim" data-chart="${chartKey}" data-dim="categorie">Catégorie</button>
+        <button type="button" class="${dim==='libelle'?'active':''}" data-action="chart-filter-set-dim" data-chart="${chartKey}" data-dim="libelle">${secondDimLabel}</button>
+      </div>
+      <input type="text" class="cf-search" data-action="col-filter-search" placeholder="Rechercher…" value="${colFilterSearch.replace(/"/g,'&quot;')}">
+      <div class="cf-list">
+        <label class="cf-item"><input type="checkbox" data-action="chart-filter-toggle-all" data-chart="${chartKey}" ${allChecked?'checked':''}> <strong>(Tout sélectionner)</strong></label>
+        ${shown.map(v=>`<label class="cf-item" data-value-row="${v.replace(/"/g,'&quot;')}"><input type="checkbox" data-action="chart-filter-toggle-value" data-chart="${chartKey}" data-value="${v.replace(/"/g,'&quot;')}" ${chartFilterPendingChecked.has(v)?'checked':''}> ${v}</label>`).join('')}
+      </div>
+      <div class="cf-actions">
+        <button class="btn btn-primary btn-sm" data-action="chart-filter-ok" data-chart="${chartKey}">${icon('check')}OK</button>
+        <button class="btn btn-ghost btn-sm" data-action="chart-filter-cancel">Annuler</button>
+      </div>
+    </div>`;
+}
+function chartFilterActiveBarHTML(chartKey){
+  return `<div class="row-actions" style="justify-content:flex-start;margin-bottom:10px;"><button class="btn btn-ghost btn-sm" data-action="clear-chart-filter" data-chart="${chartKey}">${icon('x')}Réinitialiser le filtre</button></div>`;
+}
+
 function drawDashboardCharts(){
   if(!chartLibReady()){ chartUnavailableNote('chartRepartition'); chartUnavailableNote('chartAnnuelMini'); return; }
   const key = state.selectedMonth;
-  const d = dashboardData(key);
   destroyChart('rep');
   const ctx1 = document.getElementById('chartRepartition');
   if(ctx1){
-    const parts = [
-      {label:'Abonnements', value:d.aboHorsCJ, color:'#FFFFFF'},
-      {label:'Charges', value:d.chargesHorsCJ, color:'#C7C7CE'},
-      {label:'Dépenses', value:d.depensesHorsCJ, color:'#E3D3A9'},
-      {label:'Compte joint', value:d.virementCJ, color:'#EFB6AC'},
-      {label:'Épargne', value:d.epargneObj, color:'#BFE9D2'},
-    ].filter(p=>p.value>0.01);
+    const parts = chartFilteredGrouped('depRepartition');
     charts.rep = new Chart(ctx1, {
       type:'doughnut',
-      data:{ labels: parts.map(p=>p.label), datasets:[{ data:parts.map(p=>p.value), backgroundColor:parts.map(p=>p.color), borderWidth:0, hoverOffset:6 }]},
+      data:{ labels: parts.map(p=>p.label), datasets:[{ data:parts.map(p=>p.value), backgroundColor:parts.map((p,i)=>paletteColor(i)), borderWidth:0, hoverOffset:6 }]},
       options:{ responsive:true, maintainAspectRatio:false, cutout:'72%', plugins:{ legend:{ position:'bottom', labels:{ color:'#8D95A6', font:{family:'Inter',size:11.5}, boxWidth:8, boxHeight:8, usePointStyle:true, padding:14 } } } }
     });
   }
@@ -1656,7 +1774,7 @@ function drawDashboardCharts(){
       type:'line',
       data:{ labels: months.map(m=>MONTH_NAMES[Number(m.key.split('-')[1])-1].slice(0,3)),
         datasets:[
-          {label:'Revenus', data:months.map(m=>m.revenu), borderColor:'#BFE9D2', backgroundColor:'rgba(191,233,210,0.08)', fill:true, tension:.35, pointRadius:0, borderWidth:2},
+          {label:'Revenus', data:months.map(m=>revAnnuelFilteredTotalForMonth(m.key)), borderColor:'#BFE9D2', backgroundColor:'rgba(191,233,210,0.08)', fill:true, tension:.35, pointRadius:0, borderWidth:2},
           {label:'Dépenses', data:months.map(m=>m.totalDepenses), borderColor:'#EFB6AC', backgroundColor:'rgba(239,182,172,0.06)', fill:true, tension:.35, pointRadius:0, borderWidth:2}
         ]},
       options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{display:false}, ticks:{color:'#565D6C', font:{size:10.5}} }, y:{ grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#565D6C', font:{size:10.5}, callback:v=>v>=1000?(v/1000)+'k':v} } },
@@ -2573,6 +2691,10 @@ document.addEventListener('click', async (e)=>{
     colFilterOpen = null; colFilterPending = null; colFilterSearch = '';
     render();
   }
+  if(chartFilterOpen && !e.target.closest('.chart-filter-panel') && !e.target.closest('[data-action="toggle-chart-filter"]')){
+    chartFilterOpen = null; chartFilterPendingDim = null; chartFilterPendingChecked = null; colFilterSearch = '';
+    render();
+  }
   document.querySelectorAll('.cat-select.open').forEach(wrap=>{
     if(!e.target.closest('.cat-select')){ wrap.classList.remove('open'); resetCatDropdown(wrap); }
   });
@@ -2790,6 +2912,58 @@ async function handleAction(action, id, el){
     case 'col-filter-cancel':
       colFilterOpen = null; colFilterPending = null; colFilterSearch = '';
       await render(); break;
+
+    /* Filtre des graphiques du tableau de bord (dimension + exclusion de valeurs) */
+    case 'toggle-chart-filter': {
+      const chartKey = el.dataset.chart;
+      if(chartFilterOpen === chartKey){ chartFilterOpen = null; }
+      else{
+        chartFilterOpen = chartKey;
+        colFilterSearch = '';
+        const f = chartFilterState(chartKey);
+        chartFilterPendingDim = f.dim;
+        const all = chartDistinctValuesForDim(chartItemsFor(chartKey), f.dim);
+        const excluded = new Set(f.excluded[f.dim] || []);
+        chartFilterPendingChecked = new Set(all.filter(v=>!excluded.has(v)));
+      }
+      await render(); break; }
+    case 'chart-filter-set-dim': {
+      const chartKey = el.dataset.chart, dim = el.dataset.dim;
+      chartFilterPendingDim = dim;
+      colFilterSearch = '';
+      const f = chartFilterState(chartKey);
+      const all = chartDistinctValuesForDim(chartItemsFor(chartKey), dim);
+      const excluded = new Set(f.excluded[dim] || []);
+      chartFilterPendingChecked = new Set(all.filter(v=>!excluded.has(v)));
+      await render(); break; }
+    case 'chart-filter-toggle-all': {
+      const chartKey = el.dataset.chart;
+      const all = chartDistinctValuesForDim(chartItemsFor(chartKey), chartFilterPendingDim);
+      const shown = colFilterSearch ? all.filter(v=>v.toLowerCase().includes(colFilterSearch.toLowerCase())) : all;
+      const allChecked = shown.every(v=>chartFilterPendingChecked.has(v));
+      shown.forEach(v=>{ if(allChecked) chartFilterPendingChecked.delete(v); else chartFilterPendingChecked.add(v); });
+      await render(); break; }
+    case 'chart-filter-toggle-value': {
+      const v = el.dataset.value;
+      if(chartFilterPendingChecked.has(v)) chartFilterPendingChecked.delete(v); else chartFilterPendingChecked.add(v);
+      await render(); break; }
+    case 'chart-filter-ok': {
+      const chartKey = el.dataset.chart;
+      const dim = chartFilterPendingDim;
+      const all = chartDistinctValuesForDim(chartItemsFor(chartKey), dim);
+      const f = chartFilterState(chartKey);
+      f.dim = dim;
+      f.excluded[dim] = (chartFilterPendingChecked.size===all.length) ? [] : all.filter(v=>!chartFilterPendingChecked.has(v));
+      chartFilterOpen = null; chartFilterPendingDim = null; chartFilterPendingChecked = null; colFilterSearch = '';
+      await persist(); await render(); break; }
+    case 'chart-filter-cancel':
+      chartFilterOpen = null; chartFilterPendingDim = null; chartFilterPendingChecked = null; colFilterSearch = '';
+      await render(); break;
+    case 'clear-chart-filter': {
+      const f = chartFilterState(el.dataset.chart);
+      f.excluded = {categorie:[], libelle:[]};
+      await persist(); await render(); break; }
+
     case 'run-analyse': {
       const val = document.getElementById('analyse-search').value;
       state.analyseTerm = val; await persist(); await render(); break; }
