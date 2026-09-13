@@ -286,6 +286,8 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
 .field select option{background:#161616;color:#FFFFFF;}
 .field input:focus,.field select:focus{outline:none;border-color:var(--teal);background:rgba(255,255,255,0.06);}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.field.has-error input,.field.has-error select{border-color:var(--coral);background:rgba(239,182,172,0.08);}
+.field-error-text{font-size:11.5px;color:var(--coral);margin-top:5px;}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
 
 /* toast */
@@ -1295,8 +1297,14 @@ function openModal(title, fields, values, onSave, extraHtml){
   const ov = document.getElementById('ov');
   ov.addEventListener('click', (e)=>{ if(e.target.id==='ov') closeModal(); });
   document.getElementById('cancel-btn')?.addEventListener('click', closeModal);
+  fields.forEach(f=>{
+    const el = document.getElementById('f_'+f.key);
+    el?.addEventListener('input', ()=>clearFieldError(f.key));
+    el?.addEventListener('change', ()=>clearFieldError(f.key));
+  });
   document.getElementById('modal-form').onsubmit = async (e)=>{
     e.preventDefault();
+    clearFieldErrors();
     const data = {};
     fields.forEach(f=>{
       const el = document.getElementById('f_'+f.key);
@@ -1308,7 +1316,8 @@ function openModal(title, fields, values, onSave, extraHtml){
     });
     // onSave peut renvoyer explicitement false pour signaler une validation
     // échouée : dans ce cas, le modal reste ouvert (rien n'est perdu, l'utilisateur
-    // corrige simplement sa saisie) plutôt que de se fermer sur une erreur.
+    // corrige simplement sa saisie) plutôt que de se fermer sur une erreur. Il peut
+    // aussi avoir mis en évidence les champs fautifs via markFieldError avant de renvoyer false.
     const result = await onSave(data);
     if(result===false) return;
     closeModal();
@@ -1378,6 +1387,30 @@ function resetCatDropdown(wrap){
   if(inputRow) inputRow.hidden = true;
 }
 function closeModal(){ document.getElementById('modal-root').innerHTML=''; }
+function markFieldError(key, msg){
+  const input = document.getElementById('f_'+key);
+  const field = input?.closest('.field');
+  if(!field) return;
+  field.classList.add('has-error');
+  if(msg && !field.querySelector('.field-error-text')){
+    const p = document.createElement('div');
+    p.className = 'field-error-text';
+    p.textContent = msg;
+    field.appendChild(p);
+  }
+}
+function clearFieldError(key){
+  const field = document.getElementById('f_'+key)?.closest('.field');
+  if(!field) return;
+  field.classList.remove('has-error');
+  field.querySelector('.field-error-text')?.remove();
+}
+function clearFieldErrors(){
+  document.querySelectorAll('#modal-form .field.has-error').forEach(field=>{
+    field.classList.remove('has-error');
+    field.querySelector('.field-error-text')?.remove();
+  });
+}
 
 function confirmDelete(label, onYes){
   openModal(`Supprimer « ${label} » ?`, [], {}, ()=>{}, `
@@ -1978,6 +2011,18 @@ function depense_fields(){
     {key:'statut', label:'Statut', type:'select', options:['Actif','Inactif']},
   ];
 }
+function depenseValidationErrors(data){
+  const errors = [];
+  if(!data.libelle || !String(data.libelle).trim()) errors.push(['libelle','Renseigne un libellé']);
+  if(!data.montant || Number(data.montant)<=0) errors.push(['montant','Renseigne un montant supérieur à 0']);
+  if(data.modePaiement==='Echelonne'){
+    if(!data.dateDebut) errors.push(['dateDebut','Renseigne une date de début']);
+    if(!data.nbMensualites || data.nbMensualites<1) errors.push(['nbMensualites','Renseigne au moins 1 mensualité']);
+  } else if(data.modePaiement==='Unique'){
+    if(!data.date) errors.push(['date','Renseigne une date']);
+  }
+  return errors;
+}
 function setupDepenseFormToggle(){
   const sel = document.getElementById('f_modePaiement');
   if(!sel) return;
@@ -2531,7 +2576,8 @@ async function handleAction(action, id, el){
 
     /* Dépenses (uniques, échelonnées, récurrentes/abonnements, ou prévisionnelles) */
     case 'add-depense': openModal('Ajouter une dépense', depense_fields(), {categorie:(myCategoriesDep()[0]||{}).nom||'', compte: jointPartner()?'Compte Perso':'Compte Perso', modePaiement:'Unique', date:new Date().toISOString().slice(0,10), priorite:'Moyenne', frequence:'Mensuel', statut:'Actif', nbMensualites:3}, async (data)=>{
-      if(data.modePaiement==='Echelonne' && (!data.nbMensualites || data.nbMensualites<1)){ toast('Renseigne au moins 1 mensualité'); return false; }
+      const errors = depenseValidationErrors(data);
+      if(errors.length){ errors.forEach(([key,msg])=>markFieldError(key,msg)); toast(errors[0][1]); return false; }
       const dep = {id:uid(), ownerId:currentUser().id, libelle:data.libelle, categorie:data.categorie, compte:data.compte, montant:data.montant, modePaiement:data.modePaiement, notes:''};
       if(data.modePaiement==='Echelonne'){ dep.dateDebut=data.dateDebut; dep.nbMensualites=data.nbMensualites; dep.moisRetires=[]; }
       else if(data.modePaiement==='Previsionnelle'){ dep.priorite=data.priorite; }
@@ -2541,7 +2587,8 @@ async function handleAction(action, id, el){
       '<div id="depense-preview" class="field-note" style="margin-top:-8px;margin-bottom:14px;min-height:16px;"></div>');
       setTimeout(setupDepenseFormToggle, 0); break;
     case 'edit-depense': openModal('Modifier la dépense', depense_fields(), find(mine(state.depenses)), async (data)=>{
-      if(data.modePaiement==='Echelonne' && (!data.nbMensualites || data.nbMensualites<1)){ toast('Renseigne au moins 1 mensualité'); return false; }
+      const errors = depenseValidationErrors(data);
+      if(errors.length){ errors.forEach(([key,msg])=>markFieldError(key,msg)); toast(errors[0][1]); return false; }
       const dep = find(mine(state.depenses));
       const wasEchelonne = dep.modePaiement==='Echelonne', prevMoisRetires = dep.moisRetires;
       const wasPrevisionnelle = dep.modePaiement==='Previsionnelle';
