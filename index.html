@@ -836,6 +836,17 @@ function monthKey(y,m){ return `${y}-${String(m).padStart(2,'0')}`; }
 function monthLabel(key){ const [y,m] = key.split('-').map(Number); return `${MONTH_NAMES[m-1]} ${y}`; }
 function monthBounds(key){ const [y,m]=key.split('-').map(Number); return {start:new Date(y,m-1,1), end:new Date(y,m,0)}; }
 function addMonths(key, delta){ let [y,m]=key.split('-').map(Number); m+=delta; while(m>12){m-=12;y++;} while(m<1){m+=12;y--;} return monthKey(y,m); }
+// Date par défaut proposée dans les formulaires de saisie ponctuelle : le jour
+// même si on est sur le mois en cours, sinon le 1er du mois actuellement
+// consulté — pour éviter d'ajouter silencieusement une entrée à la date du
+// jour pendant qu'on navigue sur un autre mois, ce qui la rend invisible.
+function defaultDateForSelectedMonth(){
+  const today = new Date();
+  const todayISO = today.toISOString().slice(0,10);
+  const key = state.selectedMonth;
+  if(!key || key===monthKey(today.getFullYear(), today.getMonth()+1)) return todayISO;
+  return `${key}-01`;
+}
 function inRangeMonth(key, dateDebut, dateFin){
   const {start,end} = monthBounds(key);
   const d0 = dateDebut ? new Date(dateDebut+'T00:00:00') : null;
@@ -2582,7 +2593,7 @@ async function handleAction(action, id, el){
   const find = (arr)=> arr.find(x=>x.id===id);
   switch(action){
     /* Revenus récurrents */
-    case 'add-revrec': openModal('Ajouter un revenu récurrent', revrecFields(), {categorie:(myCategories('revenus').find(c=>c.nom==='Salaire')||myCategories('revenus')[0]||{}).nom||'', dateDebut: new Date().toISOString().slice(0,10)}, async (data)=>{
+    case 'add-revrec': openModal('Ajouter un revenu récurrent', revrecFields(), {categorie:(myCategories('revenus').find(c=>c.nom==='Salaire')||myCategories('revenus')[0]||{}).nom||'', dateDebut: defaultDateForSelectedMonth()}, async (data)=>{
       if(Number(data.montant)<0){ markFieldError('montant','Un revenu ne peut pas être négatif'); toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense récurrente.'); return false; }
       if(reportFieldErrors(fieldRequiredErrors(revrecFields(), data))) return false;
       state.revenusRecurrents.push({id:uid(), ownerId:currentUser().id, ...data}); await persist(); await render(); toast('Revenu ajouté'); }); break;
@@ -2593,7 +2604,7 @@ async function handleAction(action, id, el){
     case 'del-revrec': { const item=find(mine(state.revenusRecurrents)); confirmDelete(item.libelle, async ()=>{ state.revenusRecurrents = state.revenusRecurrents.filter(x=>x.id!==id); await persist(); await render(); toast('Revenu supprimé'); }); break; }
 
     /* Revenus exceptionnels */
-    case 'add-revexc': openModal('Ajouter une rentrée exceptionnelle', revexcFields(), {date:new Date().toISOString().slice(0,10), categorie:(myCategories('revenus').find(c=>c.nom==='Autre')||myCategories('revenus')[0]||{}).nom||''}, async (data)=>{
+    case 'add-revexc': openModal('Ajouter une rentrée exceptionnelle', revexcFields(), {date:defaultDateForSelectedMonth(), categorie:(myCategories('revenus').find(c=>c.nom==='Autre')||myCategories('revenus')[0]||{}).nom||''}, async (data)=>{
       if(Number(data.montant)<0){ markFieldError('montant','Un revenu ne peut pas être négatif'); toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense exceptionnelle.'); return false; }
       if(reportFieldErrors(fieldRequiredErrors(revexcFields(), data))) return false;
       state.revenusExceptionnels.push({id:uid(), ownerId:currentUser().id, ...data}); await persist(); await render(); toast('Rentrée ajoutée'); }); break;
@@ -2604,7 +2615,7 @@ async function handleAction(action, id, el){
     case 'del-revexc': { const item=find(mine(state.revenusExceptionnels)); confirmDelete(item.libelle, async ()=>{ state.revenusExceptionnels = state.revenusExceptionnels.filter(x=>x.id!==id); await persist(); await render(); toast('Rentrée supprimée'); }); break; }
 
     /* Dépenses (uniques, échelonnées, récurrentes/abonnements, ou prévisionnelles) */
-    case 'add-depense': openModal('Ajouter une dépense', depense_fields(), {categorie:(myCategoriesDep()[0]||{}).nom||'', compte: jointPartner()?'Compte Perso':'Compte Perso', modePaiement:'Unique', date:new Date().toISOString().slice(0,10), priorite:'Moyenne', frequence:'Mensuel', statut:'Actif', nbMensualites:3}, async (data)=>{
+    case 'add-depense': openModal('Ajouter une dépense', depense_fields(), {categorie:(myCategoriesDep()[0]||{}).nom||'', compte: jointPartner()?'Compte Perso':'Compte Perso', modePaiement:'Unique', date:defaultDateForSelectedMonth(), priorite:'Moyenne', frequence:'Mensuel', statut:'Actif', nbMensualites:3}, async (data)=>{
       const errors = depenseValidationErrors(data);
       if(errors.length){ errors.forEach(([key,msg])=>markFieldError(key,msg)); toast(errors[0][1]); return false; }
       const dep = {id:uid(), ownerId:currentUser().id, libelle:data.libelle, categorie:data.categorie, compte:data.compte, montant:data.montant, modePaiement:data.modePaiement, notes:''};
@@ -2727,7 +2738,7 @@ async function handleAction(action, id, el){
       await persist(); await render(); toast('Objectif supprimé'); }); break; }
 
     /* Versements */
-    case 'add-versement': openModal(`Verser vers « ${el.dataset.obj} »`, VERS_FIELDS_BASE, {date:new Date().toISOString().slice(0,10)}, async (data)=>{
+    case 'add-versement': openModal(`Verser vers « ${el.dataset.obj} »`, VERS_FIELDS_BASE, {date:defaultDateForSelectedMonth()}, async (data)=>{
       if(reportFieldErrors(fieldRequiredErrors(VERS_FIELDS_BASE, data))) return false;
       state.versements.push({id:uid(), ownerId:currentUser().id, objectifNom:el.dataset.obj, ...data}); await persist(); await render(); toast('Versement enregistré'); }); break;
     case 'del-versement': confirmDelete('ce versement', async ()=>{ state.versements = state.versements.filter(x=>x.id!==id); await persist(); await render(); toast('Versement supprimé'); }); break;
