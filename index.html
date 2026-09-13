@@ -239,6 +239,9 @@ td.wrap{white-space:normal;}
 .pill-coral{background:rgba(239,182,172,0.14);color:var(--coral);}
 .pill-amber{background:rgba(255,180,84,0.12);color:var(--amber);}
 .pill-dim{background:rgba(255,255,255,0.06);color:var(--text-dim);}
+.pill-del{width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:inherit;opacity:.7;flex-shrink:0;}
+.pill-del:hover{opacity:1;background:rgba(255,255,255,0.18);}
+.pill-del svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2.5;}
 .row-actions{display:flex;gap:6px;justify-content:flex-end;}
 .icon-btn{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);}
 .icon-btn:hover{background:rgba(255,255,255,0.07);color:var(--text);}
@@ -543,7 +546,8 @@ function defaultState(){
     depenses: [],
     objectifs: [],
     versements: [],
-    charges: []
+    charges: [],
+    categoriesDepenses: []
   };
 }
 
@@ -711,11 +715,21 @@ async function loadState(){
     }
   }
 
+  // Migration : passage d'une liste de catégories de dépenses fixe et partagée à
+  // des catégories personnalisables par personne. On initialise chaque compte déjà
+  // existant avec l'ancienne liste par défaut (rien ne change pour lui tant qu'il
+  // ne la modifie pas), plutôt que de le laisser démarrer sans aucune catégorie.
+  if(!Array.isArray(state.categoriesDepenses)){
+    state.categoriesDepenses = [];
+    authState.users.forEach(u=>{ seedDefaultCategoriesDep(u.id); });
+    needsPersist = true;
+  }
+
   if(needsPersist) await persist();
   if(needsPersistAuth) await persistAuth();
   if(needsPersistSocial) await persistSocial();
 }
-const OWNED_ARRAYS = ['revenusRecurrents','revenusExceptionnels','depenses','objectifs','versements','charges'];
+const OWNED_ARRAYS = ['revenusRecurrents','revenusExceptionnels','depenses','objectifs','versements','charges','categoriesDepenses'];
 function mine(arr){
   const me = currentUser();
   return me ? (arr||[]).filter(e=>e.ownerId===me.id) : [];
@@ -1805,10 +1819,25 @@ function prioritePillClass(p){
   if(p==='Moyenne') return 'pill-amber';
   return 'pill-dim';
 }
-function depense_fields(){
+/* ============================== CATÉGORIES DE DÉPENSES (personnalisables) ============================== */
+// Chacun gère sa propre liste de catégories (créer/supprimer) — seules les siennes
+// apparaissent dans le menu déroulant "Catégorie" des dépenses.
+function seedDefaultCategoriesDep(userId){
+  CATS_DEP.forEach(nom=>{ state.categoriesDepenses.push({id:uid(), ownerId:userId, nom}); });
+}
+function myCategoriesDep(){
+  return mine(state.categoriesDepenses).slice().sort((a,b)=>a.nom.localeCompare(b.nom,'fr'));
+}
+function depCategoryOptions(currentValue){
+  const noms = myCategoriesDep().map(c=>c.nom);
+  if(currentValue && !noms.includes(currentValue)) noms.unshift(currentValue);
+  if(noms.length===0) return [{value:'', label:'Aucune catégorie — crée-en une dans Paramètres'}];
+  return noms;
+}
+function depense_fields(currentCategorie){
   return [
     {key:'libelle', label:'Libellé', placeholder:'Canapé, restaurant, réparation, Netflix...'},
-    {key:'categorie', label:'Catégorie', type:'select', options:CATS_DEP},
+    {key:'categorie', label:'Catégorie', type:'select', options:depCategoryOptions(currentCategorie)},
     {key:'compte', label:'Compte', type:'select', options:compteOptions()},
     {key:'montant', label:'Montant (€)', type:'number', step:'0.01'},
     {key:'modePaiement', label:'Type', type:'select', options:[{value:'Unique',label:'En une fois'},{value:'Echelonne',label:'Plusieurs fois (échelonné)'},{value:'Recurrent',label:'Récurrente (abonnement)'},{value:'Previsionnelle',label:'Prévisionnelle (pas encore datée)'}]},
@@ -2196,6 +2225,10 @@ function afterRender(){
       const list = document.getElementById('joint-messages');
       if(list) list.scrollTop = list.scrollHeight;
     }
+    if(currentView==='parametres'){
+      const catInput = document.getElementById('new-dep-category');
+      if(catInput) catInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); handleAction('add-dep-category'); } });
+    }
   }catch(e){ console.error('afterRender: erreur non bloquante', e); }
 }
 function redrawCurrentCharts(){
@@ -2294,7 +2327,7 @@ async function handleAction(action, id, el){
     case 'del-revexc': { const item=find(mine(state.revenusExceptionnels)); confirmDelete(item.libelle, async ()=>{ state.revenusExceptionnels = state.revenusExceptionnels.filter(x=>x.id!==id); await persist(); await render(); toast('Rentrée supprimée'); }); break; }
 
     /* Dépenses (uniques, échelonnées, récurrentes/abonnements, ou prévisionnelles) */
-    case 'add-depense': openModal('Ajouter une dépense', depense_fields(), {categorie:'Achat', compte: jointPartner()?'Compte Perso':'Compte Perso', modePaiement:'Unique', date:new Date().toISOString().slice(0,10), priorite:'Moyenne', frequence:'Mensuel', statut:'Actif', nbMensualites:3}, async (data)=>{
+    case 'add-depense': openModal('Ajouter une dépense', depense_fields(), {categorie:(myCategoriesDep()[0]||{}).nom||'', compte: jointPartner()?'Compte Perso':'Compte Perso', modePaiement:'Unique', date:new Date().toISOString().slice(0,10), priorite:'Moyenne', frequence:'Mensuel', statut:'Actif', nbMensualites:3}, async (data)=>{
       if(data.modePaiement==='Echelonne' && (!data.nbMensualites || data.nbMensualites<1)){ toast('Renseigne au moins 1 mensualité'); return false; }
       const dep = {id:uid(), ownerId:currentUser().id, libelle:data.libelle, categorie:data.categorie, compte:data.compte, montant:data.montant, modePaiement:data.modePaiement, notes:''};
       if(data.modePaiement==='Echelonne'){ dep.dateDebut=data.dateDebut; dep.nbMensualites=data.nbMensualites; dep.moisRetires=[]; }
@@ -2304,7 +2337,7 @@ async function handleAction(action, id, el){
       state.depenses.push(dep); await persist(); await render(); toast(data.modePaiement==='Previsionnelle' ? 'Dépense prévisionnelle ajoutée' : (data.modePaiement==='Recurrent' ? 'Dépense récurrente ajoutée' : 'Dépense ajoutée')); },
       '<div id="depense-preview" class="field-note" style="margin-top:-8px;margin-bottom:14px;min-height:16px;"></div>');
       setTimeout(setupDepenseFormToggle, 0); break;
-    case 'edit-depense': openModal('Modifier la dépense', depense_fields(), find(mine(state.depenses)), async (data)=>{
+    case 'edit-depense': openModal('Modifier la dépense', depense_fields(find(mine(state.depenses)).categorie), find(mine(state.depenses)), async (data)=>{
       if(data.modePaiement==='Echelonne' && (!data.nbMensualites || data.nbMensualites<1)){ toast('Renseigne au moins 1 mensualité'); return false; }
       const dep = find(mine(state.depenses));
       const wasEchelonne = dep.modePaiement==='Echelonne', prevMoisRetires = dep.moisRetires;
@@ -2320,6 +2353,19 @@ async function handleAction(action, id, el){
       '<div id="depense-preview" class="field-note" style="margin-top:-8px;margin-bottom:14px;min-height:16px;"></div>');
       setTimeout(setupDepenseFormToggle, 0); break;
     case 'del-depense': { const item=find(mine(state.depenses)); confirmDelete(item.libelle, async ()=>{ state.depenses = state.depenses.filter(x=>x.id!==id); await persist(); await render(); toast('Dépense supprimée'); }); break; }
+    case 'add-dep-category': {
+      const input = document.getElementById('new-dep-category');
+      const nom = (input?.value||'').trim();
+      if(!nom){ toast('Donne un nom à la catégorie'); return; }
+      if(myCategoriesDep().some(c=>c.nom.toLowerCase()===nom.toLowerCase())){ toast('Cette catégorie existe déjà'); return; }
+      state.categoriesDepenses.push({id:uid(), ownerId:currentUser().id, nom});
+      await persist(); await render(); toast('Catégorie ajoutée'); break; }
+    case 'del-dep-category': {
+      const item = find(mine(state.categoriesDepenses));
+      confirmDelete(item.nom, async ()=>{
+        state.categoriesDepenses = state.categoriesDepenses.filter(x=>x.id!==id);
+        await persist(); await render(); toast('Catégorie supprimée — les dépenses déjà saisies avec cette catégorie ne sont pas modifiées'); });
+      break; }
     case 'toggle-depense-statut': { const item=find(mine(state.depenses)); item.statut = item.statut==='Actif'?'Inactif':'Actif'; await persist(); await render(); toast('Statut mis à jour'); break; }
     case 'goto-depenses': currentView = 'depenses'; await render(); break;
     case 'switch-space': currentSpace = el.dataset.space; currentView = defaultViewForSpace(currentSpace); await render(); break;
@@ -2437,8 +2483,10 @@ async function handleAction(action, id, el){
       if(authState.users.some(u=>u.username===data.username.trim().toLowerCase())){ toast('Cet identifiant existe déjà'); return false; }
       const salt = randomSalt();
       const passwordHash = await hashPassword(data.password||'changeme', salt);
-      authState.users.push({id:uid(), username:data.username.trim().toLowerCase(), displayName:data.displayName, role:data.role, jointWith:null, salt, passwordHash});
-      await persistAuth(); await render(); toast('Compte créé — pense à transmettre le jeton d\u2019accès à cette personne par email, il lui sera demandé à sa première connexion.'); }); break;
+      const newUser = {id:uid(), username:data.username.trim().toLowerCase(), displayName:data.displayName, role:data.role, jointWith:null, salt, passwordHash};
+      authState.users.push(newUser);
+      seedDefaultCategoriesDep(newUser.id);
+      await Promise.all([persistAuth(), persist()]); await render(); toast('Compte créé — pense à transmettre le jeton d\u2019accès à cette personne par email, il lui sera demandé à sa première connexion.'); }); break;
     case 'edit-user': {
       const u = find(authState.users);
       const fields = (isAdmin() ? userFieldsAdmin(u.id) : userFieldsSelf(u.id)).concat([{key:'password', label:'Nouveau mot de passe (optionnel)', type:'password'}]);
@@ -2850,6 +2898,7 @@ function renderSetupAdminForm(verifiedCode){
     const passwordHash = await hashPassword(pass, salt);
     const user = {id:uid(), username, salt, passwordHash, displayName:name||username, role:'admin'};
     authState.users.push(user);
+    seedDefaultCategoriesDep(user.id);
     authState.setupCodeUsed = true; // le code ne pourra plus jamais resservir, même si ce compte est supprimé un jour
     await Promise.all([persist(), persistSocial(), persistAuth()]);
     setSession(user.id, document.getElementById('su-remember')?.checked);
@@ -3036,6 +3085,19 @@ function renderParametres(){
         <button class="btn btn-ghost btn-sm" data-action="toggle-sidebar-collapse">${icon(state.navCollapsed?'eye':'eyeOff')}${state.navCollapsed?'Afficher la barre de navigation':'Masquer la barre de navigation'}</button>
         ${state.navOrder?.finance ? `<button class="btn btn-ghost btn-sm" data-action="reset-nav-order" data-space="finance">${icon('refresh')}Réinitialiser l'ordre — Finance</button>` : ''}
         ${state.navOrder?.groupes ? `<button class="btn btn-ghost btn-sm" data-action="reset-nav-order" data-space="groupes">${icon('refresh')}Réinitialiser l'ordre — Groupes</button>` : ''}
+      </div>
+    </div>
+
+    <div class="card settings-block">
+      <h3>Catégories de dépenses</h3>
+      <div class="sub">Crée ou supprime tes propres catégories — seules les tiennes apparaissent dans le menu déroulant « Catégorie » d'une dépense.</div>
+      <div class="row-actions" style="justify-content:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+        ${myCategoriesDep().map(c=>`<span class="pill pill-dim">${c.nom}<button class="pill-del" data-action="del-dep-category" data-id="${c.id}" title="Supprimer">${icon('x')}</button></span>`).join('')}
+        ${myCategoriesDep().length===0 ? `<span class="field-note">Aucune catégorie pour l'instant — ajoutes-en une ci-dessous.</span>` : ''}
+      </div>
+      <div class="kv-input-row">
+        <input id="new-dep-category" type="text" placeholder="Nouvelle catégorie" maxlength="40">
+        <button class="btn btn-primary btn-sm" data-action="add-dep-category">${icon('plus')}Ajouter</button>
       </div>
     </div>
 
