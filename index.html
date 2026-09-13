@@ -14,7 +14,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js" onerror="
   var s=document.createElement('script');
   s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js';
-  s.onload=function(){ if(window.render && window.currentView) render(); };
+  s.onload=function(){ if(window.render && window.currentView && window.currentUser && currentUser()) render(); };
   document.head.appendChild(s);
 "></script>
 <style>
@@ -3214,6 +3214,7 @@ async function enableBrowserNotifications(){
 /* ---- Compte joint : demandes (envoi / acceptation / refus) ---- */
 function myPendingIncomingRequests(){
   const me = currentUser();
+  if(!me) return [];
   const incoming = socialState.jointRequests.filter(r=>r.toId===me.id && r.status==='pending');
   // Si j'ai déjà un partenaire actif, ces demandes n'ont plus lieu d'être : on les
   // refuse automatiquement plutôt que de les laisser traîner indéfiniment (elles ne
@@ -3235,6 +3236,7 @@ function receivedPendingRequestFrom(fromId){
 }
 function unreadMessagesCount(){
   const me = currentUser();
+  if(!me) return 0;
   return socialState.messages.filter(m=>m.toId===me.id && !(m.readBy||[]).includes(me.id)).length;
 }
 function pendingAccountRequests(){
@@ -3244,15 +3246,18 @@ function pendingAccountRequests(){
 }
 function myPendingAccountRequest(type){
   const me = currentUser();
+  if(!me) return null;
   return socialState.accountRequests.find(r=>r.fromId===me.id && r.type===type && r.status==='pending');
 }
 function myApprovedExportRequest(){
   const me = currentUser();
+  if(!me) return null;
   return socialState.accountRequests.find(r=>r.fromId===me.id && r.type==='export' && r.status==='approved');
 }
 /* ---- Suppression d'une dépense du/de la partenaire : nécessite son accord ---- */
 function myPendingExpenseDeleteRequestsReceived(){
   const me = currentUser();
+  if(!me) return [];
   return socialState.expenseDeleteRequests.filter(r=>r.toId===me.id && r.status==='pending');
 }
 function itemArrayFor(itemType){
