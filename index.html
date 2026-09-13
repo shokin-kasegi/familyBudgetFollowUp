@@ -286,6 +286,8 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
 .field select option{background:#161616;color:#FFFFFF;}
 .field input:focus,.field select:focus{outline:none;border-color:var(--teal);background:rgba(255,255,255,0.06);}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.field.has-error input,.field.has-error select{border-color:var(--coral);background:rgba(239,182,172,0.08);}
+.field-error-text{font-size:11.5px;color:var(--coral);margin-top:5px;}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
 
 /* toast */
@@ -834,6 +836,17 @@ function monthKey(y,m){ return `${y}-${String(m).padStart(2,'0')}`; }
 function monthLabel(key){ const [y,m] = key.split('-').map(Number); return `${MONTH_NAMES[m-1]} ${y}`; }
 function monthBounds(key){ const [y,m]=key.split('-').map(Number); return {start:new Date(y,m-1,1), end:new Date(y,m,0)}; }
 function addMonths(key, delta){ let [y,m]=key.split('-').map(Number); m+=delta; while(m>12){m-=12;y++;} while(m<1){m+=12;y--;} return monthKey(y,m); }
+// Date par défaut proposée dans les formulaires de saisie ponctuelle : le jour
+// même si on est sur le mois en cours, sinon le 1er du mois actuellement
+// consulté — pour éviter d'ajouter silencieusement une entrée à la date du
+// jour pendant qu'on navigue sur un autre mois, ce qui la rend invisible.
+function defaultDateForSelectedMonth(){
+  const today = new Date();
+  const todayISO = today.toISOString().slice(0,10);
+  const key = state.selectedMonth;
+  if(!key || key===monthKey(today.getFullYear(), today.getMonth()+1)) return todayISO;
+  return `${key}-01`;
+}
 function inRangeMonth(key, dateDebut, dateFin){
   const {start,end} = monthBounds(key);
   const d0 = dateDebut ? new Date(dateDebut+'T00:00:00') : null;
@@ -1295,8 +1308,14 @@ function openModal(title, fields, values, onSave, extraHtml){
   const ov = document.getElementById('ov');
   ov.addEventListener('click', (e)=>{ if(e.target.id==='ov') closeModal(); });
   document.getElementById('cancel-btn')?.addEventListener('click', closeModal);
+  fields.forEach(f=>{
+    const el = document.getElementById('f_'+f.key);
+    el?.addEventListener('input', ()=>clearFieldError(f.key));
+    el?.addEventListener('change', ()=>clearFieldError(f.key));
+  });
   document.getElementById('modal-form').onsubmit = async (e)=>{
     e.preventDefault();
+    clearFieldErrors();
     const data = {};
     fields.forEach(f=>{
       const el = document.getElementById('f_'+f.key);
@@ -1308,7 +1327,8 @@ function openModal(title, fields, values, onSave, extraHtml){
     });
     // onSave peut renvoyer explicitement false pour signaler une validation
     // échouée : dans ce cas, le modal reste ouvert (rien n'est perdu, l'utilisateur
-    // corrige simplement sa saisie) plutôt que de se fermer sur une erreur.
+    // corrige simplement sa saisie) plutôt que de se fermer sur une erreur. Il peut
+    // aussi avoir mis en évidence les champs fautifs via markFieldError avant de renvoyer false.
     const result = await onSave(data);
     if(result===false) return;
     closeModal();
@@ -1378,6 +1398,53 @@ function resetCatDropdown(wrap){
   if(inputRow) inputRow.hidden = true;
 }
 function closeModal(){ document.getElementById('modal-root').innerHTML=''; }
+function markFieldError(key, msg){
+  const input = document.getElementById('f_'+key);
+  const field = input?.closest('.field');
+  if(!field) return;
+  field.classList.add('has-error');
+  if(msg && !field.querySelector('.field-error-text')){
+    const p = document.createElement('div');
+    p.className = 'field-error-text';
+    p.textContent = msg;
+    field.appendChild(p);
+  }
+}
+function clearFieldError(key){
+  const field = document.getElementById('f_'+key)?.closest('.field');
+  if(!field) return;
+  field.classList.remove('has-error');
+  field.querySelector('.field-error-text')?.remove();
+}
+function clearFieldErrors(){
+  document.querySelectorAll('#modal-form .field.has-error').forEach(field=>{
+    field.classList.remove('has-error');
+    field.querySelector('.field-error-text')?.remove();
+  });
+}
+// Validation générique pour les formulaires de saisie : un champ marqué
+// `required` doit être non vide (montant strictement positif pour les
+// champs numériques) sous peine de rester en évidence et de bloquer l'ajout.
+function fieldRequiredErrors(fields, data){
+  const errors = [];
+  fields.forEach(f=>{
+    if(!f.required) return;
+    const v = data[f.key];
+    const empty = v===undefined || v===null || (typeof v==='string' && !v.trim());
+    if(f.type==='number'){
+      if(empty || Number(v)<=0) errors.push([f.key, f.errorMsg || 'Renseigne un montant supérieur à 0']);
+    } else if(empty){
+      errors.push([f.key, f.errorMsg || (f.type==='date' ? 'Renseigne une date' : (f.type==='category' ? 'Choisis une catégorie' : 'Ce champ est obligatoire'))]);
+    }
+  });
+  return errors;
+}
+function reportFieldErrors(errors){
+  if(!errors.length) return false;
+  errors.forEach(([key,msg])=>markFieldError(key,msg));
+  toast(errors[0][1]);
+  return true;
+}
 
 function confirmDelete(label, onYes){
   openModal(`Supprimer « ${label} » ?`, [], {}, ()=>{}, `
@@ -1698,10 +1765,10 @@ function emptyState(iconName, title, desc, action, btnLabel){
 
 function revrecFields(){
   const fields = [
-    {key:'libelle', label:'Libellé', placeholder:'Salaire'},
-    {key:'categorie', label:'Catégorie', type:'category', categoryType:'revenus'},
-    {key:'montant', label:'Montant mensuel (€)', type:'number', step:'0.01'},
-    {key:'dateDebut', label:'Date de début', type:'date'},
+    {key:'libelle', label:'Libellé', placeholder:'Salaire', required:true},
+    {key:'categorie', label:'Catégorie', type:'category', categoryType:'revenus', required:true},
+    {key:'montant', label:'Montant mensuel (€)', type:'number', step:'0.01', required:true},
+    {key:'dateDebut', label:'Date de début', type:'date', required:true},
     {key:'dateFin', label:'Date de fin (vide = illimité)', type:'date'},
   ];
   if(jointPartner()) fields.push({key:'excludeFromJoint', label:'Ne pas compter ce revenu dans le calcul du compte joint', type:'checkbox'});
@@ -1709,10 +1776,10 @@ function revrecFields(){
 }
 function revexcFields(){
   const fields = [
-    {key:'date', label:'Date', type:'date'},
-    {key:'libelle', label:'Libellé', placeholder:'Prime annuelle'},
-    {key:'categorie', label:'Catégorie', type:'category', categoryType:'revenus'},
-    {key:'montant', label:'Montant (€)', type:'number', step:'0.01'},
+    {key:'date', label:'Date', type:'date', required:true},
+    {key:'libelle', label:'Libellé', placeholder:'Prime annuelle', required:true},
+    {key:'categorie', label:'Catégorie', type:'category', categoryType:'revenus', required:true},
+    {key:'montant', label:'Montant (€)', type:'number', step:'0.01', required:true},
   ];
   if(jointPartner()) fields.push({key:'excludeFromJoint', label:'Ne pas compter ce revenu dans le calcul du compte joint', type:'checkbox'});
   return fields;
@@ -1978,6 +2045,18 @@ function depense_fields(){
     {key:'statut', label:'Statut', type:'select', options:['Actif','Inactif']},
   ];
 }
+function depenseValidationErrors(data){
+  const errors = [];
+  if(!data.libelle || !String(data.libelle).trim()) errors.push(['libelle','Renseigne un libellé']);
+  if(!data.montant || Number(data.montant)<=0) errors.push(['montant','Renseigne un montant supérieur à 0']);
+  if(data.modePaiement==='Echelonne'){
+    if(!data.dateDebut) errors.push(['dateDebut','Renseigne une date de début']);
+    if(!data.nbMensualites || data.nbMensualites<1) errors.push(['nbMensualites','Renseigne au moins 1 mensualité']);
+  } else if(data.modePaiement==='Unique'){
+    if(!data.date) errors.push(['date','Renseigne une date']);
+  }
+  return errors;
+}
 function setupDepenseFormToggle(){
   const sel = document.getElementById('f_modePaiement');
   if(!sel) return;
@@ -2144,16 +2223,16 @@ function renderObjectifs(){
   `;
 }
 const OBJ_FIELDS = [
-  {key:'nom', label:'Nom du projet', placeholder:'Maison'},
-  {key:'categorie', label:'Catégorie', placeholder:'Habitation'},
-  {key:'montantCible', label:'Montant cible (€)', type:'number', step:'0.01'},
+  {key:'nom', label:'Nom du projet', placeholder:'Maison', required:true},
+  {key:'categorie', label:'Catégorie', placeholder:'Habitation', required:true},
+  {key:'montantCible', label:'Montant cible (€)', type:'number', step:'0.01', required:true},
   {key:'priorite', label:'Priorité', type:'select', options:['Haute','Moyenne','Basse']},
-  {key:'dateDebut', label:'Date de début', type:'date'},
+  {key:'dateDebut', label:'Date de début', type:'date', required:true},
   {key:'dateFin', label:'Date de fin visée', type:'date'},
 ];
 const VERS_FIELDS_BASE = [
-  {key:'date', label:'Date', type:'date'},
-  {key:'montant', label:'Montant versé (€)', type:'number', step:'0.01'},
+  {key:'date', label:'Date', type:'date', required:true},
+  {key:'montant', label:'Montant versé (€)', type:'number', step:'0.01', required:true},
   {key:'note', label:'Note (facultatif)', placeholder:''},
 ];
 
@@ -2198,10 +2277,10 @@ function renderCharges(){
 }
 function charge_fields(){
   return [
-    {key:'categorie', label:'Catégorie', placeholder:'Loyer'},
+    {key:'categorie', label:'Catégorie', placeholder:'Loyer', required:true},
     {key:'type', label:'Type', type:'select', options:['Fixe','Temporaire']},
     {key:'description', label:'Description', placeholder:'Appartement'},
-    {key:'budget', label:'Budget mensuel (€)', type:'number', step:'0.01'},
+    {key:'budget', label:'Budget mensuel (€)', type:'number', step:'0.01', required:true},
     {key:'compte', label:'Compte', type:'select', options:compteOptions()},
     {key:'dateDebut', label:'Date de début (si temporaire)', type:'date'},
     {key:'dateFin', label:'Date de fin (si temporaire)', type:'date'},
@@ -2414,6 +2493,7 @@ document.addEventListener('click', async (e)=>{
     const label = field.querySelector('.cat-select-label');
     label.textContent = nom; label.classList.remove('is-placeholder');
     field.querySelector('.cat-select').classList.remove('open');
+    clearFieldError(field.dataset.catKey);
     return;
   }
   const catDelBtn = e.target.closest('[data-cat-delete]');
@@ -2463,6 +2543,7 @@ document.addEventListener('click', async (e)=>{
     label.textContent = result.cat.nom; label.classList.remove('is-placeholder');
     field.querySelector('.cat-dropdown').innerHTML = categoryDropdownListHTML(type, hidden.value);
     field.querySelector('.cat-select').classList.remove('open');
+    clearFieldError(field.dataset.catKey);
     toast('Catégorie ajoutée');
     return;
   }
@@ -2512,26 +2593,31 @@ async function handleAction(action, id, el){
   const find = (arr)=> arr.find(x=>x.id===id);
   switch(action){
     /* Revenus récurrents */
-    case 'add-revrec': openModal('Ajouter un revenu récurrent', revrecFields(), {categorie:(myCategories('revenus').find(c=>c.nom==='Salaire')||myCategories('revenus')[0]||{}).nom||'', dateDebut: new Date().toISOString().slice(0,10)}, async (data)=>{
-      if(Number(data.montant)<0){ toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense récurrente.'); return false; }
+    case 'add-revrec': openModal('Ajouter un revenu récurrent', revrecFields(), {categorie:(myCategories('revenus').find(c=>c.nom==='Salaire')||myCategories('revenus')[0]||{}).nom||'', dateDebut: defaultDateForSelectedMonth()}, async (data)=>{
+      if(Number(data.montant)<0){ markFieldError('montant','Un revenu ne peut pas être négatif'); toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense récurrente.'); return false; }
+      if(reportFieldErrors(fieldRequiredErrors(revrecFields(), data))) return false;
       state.revenusRecurrents.push({id:uid(), ownerId:currentUser().id, ...data}); await persist(); await render(); toast('Revenu ajouté'); }); break;
     case 'edit-revrec': openModal('Modifier le revenu', revrecFields(), find(mine(state.revenusRecurrents)), async (data)=>{
-      if(Number(data.montant)<0){ toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense récurrente.'); return false; }
+      if(Number(data.montant)<0){ markFieldError('montant','Un revenu ne peut pas être négatif'); toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense récurrente.'); return false; }
+      if(reportFieldErrors(fieldRequiredErrors(revrecFields(), data))) return false;
       Object.assign(find(mine(state.revenusRecurrents)), data); await persist(); await render(); toast('Revenu mis à jour'); }); break;
     case 'del-revrec': { const item=find(mine(state.revenusRecurrents)); confirmDelete(item.libelle, async ()=>{ state.revenusRecurrents = state.revenusRecurrents.filter(x=>x.id!==id); await persist(); await render(); toast('Revenu supprimé'); }); break; }
 
     /* Revenus exceptionnels */
-    case 'add-revexc': openModal('Ajouter une rentrée exceptionnelle', revexcFields(), {date:new Date().toISOString().slice(0,10), categorie:(myCategories('revenus').find(c=>c.nom==='Autre')||myCategories('revenus')[0]||{}).nom||''}, async (data)=>{
-      if(Number(data.montant)<0){ toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense exceptionnelle.'); return false; }
+    case 'add-revexc': openModal('Ajouter une rentrée exceptionnelle', revexcFields(), {date:defaultDateForSelectedMonth(), categorie:(myCategories('revenus').find(c=>c.nom==='Autre')||myCategories('revenus')[0]||{}).nom||''}, async (data)=>{
+      if(Number(data.montant)<0){ markFieldError('montant','Un revenu ne peut pas être négatif'); toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense exceptionnelle.'); return false; }
+      if(reportFieldErrors(fieldRequiredErrors(revexcFields(), data))) return false;
       state.revenusExceptionnels.push({id:uid(), ownerId:currentUser().id, ...data}); await persist(); await render(); toast('Rentrée ajoutée'); }); break;
     case 'edit-revexc': openModal('Modifier la rentrée', revexcFields(), find(mine(state.revenusExceptionnels)), async (data)=>{
-      if(Number(data.montant)<0){ toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense exceptionnelle.'); return false; }
+      if(Number(data.montant)<0){ markFieldError('montant','Un revenu ne peut pas être négatif'); toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense exceptionnelle.'); return false; }
+      if(reportFieldErrors(fieldRequiredErrors(revexcFields(), data))) return false;
       Object.assign(find(mine(state.revenusExceptionnels)), data); await persist(); await render(); toast('Rentrée mise à jour'); }); break;
     case 'del-revexc': { const item=find(mine(state.revenusExceptionnels)); confirmDelete(item.libelle, async ()=>{ state.revenusExceptionnels = state.revenusExceptionnels.filter(x=>x.id!==id); await persist(); await render(); toast('Rentrée supprimée'); }); break; }
 
     /* Dépenses (uniques, échelonnées, récurrentes/abonnements, ou prévisionnelles) */
-    case 'add-depense': openModal('Ajouter une dépense', depense_fields(), {categorie:(myCategoriesDep()[0]||{}).nom||'', compte: jointPartner()?'Compte Perso':'Compte Perso', modePaiement:'Unique', date:new Date().toISOString().slice(0,10), priorite:'Moyenne', frequence:'Mensuel', statut:'Actif', nbMensualites:3}, async (data)=>{
-      if(data.modePaiement==='Echelonne' && (!data.nbMensualites || data.nbMensualites<1)){ toast('Renseigne au moins 1 mensualité'); return false; }
+    case 'add-depense': openModal('Ajouter une dépense', depense_fields(), {categorie:(myCategoriesDep()[0]||{}).nom||'', compte: jointPartner()?'Compte Perso':'Compte Perso', modePaiement:'Unique', date:defaultDateForSelectedMonth(), priorite:'Moyenne', frequence:'Mensuel', statut:'Actif', nbMensualites:3}, async (data)=>{
+      const errors = depenseValidationErrors(data);
+      if(errors.length){ errors.forEach(([key,msg])=>markFieldError(key,msg)); toast(errors[0][1]); return false; }
       const dep = {id:uid(), ownerId:currentUser().id, libelle:data.libelle, categorie:data.categorie, compte:data.compte, montant:data.montant, modePaiement:data.modePaiement, notes:''};
       if(data.modePaiement==='Echelonne'){ dep.dateDebut=data.dateDebut; dep.nbMensualites=data.nbMensualites; dep.moisRetires=[]; }
       else if(data.modePaiement==='Previsionnelle'){ dep.priorite=data.priorite; }
@@ -2541,7 +2627,8 @@ async function handleAction(action, id, el){
       '<div id="depense-preview" class="field-note" style="margin-top:-8px;margin-bottom:14px;min-height:16px;"></div>');
       setTimeout(setupDepenseFormToggle, 0); break;
     case 'edit-depense': openModal('Modifier la dépense', depense_fields(), find(mine(state.depenses)), async (data)=>{
-      if(data.modePaiement==='Echelonne' && (!data.nbMensualites || data.nbMensualites<1)){ toast('Renseigne au moins 1 mensualité'); return false; }
+      const errors = depenseValidationErrors(data);
+      if(errors.length){ errors.forEach(([key,msg])=>markFieldError(key,msg)); toast(errors[0][1]); return false; }
       const dep = find(mine(state.depenses));
       const wasEchelonne = dep.modePaiement==='Echelonne', prevMoisRetires = dep.moisRetires;
       const wasPrevisionnelle = dep.modePaiement==='Previsionnelle';
@@ -2627,19 +2714,20 @@ async function handleAction(action, id, el){
       await persist(); await render(); toast('Mensualité réintégrée'); break; }
     case 'ech-add-versement': {
       const dep = find(mine(state.depenses));
-      openModal('Déclarer un versement exceptionnel', [
-        {key:'montant', label:'Montant versé (€)', type:'number', step:'0.01'}
-      ], {}, async (data)=>{
+      const versExcFields = [{key:'montant', label:'Montant versé (€)', type:'number', step:'0.01', required:true}];
+      openModal('Déclarer un versement exceptionnel', versExcFields, {}, async (data)=>{
+        if(reportFieldErrors(fieldRequiredErrors(versExcFields, data))) return false;
         const montant = Number(data.montant)||0;
-        if(montant<=0){ toast('Renseigne un montant supérieur à 0'); return false; }
         dep.montant = Math.max((Number(dep.montant)||0) - montant, 0);
         await persist(); await render(); toast('Versement enregistré — mensualités suivantes recalculées'); });
       break; }
 
     /* Objectifs */
     case 'add-obj': openModal('Ajouter un objectif', OBJ_FIELDS, {priorite:'Moyenne', dateDebut:new Date().toISOString().slice(0,10)}, async (data)=>{
+      if(reportFieldErrors(fieldRequiredErrors(OBJ_FIELDS, data))) return false;
       state.objectifs.push({id:uid(), ownerId:currentUser().id, ...data}); await persist(); await render(); toast('Objectif ajouté'); }); break;
     case 'edit-obj': openModal('Modifier l\u2019objectif', OBJ_FIELDS, find(mine(state.objectifs)), async (data)=>{
+      if(reportFieldErrors(fieldRequiredErrors(OBJ_FIELDS, data))) return false;
       const old = find(mine(state.objectifs)); const oldNom = old.nom;
       Object.assign(old, data);
       if(oldNom !== data.nom){ mine(state.versements).forEach(v=>{ if(v.objectifNom===oldNom) v.objectifNom = data.nom; }); }
@@ -2650,14 +2738,17 @@ async function handleAction(action, id, el){
       await persist(); await render(); toast('Objectif supprimé'); }); break; }
 
     /* Versements */
-    case 'add-versement': openModal(`Verser vers « ${el.dataset.obj} »`, VERS_FIELDS_BASE, {date:new Date().toISOString().slice(0,10)}, async (data)=>{
+    case 'add-versement': openModal(`Verser vers « ${el.dataset.obj} »`, VERS_FIELDS_BASE, {date:defaultDateForSelectedMonth()}, async (data)=>{
+      if(reportFieldErrors(fieldRequiredErrors(VERS_FIELDS_BASE, data))) return false;
       state.versements.push({id:uid(), ownerId:currentUser().id, objectifNom:el.dataset.obj, ...data}); await persist(); await render(); toast('Versement enregistré'); }); break;
     case 'del-versement': confirmDelete('ce versement', async ()=>{ state.versements = state.versements.filter(x=>x.id!==id); await persist(); await render(); toast('Versement supprimé'); }); break;
 
     /* Charges */
     case 'add-charge': openModal('Ajouter une charge', charge_fields(), {type:'Fixe', compte: jointPartner() ? 'Compte Joint' : 'Compte Perso'}, async (data)=>{
+      if(reportFieldErrors(fieldRequiredErrors(charge_fields(), data))) return false;
       state.charges.push({id:uid(), ownerId:currentUser().id, notes:'', ...data}); await persist(); await render(); toast('Charge ajoutée'); }); break;
     case 'edit-charge': openModal('Modifier la charge', charge_fields(), find(mine(state.charges)), async (data)=>{
+      if(reportFieldErrors(fieldRequiredErrors(charge_fields(), data))) return false;
       Object.assign(find(mine(state.charges)), data); await persist(); await render(); toast('Charge mise à jour'); }); break;
     case 'del-charge': { const item=find(mine(state.charges)); confirmDelete(item.categorie, async ()=>{ state.charges = state.charges.filter(x=>x.id!==id); await persist(); await render(); toast('Charge supprimée'); }); break; }
 
@@ -2669,19 +2760,23 @@ async function handleAction(action, id, el){
     case 'logout': stopPolling(); clearSession(); await boot(); toast('Déconnecté'); break;
     case 'toggle-sidebar-collapse': state.navCollapsed = !state.navCollapsed; await persist(); await render(); break;
     case 'reset-nav-order': if(state.navOrder) state.navOrder[el.dataset.space||currentSpace] = null; await persist(); await render(); break;
-    case 'add-user': openModal('Ajouter un compte', userFieldsAdmin(null).concat([{key:'password', label:'Mot de passe', type:'password'}]), {role:'membre'}, async (data)=>{
-      if(authState.users.some(u=>u.username===data.username.trim().toLowerCase())){ toast('Cet identifiant existe déjà'); return false; }
+    case 'add-user': {
+      const addUserFields = userFieldsAdmin(null).concat([{key:'password', label:'Mot de passe', type:'password'}]);
+      openModal('Ajouter un compte', addUserFields, {role:'membre'}, async (data)=>{
+      if(reportFieldErrors(fieldRequiredErrors(addUserFields, data))) return false;
+      if(authState.users.some(u=>u.username===data.username.trim().toLowerCase())){ markFieldError('username','Cet identifiant existe déjà'); toast('Cet identifiant existe déjà'); return false; }
       const salt = randomSalt();
       const passwordHash = await hashPassword(data.password||'changeme', salt);
       const newUser = {id:uid(), username:data.username.trim().toLowerCase(), displayName:data.displayName, role:data.role, jointWith:null, salt, passwordHash};
       authState.users.push(newUser);
       seedDefaultCategoriesDep(newUser.id);
       seedDefaultCategoriesRev(newUser.id);
-      await Promise.all([persistAuth(), persist()]); await render(); toast('Compte créé — pense à transmettre le jeton d\u2019accès à cette personne par email, il lui sera demandé à sa première connexion.'); }); break;
+      await Promise.all([persistAuth(), persist()]); await render(); toast('Compte créé — pense à transmettre le jeton d\u2019accès à cette personne par email, il lui sera demandé à sa première connexion.'); }); break; }
     case 'edit-user': {
       const u = find(authState.users);
       const fields = (isAdmin() ? userFieldsAdmin(u.id) : userFieldsSelf(u.id)).concat([{key:'password', label:'Nouveau mot de passe (optionnel)', type:'password'}]);
       openModal('Modifier le compte', fields, u, async (data)=>{
+        if(reportFieldErrors(fieldRequiredErrors(fields, data))) return false;
         u.displayName = data.displayName;
         if(isAdmin()){ u.username = (data.username||u.username).trim().toLowerCase(); u.role = data.role||u.role; }
         if(data.password){ u.salt = randomSalt(); u.passwordHash = await hashPassword(data.password, u.salt); }
@@ -3329,14 +3424,14 @@ function jointWithOptions(excludeId){
 }
 function userFieldsAdmin(excludeId){
   return [
-    {key:'displayName', label:'Nom affiché'},
-    {key:'username', label:'Identifiant'},
+    {key:'displayName', label:'Nom affiché', required:true},
+    {key:'username', label:'Identifiant', required:true},
     {key:'role', label:'Rôle', type:'select', options:['membre','admin']},
   ];
 }
 function userFieldsSelf(excludeId){
   return [
-    {key:'displayName', label:'Nom affiché'},
+    {key:'displayName', label:'Nom affiché', required:true},
   ];
 }
 
