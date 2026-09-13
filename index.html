@@ -2227,18 +2227,16 @@ function renderObjectifs(){
         </div>
       </div>
       <div class="ld-detail-pane">
-        ${selected ? renderObjDetail(selected, key) : ''}
+        ${selected ? renderObjSummary(selected) : ''}
       </div>
     </div>
+    ${selected ? renderObjVersements(selected, key) : ''}
   `;
 }
-function renderObjDetail(o, key){
+function renderObjSummary(o){
   const c = objectifCalc(o);
-  const versAll = mine(state.versements).filter(v=>v.objectifNom===o.nom && v.date && v.date.slice(0,7)===key);
-  const versFiltered = applyTableFilterAndSort('versements', VERS_COLUMNS, versAll);
-  const versList = tableFilterState('versements').sortCol ? versFiltered : [...versFiltered].sort((a,b)=>new Date(b.date)-new Date(a.date));
   return `
-    <div class="card" style="margin-bottom:16px;">
+    <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
         <div><div style="font-weight:600;font-size:18px;">${o.nom}</div><div style="font-size:12.5px;color:var(--text-dim);margin-top:2px;">${o.categorie} · priorité ${o.priorite}</div></div>
         <span class="pill ${c.statut==='Atteint'?'pill-teal':c.statut==='En cours'?'pill-amber':'pill-dim'}">${c.statut}</span>
@@ -2259,8 +2257,14 @@ function renderObjDetail(o, key){
         <button class="icon-btn del" data-action="del-obj" data-id="${o.id}">${icon('trash')}</button>
       </div>
     </div>
-
-    <div class="section-head">
+  `;
+}
+function renderObjVersements(o, key){
+  const versAll = mine(state.versements).filter(v=>v.objectifNom===o.nom && v.date && v.date.slice(0,7)===key);
+  const versFiltered = applyTableFilterAndSort('versements', VERS_COLUMNS, versAll);
+  const versList = tableFilterState('versements').sortCol ? versFiltered : [...versFiltered].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  return `
+    <div class="section-head" style="margin-top:24px;">
       <div><h3 style="font-size:15px;font-weight:600;">Historique des versements</h3><div class="field-note" style="margin-top:2px;">Sommes mises de côté vers « ${o.nom} », mois par mois.</div></div>
       ${monthStepperHTML(key,'dashboard')}
     </div>
