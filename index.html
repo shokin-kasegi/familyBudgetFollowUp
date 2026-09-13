@@ -260,14 +260,19 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
 .empty p{font-size:13.5px;margin-bottom:16px;}
 
 /* ---------- Liste + détail (Objectifs) ---------- */
-.list-detail{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:flex-start;}
+.list-detail{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
 @media(max-width:880px){.list-detail{grid-template-columns:1fr;}}
-.ld-list-pane{position:sticky;top:0;}
-@media(max-width:880px){.ld-list-pane{position:static;}}
+.ld-list-pane,.ld-detail-pane{display:flex;flex-direction:column;min-width:0;}
+@media(min-width:881px){
+  .ld-list-pane > .card,.ld-detail-pane > .card{height:360px;}
+  .ld-list-pane > .card{display:flex;flex-direction:column;overflow:hidden;}
+  .ld-list-pane .table-wrap{overflow-y:auto;flex:1;min-height:0;}
+  .ld-list-pane thead th{position:sticky;top:0;background:#0b0c0f;z-index:1;}
+  .ld-detail-pane > .card{overflow-y:auto;}
+}
 .ld-row{cursor:pointer;}
 .ld-row.active{background:rgba(255,255,255,0.06);}
 .ld-row.active td:first-child{box-shadow:inset 3px 0 0 var(--text);}
-.ld-detail-pane{min-width:0;}
 
 /* ---------- Modal ---------- */
 .modal-overlay{
@@ -2201,9 +2206,9 @@ function renderObjectifs(){
       <button class="btn btn-primary" data-action="add-obj">${icon('plus')}Ajouter un objectif</button></div>
     <div class="list-detail">
       <div class="ld-list-pane">
-        <div class="card" style="padding:0;">
-          ${tableFilterActive('objectifs') ? `<div class="row-actions" style="justify-content:flex-start;padding:14px 16px 0;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="objectifs">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
-          ${list.length===0 ? `<div style="padding:16px;">${emptyState('target','Aucun résultat','Aucun objectif ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres')}</div>` : `
+        <div class="card">
+          ${tableFilterActive('objectifs') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="objectifs">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
+          ${list.length===0 ? emptyState('target','Aucun résultat','Aucun objectif ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
           <div class="table-wrap">
             <table>
               <thead><tr>
