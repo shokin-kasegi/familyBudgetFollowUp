@@ -1354,6 +1354,21 @@ function openModal(title, fields, values, onSave, extraHtml){
     el?.addEventListener('input', ()=>clearFieldError(f.key));
     el?.addEventListener('change', ()=>clearFieldError(f.key));
   });
+  if(fields.some(f=>f.showIf)){
+    const updateConditionalFields = ()=>{
+      const current = {};
+      fields.forEach(f=>{ const el = document.getElementById('f_'+f.key); if(el) current[f.key] = f.type==='checkbox' ? el.checked : el.value; });
+      fields.forEach(f=>{
+        if(!f.showIf) return;
+        const el = document.getElementById('f_'+f.key);
+        const wrap = el?.closest('.field');
+        if(wrap) wrap.hidden = !f.showIf(current);
+      });
+    };
+    document.getElementById('modal-form').addEventListener('input', updateConditionalFields);
+    document.getElementById('modal-form').addEventListener('change', updateConditionalFields);
+    updateConditionalFields();
+  }
   document.getElementById('modal-form').onsubmit = async (e)=>{
     e.preventDefault();
     clearFieldErrors();
@@ -1378,29 +1393,30 @@ function openModal(title, fields, values, onSave, extraHtml){
 }
 function fieldHTML(f, values){
   const val = values && values[f.key]!==undefined && values[f.key]!==null ? values[f.key] : (f.default!==undefined?f.default:'');
+  const hiddenAttr = f.showIf && !f.showIf(values||{}) ? ' hidden' : '';
   if(f.type==='select'){
     const opts = f.options.map(o=> typeof o==='object' ? o : {value:o, label:o});
-    return `<div class="field"><label>${f.label}</label><select id="f_${f.key}">${opts.map(o=>`<option value="${o.value}" ${String(o.value)===String(val)?'selected':''}>${o.label}</option>`).join('')}</select></div>`;
+    return `<div class="field"${hiddenAttr}><label>${f.label}</label><select id="f_${f.key}">${opts.map(o=>`<option value="${o.value}" ${String(o.value)===String(val)?'selected':''}>${o.label}</option>`).join('')}</select></div>`;
   }
   if(f.type==='category'){
-    return categoryFieldHTML(f, val);
+    return categoryFieldHTML(f, val, hiddenAttr);
   }
   if(f.type==='checkbox'){
-    return `<div class="field" style="display:flex;align-items:center;gap:9px;"><input id="f_${f.key}" type="checkbox" ${val?'checked':''} style="width:16px;height:16px;accent-color:#FFFFFF;"><label style="margin:0;font-size:13px;color:var(--text);">${f.label}</label></div>`;
+    return `<div class="field"${hiddenAttr} style="display:flex;align-items:center;gap:9px;"><input id="f_${f.key}" type="checkbox" ${val?'checked':''} style="width:16px;height:16px;accent-color:#FFFFFF;"><label style="margin:0;font-size:13px;color:var(--text);">${f.label}</label></div>`;
   }
   if(f.type==='password'){
-    return `<div class="field"><label>${f.label}</label><div class="pw-wrap"><input id="f_${f.key}" type="password" value="${val||''}" placeholder="${f.placeholder||''}" autocomplete="${f.autocomplete||'current-password'}"><button type="button" class="pw-toggle" data-toggle-pw="f_${f.key}">${icon('eye')}</button></div></div>`;
+    return `<div class="field"${hiddenAttr}><label>${f.label}</label><div class="pw-wrap"><input id="f_${f.key}" type="password" value="${val||''}" placeholder="${f.placeholder||''}" autocomplete="${f.autocomplete||'current-password'}"><button type="button" class="pw-toggle" data-toggle-pw="f_${f.key}">${icon('eye')}</button></div></div>`;
   }
-  return `<div class="field"><label>${f.label}</label><input id="f_${f.key}" type="${f.type||'text'}" ${f.step?`step="${f.step}"`:''} value="${val===0?0:(val||'')}" placeholder="${f.placeholder||''}"></div>`;
+  return `<div class="field"${hiddenAttr}><label>${f.label}</label><input id="f_${f.key}" type="${f.type||'text'}" ${f.step?`step="${f.step}"`:''} value="${val===0?0:(val||'')}" placeholder="${f.placeholder||''}"></div>`;
 }
 function attrEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
 // Champ « Catégorie » personnalisable : au lieu d'un <select> figé, un menu
 // déroulant où chaque catégorie porte sa propre croix de suppression, et où
 // une dernière ligne « + Autre… » ouvre un champ texte pour en créer une
 // nouvelle sans jamais quitter le formulaire en cours.
-function categoryFieldHTML(f, val){
+function categoryFieldHTML(f, val, hiddenAttr){
   const hasVal = val!==undefined && val!==null && val!=='';
-  return `<div class="field cat-field" data-cat-type="${f.categoryType}" data-cat-key="${f.key}">
+  return `<div class="field cat-field"${hiddenAttr||''} data-cat-type="${f.categoryType}" data-cat-key="${f.key}">
     <label>${f.label}</label>
     <input type="hidden" id="f_${f.key}" value="${attrEsc(val)}">
     <div class="cat-select">
@@ -2501,8 +2517,8 @@ function charge_fields(){
     {key:'description', label:'Description', placeholder:'Appartement'},
     {key:'budget', label:'Budget mensuel (€)', type:'number', step:'0.01', required:true},
     {key:'compte', label:'Compte', type:'select', options:compteOptions()},
-    {key:'dateDebut', label:'Date de début (si temporaire)', type:'date'},
-    {key:'dateFin', label:'Date de fin (si temporaire)', type:'date'},
+    {key:'dateDebut', label:'Date de début', type:'date', showIf:(v)=>v.type==='Temporaire'},
+    {key:'dateFin', label:'Date de fin', type:'date', showIf:(v)=>v.type==='Temporaire'},
   ];
 }
 
