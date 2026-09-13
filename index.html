@@ -575,6 +575,8 @@ const ADMIN_CONTACT_EMAIL = 'saindouhamza@gmail.com';
 const MONTH_NAMES = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 const CATS_DEP = ['Achat','Réparation','Santé','Loisirs','Cadeau','Voyage','Imprévu','Internet','Transport','Mobile','Divertissement','Stockage','Gestion','Finance','Autre'];
 const CATS_REV = ['Salaire','Remboursement','Prime','Cadeau','Autre'];
+const CATS_OBJ = ['Habitation','Véhicule','Voyage','Éducation','Santé','Épargne','Électroménager','Autre'];
+const CATS_CHARGES = ['Loyer','Électricité','Eau','Gaz','Internet','Assurance','Abonnement','Impôts','Autre'];
 const COMPTES = ['Compte Joint','Compte Perso'];
 
 var state = null;
@@ -604,7 +606,9 @@ function defaultState(){
     versements: [],
     charges: [],
     categoriesDepenses: [],
-    categoriesRevenus: []
+    categoriesRevenus: [],
+    categoriesObjectifs: [],
+    categoriesCharges: []
   };
 }
 
@@ -790,11 +794,24 @@ async function loadState(){
     needsPersist = true;
   }
 
+  // Migration : même principe pour les catégories d'objectifs et de charges,
+  // jusque-là des champs texte libre sans liste ni gestion personnalisable.
+  if(!Array.isArray(state.categoriesObjectifs)){
+    state.categoriesObjectifs = [];
+    authState.users.forEach(u=>{ seedDefaultCategoriesObj(u.id); });
+    needsPersist = true;
+  }
+  if(!Array.isArray(state.categoriesCharges)){
+    state.categoriesCharges = [];
+    authState.users.forEach(u=>{ seedDefaultCategoriesCharges(u.id); });
+    needsPersist = true;
+  }
+
   if(needsPersist) await persist();
   if(needsPersistAuth) await persistAuth();
   if(needsPersistSocial) await persistSocial();
 }
-const OWNED_ARRAYS = ['revenusRecurrents','revenusExceptionnels','depenses','objectifs','versements','charges','categoriesDepenses','categoriesRevenus'];
+const OWNED_ARRAYS = ['revenusRecurrents','revenusExceptionnels','depenses','objectifs','versements','charges','categoriesDepenses','categoriesRevenus','categoriesObjectifs','categoriesCharges'];
 function mine(arr){
   const me = currentUser();
   return me ? (arr||[]).filter(e=>e.ownerId===me.id) : [];
@@ -2015,6 +2032,14 @@ const CATEGORY_TYPES = {
       mine(state.revenusRecurrents).forEach(r=>{ if(r.categorie===nom) r.categorie=''; });
       mine(state.revenusExceptionnels).forEach(r=>{ if(r.categorie===nom) r.categorie=''; });
     }
+  },
+  objectifs: {
+    stateKey: 'categoriesObjectifs',
+    clearFrom(nom){ mine(state.objectifs).forEach(o=>{ if(o.categorie===nom) o.categorie=''; }); }
+  },
+  charges: {
+    stateKey: 'categoriesCharges',
+    clearFrom(nom){ mine(state.charges).forEach(c=>{ if(c.categorie===nom) c.categorie=''; }); }
   }
 };
 function seedDefaultCategoriesDep(userId){
@@ -2022,6 +2047,12 @@ function seedDefaultCategoriesDep(userId){
 }
 function seedDefaultCategoriesRev(userId){
   CATS_REV.forEach(nom=>{ state.categoriesRevenus.push({id:uid(), ownerId:userId, nom}); });
+}
+function seedDefaultCategoriesObj(userId){
+  CATS_OBJ.forEach(nom=>{ state.categoriesObjectifs.push({id:uid(), ownerId:userId, nom}); });
+}
+function seedDefaultCategoriesCharges(userId){
+  CATS_CHARGES.forEach(nom=>{ state.categoriesCharges.push({id:uid(), ownerId:userId, nom}); });
 }
 function myCategories(type){
   return mine(state[CATEGORY_TYPES[type].stateKey]).slice().sort((a,b)=>a.nom.localeCompare(b.nom,'fr'));
@@ -2293,7 +2324,7 @@ function renderObjVersements(o, key){
 }
 const OBJ_FIELDS = [
   {key:'nom', label:'Nom du projet', placeholder:'Maison', required:true},
-  {key:'categorie', label:'Catégorie', placeholder:'Habitation', required:true},
+  {key:'categorie', label:'Catégorie', type:'category', categoryType:'objectifs', required:true},
   {key:'montantCible', label:'Montant cible (€)', type:'number', step:'0.01', required:true},
   {key:'priorite', label:'Priorité', type:'select', options:['Haute','Moyenne','Basse']},
   {key:'dateDebut', label:'Date de début', type:'date', required:true},
@@ -2346,7 +2377,7 @@ function renderCharges(){
 }
 function charge_fields(){
   return [
-    {key:'categorie', label:'Catégorie', placeholder:'Loyer', required:true},
+    {key:'categorie', label:'Catégorie', type:'category', categoryType:'charges', required:true},
     {key:'type', label:'Type', type:'select', options:['Fixe','Temporaire']},
     {key:'description', label:'Description', placeholder:'Appartement'},
     {key:'budget', label:'Budget mensuel (€)', type:'number', step:'0.01', required:true},
@@ -2842,6 +2873,8 @@ async function handleAction(action, id, el){
       authState.users.push(newUser);
       seedDefaultCategoriesDep(newUser.id);
       seedDefaultCategoriesRev(newUser.id);
+      seedDefaultCategoriesObj(newUser.id);
+      seedDefaultCategoriesCharges(newUser.id);
       await Promise.all([persistAuth(), persist()]); await render(); toast('Compte créé — pense à transmettre le jeton d\u2019accès à cette personne par email, il lui sera demandé à sa première connexion.'); }); break; }
     case 'edit-user': {
       const u = find(authState.users);
@@ -3257,6 +3290,8 @@ function renderSetupAdminForm(verifiedCode){
     authState.users.push(user);
     seedDefaultCategoriesDep(user.id);
     seedDefaultCategoriesRev(user.id);
+    seedDefaultCategoriesObj(user.id);
+    seedDefaultCategoriesCharges(user.id);
     authState.setupCodeUsed = true; // le code ne pourra plus jamais resservir, même si ce compte est supprimé un jour
     await Promise.all([persist(), persistSocial(), persistAuth()]);
     setSession(user.id, document.getElementById('su-remember')?.checked);
