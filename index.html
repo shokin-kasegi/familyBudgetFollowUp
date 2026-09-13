@@ -259,6 +259,20 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
 .empty svg{width:34px;height:34px;stroke:var(--text-faint);fill:none;stroke-width:1.4;margin-bottom:14px;}
 .empty p{font-size:13.5px;margin-bottom:16px;}
 
+/* ---------- Liste + détail (Objectifs) ---------- */
+.list-detail{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media(max-width:880px){.list-detail{grid-template-columns:1fr;}}
+.ld-list-pane,.ld-detail-pane{display:flex;flex-direction:column;min-width:0;}
+@media(min-width:881px){
+  .ld-list-pane > .card,.ld-detail-pane > .card{height:360px;}
+  .ld-list-pane > .card{display:flex;flex-direction:column;overflow:hidden;}
+  .ld-list-pane .table-wrap{overflow-y:auto;flex:1;min-height:0;}
+  .ld-detail-pane > .card{overflow-y:auto;}
+}
+.ld-row{cursor:pointer;}
+.ld-row.active{background:rgba(255,255,255,0.06);}
+.ld-row.active td:first-child{box-shadow:inset 3px 0 0 var(--text);}
+
 /* ---------- Modal ---------- */
 .modal-overlay{
   position:fixed;inset:0;background:rgba(6,7,10,0.6);backdrop-filter:blur(6px);
@@ -1874,6 +1888,7 @@ function tableRegistry(){
     charges: { columns: CHARGE_COLUMNS, getArray: ()=> mine(state.charges) },
     versements: { columns: VERS_COLUMNS, getArray: ()=> mine(state.versements) },
     echeances: { columns: ECH_COLUMNS, getArray: ()=> mine(state.depenses).filter(d=>d.modePaiement==='Echelonne') },
+    objectifs: { columns: OBJ_COLUMNS, getArray: ()=> mine(state.objectifs) },
   };
 }
 function tableSpec(table){ return tableRegistry()[table]; }
@@ -2163,70 +2178,115 @@ const VERS_COLUMNS = {
   objectifNom: { label:'Objectif', type:'text', get:v=>v.objectifNom },
   montant: { label:'Montant', type:'number', get:v=>Number(v.montant)||0 },
 };
+const OBJ_COLUMNS = {
+  nom: { label:'Nom', type:'text', get:o=>o.nom },
+  categorie: { label:'Catégorie', type:'text', get:o=>o.categorie },
+  priorite: { label:'Priorité', type:'text', get:o=>o.priorite },
+  statut: { label:'Statut', type:'text', get:o=>objectifCalc(o).statut },
+};
+let objSelectedId = null;
 function renderObjectifs(){
   const key = state.selectedMonth;
-  const list = mine(state.objectifs);
-  const versAll = mine(state.versements).filter(v=>v.date && v.date.slice(0,7)===key);
-  const versFiltered = applyTableFilterAndSort('versements', VERS_COLUMNS, versAll);
-  const versList = tableFilterState('versements').sortCol ? versFiltered : [...versFiltered].sort((a,b)=>new Date(b.date)-new Date(a.date));
-  if(list.length===0){
+  const all = mine(state.objectifs);
+  if(all.length===0){
     return `
       <div class="page-head"><div><div class="page-title">Objectifs</div><div class="page-sub">Épargne progressive vers vos projets</div></div>
         <button class="btn btn-primary" data-action="add-obj">${icon('plus')}Ajouter un objectif</button></div>
-      <div class="card">${emptyState('target','Aucun objectif','Un objectif, c\u2019est un projet à financer (voyage, apport, achat…). Créez-en un, puis enregistrez au fil des mois les sommes mises de côté pour l\u2019atteindre.','add-obj','Créer mon premier objectif')}</div>
+      <div class="card">${emptyState('target','Aucun objectif','Un objectif, c’est un projet à financer (voyage, apport, achat…). Créez-en un, puis enregistrez au fil des mois les sommes mises de côté pour l’atteindre.','add-obj','Créer mon premier objectif')}</div>
     `;
   }
+  const list = applyTableFilterAndSort('objectifs', OBJ_COLUMNS, all);
+  if(!objSelectedId || !all.some(o=>o.id===objSelectedId)) objSelectedId = all[0].id;
+  if(list.length && !list.some(o=>o.id===objSelectedId)) objSelectedId = list[0].id;
+  const selected = (list.find(o=>o.id===objSelectedId)) || all.find(o=>o.id===objSelectedId);
+
   return `
     <div class="page-head"><div><div class="page-title">Objectifs</div><div class="page-sub">Épargne progressive vers vos projets</div></div>
       <button class="btn btn-primary" data-action="add-obj">${icon('plus')}Ajouter un objectif</button></div>
-    <div class="grid g2" style="margin-bottom:24px;">
-      ${list.map(o=>{
-        const c = objectifCalc(o);
-        return `<div class="card">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
-            <div><div style="font-weight:600;font-size:15.5px;">${o.nom}</div><div style="font-size:12.5px;color:var(--text-dim);margin-top:2px;">${o.categorie} · priorité ${o.priorite}</div></div>
-            <span class="pill ${c.statut==='Atteint'?'pill-teal':c.statut==='En cours'?'pill-amber':'pill-dim'}">${c.statut}</span>
-          </div>
-          <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:8px;">
-            <span class="display" style="font-size:22px;font-weight:600;">${fmtEUR(c.verse)}</span>
-            <span style="color:var(--text-dim);font-size:13px;">/ ${fmtEUR(o.montantCible)}</span>
-          </div>
-          <div class="progress" style="width:100%;margin-bottom:14px;"><div style="width:${c.pct*100}%"></div></div>
-          <div class="grid g3" style="gap:10px;">
-            <div><div style="font-size:11px;color:var(--text-faint);">Restant</div><div style="font-size:13.5px;font-weight:600;">${fmtEUR(c.restant)}</div></div>
-            <div><div style="font-size:11px;color:var(--text-faint);">Échéance</div><div style="font-size:13.5px;font-weight:600;">${fmtDate(o.dateFin)}</div></div>
-            <div><div style="font-size:11px;color:var(--text-faint);">Épargne / mois</div><div style="font-size:13.5px;font-weight:600;color:var(--teal);">${fmtEURPrecise(c.mensualite)}</div></div>
-          </div>
-          <div class="row-actions" style="margin-top:16px;justify-content:flex-start;">
-            <button class="btn btn-ghost btn-sm" data-action="add-versement" data-obj="${o.nom}">${icon('plus')}Verser</button>
-            <button class="icon-btn" data-action="edit-obj" data-id="${o.id}">${icon('edit')}</button>
-            <button class="icon-btn del" data-action="del-obj" data-id="${o.id}">${icon('trash')}</button>
-          </div>
-        </div>`;
-      }).join('')}
+    <div class="list-detail">
+      <div class="ld-list-pane">
+        <div class="card">
+          ${tableFilterActive('objectifs') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="objectifs">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
+          ${list.length===0 ? emptyState('target','Aucun résultat','Aucun objectif ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                ${colFilterHeaderHTML('objectifs', OBJ_COLUMNS, 'nom', all)}
+                ${colFilterHeaderHTML('objectifs', OBJ_COLUMNS, 'categorie', all)}
+                ${colFilterHeaderHTML('objectifs', OBJ_COLUMNS, 'priorite', all)}
+                ${colFilterHeaderHTML('objectifs', OBJ_COLUMNS, 'statut', all)}
+              </tr></thead>
+              <tbody>${list.map(o=>{
+                const c = objectifCalc(o);
+                return `<tr class="ld-row ${o.id===objSelectedId?'active':''}" data-action="select-obj" data-id="${o.id}">
+                  <td>${o.nom}</td>
+                  <td><span class="pill pill-dim">${o.categorie}</span></td>
+                  <td>${o.priorite}</td>
+                  <td><span class="pill ${c.statut==='Atteint'?'pill-teal':c.statut==='En cours'?'pill-amber':'pill-dim'}">${c.statut}</span></td>
+                </tr>`;
+              }).join('')}</tbody>
+            </table>
+          </div>`}
+        </div>
+      </div>
+      <div class="ld-detail-pane">
+        ${selected ? renderObjSummary(selected) : ''}
+      </div>
     </div>
-
-    <div class="section-head">
-      <div><h3 style="font-size:15px;font-weight:600;">Historique des versements</h3><div class="field-note" style="margin-top:2px;">Sommes mises de côté vers vos objectifs, mois par mois — cliquez sur « Verser » sur un objectif ci-dessus pour en ajouter.</div></div>
+    ${selected ? renderObjVersements(selected, key) : ''}
+  `;
+}
+function renderObjSummary(o){
+  const c = objectifCalc(o);
+  return `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+        <div><div style="font-weight:600;font-size:18px;">${o.nom}</div><div style="font-size:12.5px;color:var(--text-dim);margin-top:2px;">${o.categorie} · priorité ${o.priorite}</div></div>
+        <span class="pill ${c.statut==='Atteint'?'pill-teal':c.statut==='En cours'?'pill-amber':'pill-dim'}">${c.statut}</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:8px;">
+        <span class="display" style="font-size:28px;font-weight:600;">${fmtEUR(c.verse)}</span>
+        <span style="color:var(--text-dim);font-size:14px;">/ ${fmtEUR(o.montantCible)}</span>
+      </div>
+      <div class="progress" style="width:100%;margin-bottom:14px;"><div style="width:${c.pct*100}%"></div></div>
+      <div class="grid g3" style="gap:10px;">
+        <div><div style="font-size:11px;color:var(--text-faint);">Restant</div><div style="font-size:13.5px;font-weight:600;">${fmtEUR(c.restant)}</div></div>
+        <div><div style="font-size:11px;color:var(--text-faint);">Échéance</div><div style="font-size:13.5px;font-weight:600;">${fmtDate(o.dateFin)}</div></div>
+        <div><div style="font-size:11px;color:var(--text-faint);">Épargne / mois</div><div style="font-size:13.5px;font-weight:600;color:var(--teal);">${fmtEURPrecise(c.mensualite)}</div></div>
+      </div>
+      <div class="row-actions" style="margin-top:16px;justify-content:flex-start;">
+        <button class="btn btn-ghost btn-sm" data-action="add-versement" data-obj="${o.nom}">${icon('plus')}Verser</button>
+        <button class="icon-btn" data-action="edit-obj" data-id="${o.id}">${icon('edit')}</button>
+        <button class="icon-btn del" data-action="del-obj" data-id="${o.id}">${icon('trash')}</button>
+      </div>
+    </div>
+  `;
+}
+function renderObjVersements(o, key){
+  const versAll = mine(state.versements).filter(v=>v.objectifNom===o.nom && v.date && v.date.slice(0,7)===key);
+  const versFiltered = applyTableFilterAndSort('versements', VERS_COLUMNS, versAll);
+  const versList = tableFilterState('versements').sortCol ? versFiltered : [...versFiltered].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  return `
+    <div class="section-head" style="margin-top:24px;">
+      <div><h3 style="font-size:15px;font-weight:600;">Historique des versements</h3><div class="field-note" style="margin-top:2px;">Sommes mises de côté vers « ${o.nom} », mois par mois.</div></div>
       ${monthStepperHTML(key,'dashboard')}
     </div>
     <div class="card">
       ${tableFilterActive('versements') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="versements">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
-      ${versAll.length===0 ? emptyState('wallet',`Aucun versement en ${monthLabel(key)}`,'Utilisez le bouton « Verser » sur l’un de vos objectifs ci-dessus pour enregistrer une somme mise de côté ce mois-ci.','','') :
+      ${versAll.length===0 ? emptyState('wallet',`Aucun versement en ${monthLabel(key)}`,'Utilisez le bouton « Verser » ci-dessus pour enregistrer une somme mise de côté ce mois-ci.','','') :
         (versList.length===0 ? emptyState('wallet','Aucun résultat','Aucun versement ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
       <div class="table-wrap"><table>
         <thead><tr>
-          ${colFilterHeaderHTML('versements', VERS_COLUMNS, 'date', mine(state.versements))}
-          ${colFilterHeaderHTML('versements', VERS_COLUMNS, 'objectifNom', mine(state.versements))}
-          ${colFilterHeaderHTML('versements', VERS_COLUMNS, 'montant', mine(state.versements))}
+          ${colFilterHeaderHTML('versements', VERS_COLUMNS, 'date', versAll)}
+          ${colFilterHeaderHTML('versements', VERS_COLUMNS, 'montant', versAll)}
           <th>Note</th><th></th>
         </tr></thead>
         <tbody>${versList.map(v=>`<tr>
-          <td>${fmtDate(v.date)}</td><td><span class="pill pill-dim">${v.objectifNom}</span></td>
+          <td>${fmtDate(v.date)}</td>
           <td class="num" style="color:var(--teal)">${fmtEUR(v.montant)}</td><td class="wrap">${v.note||'—'}</td>
           <td class="row-actions"><button class="icon-btn del" data-action="del-versement" data-id="${v.id}">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
-        <tfoot><tr><td colspan="2">Total versé ce mois</td><td class="num" style="color:var(--teal)">${fmtEUR(versAll.reduce((s,v)=>s+Number(v.montant),0))}</td><td colspan="2"></td></tr></tfoot>
+        <tfoot><tr><td>Total versé ce mois</td><td class="num" style="color:var(--teal)">${fmtEUR(versAll.reduce((s,v)=>s+Number(v.montant),0))}</td><td colspan="2"></td></tr></tfoot>
       </table></div>`)}
     </div>
   `;
@@ -2732,9 +2792,11 @@ async function handleAction(action, id, el){
       break; }
 
     /* Objectifs */
+    case 'select-obj': objSelectedId = id; await render(); break;
     case 'add-obj': openModal('Ajouter un objectif', OBJ_FIELDS, {priorite:'Moyenne', dateDebut:new Date().toISOString().slice(0,10)}, async (data)=>{
       if(reportFieldErrors(fieldRequiredErrors(OBJ_FIELDS, data))) return false;
-      state.objectifs.push({id:uid(), ownerId:currentUser().id, ...data}); await persist(); await render(); toast('Objectif ajouté'); }); break;
+      const newObj = {id:uid(), ownerId:currentUser().id, ...data};
+      state.objectifs.push(newObj); objSelectedId = newObj.id; await persist(); await render(); toast('Objectif ajouté'); }); break;
     case 'edit-obj': openModal('Modifier l\u2019objectif', OBJ_FIELDS, find(mine(state.objectifs)), async (data)=>{
       if(reportFieldErrors(fieldRequiredErrors(OBJ_FIELDS, data))) return false;
       const old = find(mine(state.objectifs)); const oldNom = old.nom;
