@@ -1869,7 +1869,7 @@ const ECH_COLUMNS = {
 };
 function renderEcheances(){
   const key = state.selectedMonth;
-  const all = mine(state.depenses).filter(d=>d.modePaiement==='Echelonne' && inRangeMonth(key, d.dateDebut, depenseDateFin(d)));
+  const all = mine(state.depenses).filter(d=>d.modePaiement==='Echelonne' && d.dateDebut && inRangeMonth(key, d.dateDebut, depenseDateFin(d)));
   const list = applyTableFilterAndSort('echeances', ECH_COLUMNS, all);
   return `
     <div class="page-head"><div><div class="page-title">Échéances</div><div class="page-sub">Calculées automatiquement à partir des dépenses échelonnées — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}</div>
