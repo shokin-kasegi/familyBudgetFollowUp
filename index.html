@@ -259,7 +259,7 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
 
 /* empty state */
 .empty{padding:60px 20px;text-align:center;color:var(--text-dim);}
-.empty svg{width:34px;height:34px;stroke:var(--text-faint);fill:none;stroke-width:1.4;margin-bottom:14px;}
+.empty > svg{width:34px;height:34px;stroke:var(--text-faint);fill:none;stroke-width:1.4;margin-bottom:14px;}
 .empty p{font-size:13.5px;margin-bottom:16px;}
 
 /* ---------- Liste + détail (Objectifs) ---------- */
@@ -1925,8 +1925,9 @@ function renderRevenus(){
   `;
 }
 function emptyState(iconName, title, desc, action, btnLabel){
+  const btnIcon = action==='clear-table-filter' ? 'x' : (action && action.startsWith('goto-')) ? 'chevR' : 'plus';
   return `<div class="empty">${icon(iconName)}<div style="font-weight:600;color:var(--text);margin-bottom:6px;">${title}</div><p>${desc}</p>
-    ${action ? `<button class="btn btn-primary btn-sm" data-action="${action}" style="margin:0 auto;">${icon('plus')}${btnLabel}</button>` : ''}</div>`;
+    ${action ? `<button class="btn btn-primary btn-sm" data-action="${action}" style="margin:0 auto;">${icon(btnIcon)}${btnLabel}</button>` : ''}</div>`;
 }
 
 function revrecFields(){
