@@ -2292,55 +2292,126 @@ const ECH_COLUMNS = {
   montant: { label:'Montant total', type:'number', get:d=>Number(d.montant)||0 },
   statut: { label:'Statut', type:'text', get:d=>depenseResteAPayerReel(d)<=0.01?'Soldé':'En cours' },
 };
+let echSelectedId = null;
 function renderEcheances(){
   const key = state.selectedMonth;
   const all = mine(state.depenses).filter(d=>d.modePaiement==='Echelonne' && d.dateDebut && inRangeMonth(key, d.dateDebut, depenseDateFin(d)));
+  if(all.length===0){
+    return `
+      <div class="page-head"><div><div class="page-title">Échéances</div><div class="page-sub">Calculées automatiquement à partir des dépenses échelonnées — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}</div>
+      <div class="card">${emptyState('calendar','Aucune échéance ce mois-ci','Marque une dépense comme "Échelonnée" dans l\u2019onglet Dépenses pour la voir apparaître ici, ou change de mois si tu en cherches une ailleurs.','goto-depenses','Aller à Dépenses')}</div>
+    `;
+  }
   const list = applyTableFilterAndSort('echeances', ECH_COLUMNS, all);
+  if(!echSelectedId || !all.some(d=>d.id===echSelectedId)) echSelectedId = all[0].id;
+  if(list.length && !list.some(d=>d.id===echSelectedId)) echSelectedId = list[0].id;
+  const selected = (list.find(d=>d.id===echSelectedId)) || all.find(d=>d.id===echSelectedId);
+
   return `
     <div class="page-head"><div><div class="page-title">Échéances</div><div class="page-sub">Calculées automatiquement à partir des dépenses échelonnées — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}</div>
+    <div class="list-detail">
+      <div class="ld-list-pane">
+        <div class="card">
+          ${tableFilterActive('echeances') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="echeances">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
+          ${list.length===0 ? emptyState('calendar','Aucun résultat','Aucune échéance ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'libelle', all)}
+                ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'compte', all)}
+                ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'montant', all)}
+                ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'statut', all)}
+              </tr></thead>
+              <tbody>${list.map(d=>{
+                const done = depenseResteAPayerReel(d)<=0.01;
+                const retireCeMois = (d.moisRetires||[]).includes(key);
+                return `<tr class="ld-row ${d.id===echSelectedId?'active':''}" data-action="select-ech" data-id="${d.id}">
+                  <td>${d.libelle}</td>
+                  <td><span class="pill pill-dim">${d.compte||'Compte Perso'}</span></td>
+                  <td class="num">${fmtEUR(d.montant)}</td>
+                  <td><span class="pill ${done?'pill-teal':(retireCeMois?'pill-coral':'pill-amber')}">${done?'Soldé':(retireCeMois?'Ce mois retiré':'En cours')}</span></td>
+                </tr>`;
+              }).join('')}</tbody>
+            </table>
+          </div>`}
+        </div>
+      </div>
+      <div class="ld-detail-pane">
+        ${selected ? renderEchSummary(selected, key) : ''}
+      </div>
+    </div>
+    ${selected ? renderEchHistorique(selected, key) : ''}
+  `;
+}
+function renderEchSummary(d, key){
+  const nb = depenseNbMensualites(d);
+  const dateFin = depenseDateFin(d);
+  const resteReel = depenseResteAPayerReel(d);
+  const done = resteReel<=0.01;
+  const retireCeMois = (d.moisRetires||[]).includes(key);
+  const statut = done?'Soldé':(retireCeMois?'Ce mois retiré':'En cours');
+  // "consommées" : mois entre le début et le mois consulté (inclus), hors mois retirés
+  const [y0,m0] = d.dateDebut.split('-').map(Number);
+  const [ky,km] = key.split('-').map(Number);
+  const consommees = Math.max(Math.min((ky-y0)*12+(km-m0)+1, nb), 0);
+  const pct = nb>0 ? Math.min(consommees/nb,1) : 0;
+  return `
     <div class="card">
-      ${tableFilterActive('echeances') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="echeances">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
-      ${all.length===0 ? emptyState('calendar','Aucune échéance ce mois-ci','Marque une dépense comme "Échelonnée" dans l\u2019onglet Dépenses pour la voir apparaître ici, ou change de mois si tu en cherches une ailleurs.','goto-depenses','Aller à Dépenses') :
-        (list.length===0 ? emptyState('calendar','Aucun résultat','Aucune échéance ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+        <div><div style="font-weight:600;font-size:18px;">${d.libelle}</div><div style="font-size:12.5px;color:var(--text-dim);margin-top:2px;">${d.compte||'Compte Perso'}</div></div>
+        <span class="pill ${done?'pill-teal':(retireCeMois?'pill-coral':'pill-amber')}">${statut}</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:8px;">
+        <span class="display" style="font-size:28px;font-weight:600;">${consommees}/${nb}</span>
+        <span style="color:var(--text-dim);font-size:14px;">mensualités</span>
+      </div>
+      <div class="progress" style="width:100%;margin-bottom:14px;"><div style="width:${pct*100}%"></div></div>
+      <div class="grid g3" style="gap:10px;">
+        <div><div style="font-size:11px;color:var(--text-faint);">Reste réel</div><div style="font-size:13.5px;font-weight:600;">${fmtEUR(resteReel)}</div></div>
+        <div><div style="font-size:11px;color:var(--text-faint);">Fin prévue</div><div style="font-size:13.5px;font-weight:600;">${fmtDate(dateFin)}</div></div>
+        <div><div style="font-size:11px;color:var(--text-faint);">Mensualité</div><div style="font-size:13.5px;font-weight:600;color:var(--teal);">${fmtEURPrecise(depenseMensualite(d))}</div></div>
+      </div>
+      <div class="row-actions" style="margin-top:16px;justify-content:flex-start;">
+        ${!done ? (retireCeMois
+          ? `<button class="btn btn-ghost btn-sm" data-action="ech-reintegrer-mois" data-id="${d.id}">${icon('refresh')}Réintégrer ce mois</button>`
+          : `<button class="btn btn-ghost btn-sm" data-action="ech-retirer-mois" data-id="${d.id}">${icon('x')}Retirer ce mois</button>`) : ''}
+        ${!done ? `<button class="btn btn-ghost btn-sm" data-action="ech-add-versement" data-id="${d.id}">${icon('wallet')}Verser</button>` : ''}
+        <button class="icon-btn" data-action="edit-depense" data-id="${d.id}">${icon('edit')}</button>
+      </div>
+    </div>
+  `;
+}
+function renderEchHistorique(d, key){
+  // Reconstitue le planning mois par mois, du début jusqu'au mois consulté (inclus).
+  const [y0,m0] = d.dateDebut.split('-').map(Number);
+  const [ky,km] = key.split('-').map(Number);
+  const nbMoisAffiches = Math.max((ky-y0)*12+(km-m0)+1, 0);
+  const mois = [];
+  for(let i=0;i<nbMoisAffiches;i++){
+    const idx = m0-1+i;
+    const y = y0 + Math.floor(idx/12);
+    const m = (idx%12)+1;
+    mois.push(`${y}-${String(m).padStart(2,'0')}`);
+  }
+  mois.reverse();
+  return `
+    <div class="section-head" style="margin-top:24px;">
+      <div><h3 style="font-size:15px;font-weight:600;">Historique des mensualités</h3><div class="field-note" style="margin-top:2px;">Planning mois par mois pour « ${d.libelle} », jusqu\u2019à ${monthLabel(key)}.</div></div>
+    </div>
+    <div class="card">
+      ${mois.length===0 ? emptyState('calendar','Rien pour l\u2019instant','','','') : `
       <div class="table-wrap"><table>
-        <thead><tr>
-          ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'libelle', all)}
-          ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'compte', all)}
-          ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'montant', all)}
-          <th>Mensualité</th><th>Mensualités</th><th>Ce mois</th><th>Reste prévisionnel</th><th>Reste réel</th><th>Fin prévue</th>
-          ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'statut', all)}
-          <th></th>
-        </tr></thead>
-        <tbody>${list.map(d=>{
-          const nb = depenseNbMensualites(d);
-          const dateFin = depenseDateFin(d);
-          const resteReel = depenseResteAPayerReel(d);
-          const restePrev = depenseResteAPayerPrevisionnel(d, key);
-          const done = resteReel<=0.01;
-          const retireCeMois = (d.moisRetires||[]).includes(key);
-          // "consommées" : mois entre le début et le mois consulté (inclus), hors mois retirés
-          const [y0,m0] = d.dateDebut.split('-').map(Number);
-          const [ky,km] = key.split('-').map(Number);
-          const consommees = Math.max(Math.min((ky-y0)*12+(km-m0)+1, nb), 0);
+        <thead><tr><th>Mois</th><th>Mensualité</th><th>Statut</th></tr></thead>
+        <tbody>${mois.map(mk=>{
+          const retire = (d.moisRetires||[]).includes(mk);
+          const montantMois = depenseMensualiteDuMois(d, mk);
           return `<tr>
-          <td>${d.libelle}</td><td>${d.compte||'Compte Perso'}</td><td class="num">${fmtEUR(d.montant)}</td>
-          <td class="num">${fmtEURPrecise(depenseMensualite(d))}</td>
-          <td><span style="font-size:12.5px;color:var(--text-dim);">${consommees}/${nb}</span></td>
-          <td class="num">${retireCeMois ? '—' : fmtEUR(depenseMensualiteDuMois(d,key))}</td>
-          <td class="num" style="color:var(--text-dim);" title="Ce qu'il resterait selon le planning, vu depuis ${monthLabel(key)}">${fmtEUR(restePrev)}</td>
-          <td class="num" title="Ce que tu dois vraiment, ne bouge qu'avec un versement">${fmtEUR(resteReel)}</td>
-          <td style="font-size:12px;color:var(--text-dim);">${fmtDate(dateFin)}</td>
-          <td><span class="pill ${done?'pill-teal':(retireCeMois?'pill-coral':'pill-amber')}">${done?'Soldé':(retireCeMois?'Ce mois retiré':'En cours')}</span></td>
-          <td class="row-actions">
-            ${!done ? (retireCeMois
-              ? `<button class="icon-btn" data-action="ech-reintegrer-mois" data-id="${d.id}" title="Réintégrer cette mensualité">${icon('refresh')}</button>`
-              : `<button class="icon-btn" data-action="ech-retirer-mois" data-id="${d.id}" title="Retirer la mensualité de ce mois (reporte à la fin)">${icon('x')}</button>`) : ''}
-            ${!done ? `<button class="icon-btn" data-action="ech-add-versement" data-id="${d.id}" title="Déclarer un versement exceptionnel">${icon('wallet')}</button>` : ''}
-            <button class="icon-btn" data-action="edit-depense" data-id="${d.id}">${icon('edit')}</button>
-          </td>
-        </tr>`;}).join('')}</tbody>
-        <tfoot><tr><td colspan="5">Total ${monthLabel(key)} / Reste réel</td><td class="num">${fmtEUR(depensesTotalMois(key))}</td><td></td><td class="num">${fmtEUR(depensesEchelonneesResteAPayerTotal())}</td><td colspan="3"></td></tr></tfoot>
-      </table></div>`)}
+            <td>${monthLabel(mk)}</td>
+            <td class="num" style="${retire?'color:var(--text-dim);':'color:var(--teal)'}">${retire ? '—' : fmtEURPrecise(montantMois)}</td>
+            <td><span class="pill ${retire?'pill-coral':'pill-teal'}">${retire?'Retirée':'Payée'}</span></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>`}
     </div>
   `;
 }
@@ -2982,6 +3053,7 @@ async function handleAction(action, id, el){
       state.analyseTerm = val; await persist(); await render(); break; }
 
     /* Échéances (vue calculée) : marquage manuel des mensualités payées */
+    case 'select-ech': echSelectedId = id; await render(); break;
     case 'ech-retirer-mois': {
       const dep = find(mine(state.depenses));
       const key = state.selectedMonth;
