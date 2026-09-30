@@ -227,6 +227,13 @@ main{flex:1;min-width:0;padding:34px 40px 80px;}
 
 /* ---------- Table ---------- */
 .table-wrap{overflow-x:auto;}
+/* Fondu indiquant qu'il reste du contenu (colonnes, boutons d'action) hors
+   champ à droite et/ou à gauche — voir updateTableScrollHints(). Un masque
+   (fondu vers transparent) plutôt qu'un dégradé de couleur : le fond des
+   cartes est un verre dépoli semi-transparent, pas une couleur unie. */
+.table-wrap.scroll-fade-right{ -webkit-mask-image:linear-gradient(to right, black calc(100% - 28px), transparent); mask-image:linear-gradient(to right, black calc(100% - 28px), transparent); }
+.table-wrap.scroll-fade-left{ -webkit-mask-image:linear-gradient(to left, black calc(100% - 28px), transparent); mask-image:linear-gradient(to left, black calc(100% - 28px), transparent); }
+.table-wrap.scroll-fade-left.scroll-fade-right{ -webkit-mask-image:linear-gradient(to right, transparent, black 28px, black calc(100% - 28px), transparent); mask-image:linear-gradient(to right, transparent, black 28px, black calc(100% - 28px), transparent); }
 table{width:100%;border-collapse:collapse;font-size:13.5px;}
 th{
   text-align:left;font-weight:500;color:var(--text-faint);font-size:11.5px;
@@ -1556,7 +1563,7 @@ window.addEventListener('resize', ()=>{
     // en page (barre latérale → barre mobile) de façon asynchrone, un peu après
     // le setTimeout lui-même ; sans ça, le graphique se redessine parfois sur
     // des dimensions transitoires, pas encore stabilisées.
-    requestAnimationFrame(()=>{ requestAnimationFrame(()=>{ redrawCurrentCharts(); }); });
+    requestAnimationFrame(()=>{ requestAnimationFrame(()=>{ redrawCurrentCharts(); updateTableScrollHints(); }); });
   }, 250);
 });
 // Filet supplémentaire, plus précis qu'un minuteur arbitraire : redessine
@@ -2776,10 +2783,29 @@ function avatarSolid(u){
 }
 
 /* ============================== EVENT HANDLING ============================== */
+// Indice visuel de défilement horizontal : un tableau qui déborde (fréquent
+// sur mobile, où les colonnes — et parfois les boutons d'action — sortent de
+// l'écran) reçoit un léger fondu sur le(s) bord(s) qui cachent du contenu,
+// pour signaler qu'on peut faire glisser. Pas de fondu si tout tient déjà,
+// et le fondu du côté déjà atteint disparaît une fois qu'on y a défilé.
+function updateTableScrollHints(){
+  document.querySelectorAll('.table-wrap').forEach(w=>{
+    const canScroll = w.scrollWidth > w.clientWidth + 1;
+    const atStart = w.scrollLeft <= 1;
+    const atEnd = w.scrollLeft >= w.scrollWidth - w.clientWidth - 1;
+    w.classList.toggle('scroll-fade-left', canScroll && !atStart);
+    w.classList.toggle('scroll-fade-right', canScroll && !atEnd);
+    if(!w.dataset.scrollHintBound){
+      w.dataset.scrollHintBound = '1';
+      w.addEventListener('scroll', updateTableScrollHints, {passive:true});
+    }
+  });
+}
 function afterRender(){
   // Un souci ponctuel de graphique (ex. bibliothèque externe indisponible) ne
   // doit jamais interrompre le reste de l'application (notifications, sync...).
   try{
+    updateTableScrollHints();
     redrawCurrentCharts();
     if(currentView==='analyse'){
       const input = document.getElementById('analyse-search');
