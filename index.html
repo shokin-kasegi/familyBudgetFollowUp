@@ -227,6 +227,13 @@ main{flex:1;min-width:0;padding:34px 40px 80px;}
 
 /* ---------- Table ---------- */
 .table-wrap{overflow-x:auto;}
+/* Fondu indiquant qu'il reste du contenu (colonnes, boutons d'action) hors
+   champ à droite et/ou à gauche — voir updateTableScrollHints(). Un masque
+   (fondu vers transparent) plutôt qu'un dégradé de couleur : le fond des
+   cartes est un verre dépoli semi-transparent, pas une couleur unie. */
+.table-wrap.scroll-fade-right{ -webkit-mask-image:linear-gradient(to right, black calc(100% - 28px), transparent); mask-image:linear-gradient(to right, black calc(100% - 28px), transparent); }
+.table-wrap.scroll-fade-left{ -webkit-mask-image:linear-gradient(to left, black calc(100% - 28px), transparent); mask-image:linear-gradient(to left, black calc(100% - 28px), transparent); }
+.table-wrap.scroll-fade-left.scroll-fade-right{ -webkit-mask-image:linear-gradient(to right, transparent, black 28px, black calc(100% - 28px), transparent); mask-image:linear-gradient(to right, transparent, black 28px, black calc(100% - 28px), transparent); }
 table{width:100%;border-collapse:collapse;font-size:13.5px;}
 th{
   text-align:left;font-weight:500;color:var(--text-faint);font-size:11.5px;
@@ -614,6 +621,7 @@ function defaultState(){
     depenses: [],
     objectifs: [],
     versements: [],
+    echVersements: [],
     charges: [],
     categoriesDepenses: [],
     categoriesRevenus: [],
@@ -817,11 +825,19 @@ async function loadState(){
     needsPersist = true;
   }
 
+  // Migration : les versements des Échéances n'existaient pas encore — les
+  // dépenses échelonnées existantes démarrent simplement sans historique
+  // (rien à perdre, le "versement exceptionnel" d'avant ne gardait aucune trace).
+  if(!Array.isArray(state.echVersements)){
+    state.echVersements = [];
+    needsPersist = true;
+  }
+
   if(needsPersist) await persist();
   if(needsPersistAuth) await persistAuth();
   if(needsPersistSocial) await persistSocial();
 }
-const OWNED_ARRAYS = ['revenusRecurrents','revenusExceptionnels','depenses','objectifs','versements','charges','categoriesDepenses','categoriesRevenus','categoriesObjectifs','categoriesCharges'];
+const OWNED_ARRAYS = ['revenusRecurrents','revenusExceptionnels','depenses','objectifs','versements','echVersements','charges','categoriesDepenses','categoriesRevenus','categoriesObjectifs','categoriesCharges'];
 function mine(arr){
   const me = currentUser();
   return me ? (arr||[]).filter(e=>e.ownerId===me.id) : [];
@@ -953,7 +969,7 @@ function depenseNbMensualites(dep){
   return (dep.modePaiement==='Echelonne') ? Math.max(dep.nbMensualites||1, 1) : 1;
 }
 function depenseMensualite(dep){
-  return dep.modePaiement==='Echelonne' ? (Number(dep.montant)||0)/depenseNbMensualites(dep) : (Number(dep.montant)||0);
+  return dep.modePaiement==='Echelonne' ? depenseResteAPayerReel(dep)/depenseNbMensualites(dep) : (Number(dep.montant)||0);
 }
 function depenseMensualiteDuMois(dep, key){
   if(dep.modePaiement==='Echelonne'){
@@ -980,8 +996,11 @@ function depenseMensualiteDuMois(dep, key){
      si tu n'as rien saisi. Ex. 4x 400€ à partir d'octobre : vu depuis
      novembre, le prévisionnel affiche 300€ (une mensualité "consommée"
      par le planning), qu'on ait payé ou non. */
+function echeanceVerseTotal(dep){
+  return mine(state.echVersements).filter(v=>v.echeanceId===dep.id).reduce((s,v)=>s+(Number(v.montant)||0),0);
+}
 function depenseResteAPayerReel(dep){
-  return dep.modePaiement==='Echelonne' ? Math.max(Number(dep.montant)||0, 0) : 0;
+  return dep.modePaiement==='Echelonne' ? Math.max((Number(dep.montant)||0) - echeanceVerseTotal(dep), 0) : 0;
 }
 function depenseResteAPayerPrevisionnel(dep, key){
   if(dep.modePaiement!=='Echelonne' || !dep.dateDebut) return 0;
@@ -1544,7 +1563,7 @@ window.addEventListener('resize', ()=>{
     // en page (barre latérale → barre mobile) de façon asynchrone, un peu après
     // le setTimeout lui-même ; sans ça, le graphique se redessine parfois sur
     // des dimensions transitoires, pas encore stabilisées.
-    requestAnimationFrame(()=>{ requestAnimationFrame(()=>{ redrawCurrentCharts(); }); });
+    requestAnimationFrame(()=>{ requestAnimationFrame(()=>{ redrawCurrentCharts(); updateTableScrollHints(); }); });
   }, 250);
 });
 // Filet supplémentaire, plus précis qu'un minuteur arbitraire : redessine
@@ -2041,6 +2060,7 @@ function tableRegistry(){
     charges: { columns: CHARGE_COLUMNS, getArray: ()=> mine(state.charges) },
     versements: { columns: VERS_COLUMNS, getArray: ()=> mine(state.versements) },
     echeances: { columns: ECH_COLUMNS, getArray: ()=> mine(state.depenses).filter(d=>d.modePaiement==='Echelonne') },
+    echVersements: { columns: ECH_VERS_COLUMNS, getArray: ()=> mine(state.echVersements) },
     objectifs: { columns: OBJ_COLUMNS, getArray: ()=> mine(state.objectifs) },
   };
 }
@@ -2292,54 +2312,158 @@ const ECH_COLUMNS = {
   montant: { label:'Montant total', type:'number', get:d=>Number(d.montant)||0 },
   statut: { label:'Statut', type:'text', get:d=>depenseResteAPayerReel(d)<=0.01?'Soldé':'En cours' },
 };
+let echSelectedId = null;
 function renderEcheances(){
   const key = state.selectedMonth;
   const all = mine(state.depenses).filter(d=>d.modePaiement==='Echelonne' && d.dateDebut && inRangeMonth(key, d.dateDebut, depenseDateFin(d)));
+  if(all.length===0){
+    return `
+      <div class="page-head"><div><div class="page-title">Échéances</div><div class="page-sub">Calculées automatiquement à partir des dépenses échelonnées — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}</div>
+      <div class="card">${emptyState('calendar','Aucune échéance ce mois-ci','Marque une dépense comme "Échelonnée" dans l\u2019onglet Dépenses pour la voir apparaître ici, ou change de mois si tu en cherches une ailleurs.','goto-depenses','Aller à Dépenses')}</div>
+    `;
+  }
   const list = applyTableFilterAndSort('echeances', ECH_COLUMNS, all);
+  if(!echSelectedId || !all.some(d=>d.id===echSelectedId)) echSelectedId = all[0].id;
+  if(list.length && !list.some(d=>d.id===echSelectedId)) echSelectedId = list[0].id;
+  const selected = (list.find(d=>d.id===echSelectedId)) || all.find(d=>d.id===echSelectedId);
+
   return `
     <div class="page-head"><div><div class="page-title">Échéances</div><div class="page-sub">Calculées automatiquement à partir des dépenses échelonnées — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}</div>
+    <div class="list-detail">
+      <div class="ld-list-pane">
+        <div class="card">
+          ${tableFilterActive('echeances') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="echeances">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
+          ${list.length===0 ? emptyState('calendar','Aucun résultat','Aucune échéance ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
+          <div class="table-wrap">
+            <table>
+              <thead><tr>
+                ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'libelle', all)}
+                ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'compte', all)}
+                ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'montant', all)}
+                ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'statut', all)}
+              </tr></thead>
+              <tbody>${list.map(d=>{
+                const done = depenseResteAPayerReel(d)<=0.01;
+                const retireCeMois = (d.moisRetires||[]).includes(key);
+                return `<tr class="ld-row ${d.id===echSelectedId?'active':''}" data-action="select-ech" data-id="${d.id}">
+                  <td>${d.libelle}</td>
+                  <td><span class="pill pill-dim">${d.compte||'Compte Perso'}</span></td>
+                  <td class="num">${fmtEUR(d.montant)}</td>
+                  <td><span class="pill ${done?'pill-teal':(retireCeMois?'pill-coral':'pill-amber')}">${done?'Soldé':(retireCeMois?'Ce mois retiré':'En cours')}</span></td>
+                </tr>`;
+              }).join('')}</tbody>
+            </table>
+          </div>`}
+        </div>
+      </div>
+      <div class="ld-detail-pane">
+        ${selected ? renderEchSummary(selected, key) : ''}
+      </div>
+    </div>
+    ${selected ? renderEchHistorique(selected, key) : ''}
+    ${selected ? renderEchVersements(selected, key) : ''}
+  `;
+}
+function renderEchSummary(d, key){
+  const nb = depenseNbMensualites(d);
+  const dateFin = depenseDateFin(d);
+  const resteReel = depenseResteAPayerReel(d);
+  const done = resteReel<=0.01;
+  const retireCeMois = (d.moisRetires||[]).includes(key);
+  const statut = done?'Soldé':(retireCeMois?'Ce mois retiré':'En cours');
+  // "consommées" : mois entre le début et le mois consulté (inclus), hors mois retirés
+  const [y0,m0] = d.dateDebut.split('-').map(Number);
+  const [ky,km] = key.split('-').map(Number);
+  const consommees = Math.max(Math.min((ky-y0)*12+(km-m0)+1, nb), 0);
+  const pct = nb>0 ? Math.min(consommees/nb,1) : 0;
+  return `
     <div class="card">
-      ${tableFilterActive('echeances') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="echeances">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
-      ${all.length===0 ? emptyState('calendar','Aucune échéance ce mois-ci','Marque une dépense comme "Échelonnée" dans l\u2019onglet Dépenses pour la voir apparaître ici, ou change de mois si tu en cherches une ailleurs.','goto-depenses','Aller à Dépenses') :
-        (list.length===0 ? emptyState('calendar','Aucun résultat','Aucune échéance ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+        <div><div style="font-weight:600;font-size:18px;">${d.libelle}</div><div style="font-size:12.5px;color:var(--text-dim);margin-top:2px;">${d.compte||'Compte Perso'}</div></div>
+        <span class="pill ${done?'pill-teal':(retireCeMois?'pill-coral':'pill-amber')}">${statut}</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:8px;">
+        <span class="display" style="font-size:28px;font-weight:600;">${consommees}/${nb}</span>
+        <span style="color:var(--text-dim);font-size:14px;">mensualités</span>
+      </div>
+      <div class="progress" style="width:100%;margin-bottom:14px;"><div style="width:${pct*100}%"></div></div>
+      <div class="grid g3" style="gap:10px;">
+        <div><div style="font-size:11px;color:var(--text-faint);">Reste réel</div><div style="font-size:13.5px;font-weight:600;">${fmtEUR(resteReel)}</div></div>
+        <div><div style="font-size:11px;color:var(--text-faint);">Fin prévue</div><div style="font-size:13.5px;font-weight:600;">${fmtDate(dateFin)}</div></div>
+        <div><div style="font-size:11px;color:var(--text-faint);">Mensualité</div><div style="font-size:13.5px;font-weight:600;color:var(--teal);">${fmtEURPrecise(depenseMensualite(d))}</div></div>
+      </div>
+      <div class="row-actions" style="margin-top:16px;justify-content:flex-start;">
+        ${!done ? (retireCeMois
+          ? `<button class="btn btn-ghost btn-sm" data-action="ech-reintegrer-mois" data-id="${d.id}">${icon('refresh')}Réintégrer ce mois</button>`
+          : `<button class="btn btn-ghost btn-sm" data-action="ech-retirer-mois" data-id="${d.id}">${icon('x')}Retirer ce mois</button>`) : ''}
+        ${!done ? `<button class="btn btn-ghost btn-sm" data-action="ech-add-versement" data-id="${d.id}">${icon('wallet')}Verser</button>` : ''}
+        <button class="icon-btn" data-action="edit-depense" data-id="${d.id}">${icon('edit')}</button>
+      </div>
+    </div>
+  `;
+}
+function renderEchHistorique(d, key){
+  // Reconstitue le planning mois par mois, du début jusqu'au mois consulté (inclus).
+  const [y0,m0] = d.dateDebut.split('-').map(Number);
+  const [ky,km] = key.split('-').map(Number);
+  const nbMoisAffiches = Math.max((ky-y0)*12+(km-m0)+1, 0);
+  const mois = [];
+  for(let i=0;i<nbMoisAffiches;i++){
+    const idx = m0-1+i;
+    const y = y0 + Math.floor(idx/12);
+    const m = (idx%12)+1;
+    mois.push(`${y}-${String(m).padStart(2,'0')}`);
+  }
+  mois.reverse();
+  return `
+    <div class="section-head" style="margin-top:24px;">
+      <div><h3 style="font-size:15px;font-weight:600;">Historique des mensualités</h3><div class="field-note" style="margin-top:2px;">Planning mois par mois pour « ${d.libelle} », jusqu\u2019à ${monthLabel(key)}.</div></div>
+    </div>
+    <div class="card">
+      ${mois.length===0 ? emptyState('calendar','Rien pour l\u2019instant','','','') : `
+      <div class="table-wrap"><table>
+        <thead><tr><th>Mois</th><th>Mensualité</th><th>Statut</th></tr></thead>
+        <tbody>${mois.map(mk=>{
+          const retire = (d.moisRetires||[]).includes(mk);
+          const montantMois = depenseMensualiteDuMois(d, mk);
+          return `<tr>
+            <td>${monthLabel(mk)}</td>
+            <td class="num" style="${retire?'color:var(--text-dim);':'color:var(--teal)'}">${retire ? '—' : fmtEURPrecise(montantMois)}</td>
+            <td><span class="pill ${retire?'pill-coral':'pill-teal'}">${retire?'Retirée':'Payée'}</span></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>`}
+    </div>
+  `;
+}
+const ECH_VERS_COLUMNS = {
+  date: { label:'Date', type:'text', get:v=>v.date||'' },
+  montant: { label:'Montant', type:'number', get:v=>Number(v.montant)||0 },
+};
+function renderEchVersements(d, key){
+  const versAll = mine(state.echVersements).filter(v=>v.echeanceId===d.id && v.date && v.date.slice(0,7)===key);
+  const versFiltered = applyTableFilterAndSort('echVersements', ECH_VERS_COLUMNS, versAll);
+  const versList = tableFilterState('echVersements').sortCol ? versFiltered : [...versFiltered].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  return `
+    <div class="section-head" style="margin-top:24px;">
+      <div><h3 style="font-size:15px;font-weight:600;">Historique des versements</h3><div class="field-note" style="margin-top:2px;">Sommes versées pour « ${d.libelle} », mois par mois — chaque versement modifie le reste à payer et donc les mensualités à venir.</div></div>
+    </div>
+    <div class="card">
+      ${tableFilterActive('echVersements') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="echVersements">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
+      ${versAll.length===0 ? emptyState('wallet',`Aucun versement en ${monthLabel(key)}`,'Utilisez le bouton « Verser » ci-dessus pour enregistrer un paiement ce mois-ci.','','') :
+        (versList.length===0 ? emptyState('wallet','Aucun résultat','Aucun versement ne correspond à ces filtres.','clear-table-filter','Réinitialiser les filtres') : `
       <div class="table-wrap"><table>
         <thead><tr>
-          ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'libelle', all)}
-          ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'compte', all)}
-          ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'montant', all)}
-          <th>Mensualité</th><th>Mensualités</th><th>Ce mois</th><th>Reste prévisionnel</th><th>Reste réel</th><th>Fin prévue</th>
-          ${colFilterHeaderHTML('echeances', ECH_COLUMNS, 'statut', all)}
-          <th></th>
+          ${colFilterHeaderHTML('echVersements', ECH_VERS_COLUMNS, 'date', versAll)}
+          ${colFilterHeaderHTML('echVersements', ECH_VERS_COLUMNS, 'montant', versAll)}
+          <th>Note</th><th></th>
         </tr></thead>
-        <tbody>${list.map(d=>{
-          const nb = depenseNbMensualites(d);
-          const dateFin = depenseDateFin(d);
-          const resteReel = depenseResteAPayerReel(d);
-          const restePrev = depenseResteAPayerPrevisionnel(d, key);
-          const done = resteReel<=0.01;
-          const retireCeMois = (d.moisRetires||[]).includes(key);
-          // "consommées" : mois entre le début et le mois consulté (inclus), hors mois retirés
-          const [y0,m0] = d.dateDebut.split('-').map(Number);
-          const [ky,km] = key.split('-').map(Number);
-          const consommees = Math.max(Math.min((ky-y0)*12+(km-m0)+1, nb), 0);
-          return `<tr>
-          <td>${d.libelle}</td><td>${d.compte||'Compte Perso'}</td><td class="num">${fmtEUR(d.montant)}</td>
-          <td class="num">${fmtEURPrecise(depenseMensualite(d))}</td>
-          <td><span style="font-size:12.5px;color:var(--text-dim);">${consommees}/${nb}</span></td>
-          <td class="num">${retireCeMois ? '—' : fmtEUR(depenseMensualiteDuMois(d,key))}</td>
-          <td class="num" style="color:var(--text-dim);" title="Ce qu'il resterait selon le planning, vu depuis ${monthLabel(key)}">${fmtEUR(restePrev)}</td>
-          <td class="num" title="Ce que tu dois vraiment, ne bouge qu'avec un versement">${fmtEUR(resteReel)}</td>
-          <td style="font-size:12px;color:var(--text-dim);">${fmtDate(dateFin)}</td>
-          <td><span class="pill ${done?'pill-teal':(retireCeMois?'pill-coral':'pill-amber')}">${done?'Soldé':(retireCeMois?'Ce mois retiré':'En cours')}</span></td>
-          <td class="row-actions">
-            ${!done ? (retireCeMois
-              ? `<button class="icon-btn" data-action="ech-reintegrer-mois" data-id="${d.id}" title="Réintégrer cette mensualité">${icon('refresh')}</button>`
-              : `<button class="icon-btn" data-action="ech-retirer-mois" data-id="${d.id}" title="Retirer la mensualité de ce mois (reporte à la fin)">${icon('x')}</button>`) : ''}
-            ${!done ? `<button class="icon-btn" data-action="ech-add-versement" data-id="${d.id}" title="Déclarer un versement exceptionnel">${icon('wallet')}</button>` : ''}
-            <button class="icon-btn" data-action="edit-depense" data-id="${d.id}">${icon('edit')}</button>
-          </td>
-        </tr>`;}).join('')}</tbody>
-        <tfoot><tr><td colspan="5">Total ${monthLabel(key)} / Reste réel</td><td class="num">${fmtEUR(depensesTotalMois(key))}</td><td></td><td class="num">${fmtEUR(depensesEchelonneesResteAPayerTotal())}</td><td colspan="3"></td></tr></tfoot>
+        <tbody>${versList.map(v=>`<tr>
+          <td>${fmtDate(v.date)}</td>
+          <td class="num" style="color:var(--teal)">${fmtEUR(v.montant)}</td><td class="wrap">${v.note||'—'}</td>
+          <td class="row-actions"><button class="icon-btn" data-action="edit-ech-versement" data-id="${v.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-ech-versement" data-id="${v.id}">${icon('trash')}</button></td>
+        </tr>`).join('')}</tbody>
+        <tfoot><tr><td>Total versé ce mois</td><td class="num" style="color:var(--teal)">${fmtEUR(versAll.reduce((s,v)=>s+Number(v.montant),0))}</td><td colspan="2"></td></tr></tfoot>
       </table></div>`)}
     </div>
   `;
@@ -2457,7 +2581,7 @@ function renderObjVersements(o, key){
         <tbody>${versList.map(v=>`<tr>
           <td>${fmtDate(v.date)}</td>
           <td class="num" style="color:var(--teal)">${fmtEUR(v.montant)}</td><td class="wrap">${v.note||'—'}</td>
-          <td class="row-actions"><button class="icon-btn del" data-action="del-versement" data-id="${v.id}">${icon('trash')}</button></td>
+          <td class="row-actions"><button class="icon-btn" data-action="edit-versement" data-id="${v.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-versement" data-id="${v.id}">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
         <tfoot><tr><td>Total versé ce mois</td><td class="num" style="color:var(--teal)">${fmtEUR(versAll.reduce((s,v)=>s+Number(v.montant),0))}</td><td colspan="2"></td></tr></tfoot>
       </table></div>`)}
@@ -2659,10 +2783,29 @@ function avatarSolid(u){
 }
 
 /* ============================== EVENT HANDLING ============================== */
+// Indice visuel de défilement horizontal : un tableau qui déborde (fréquent
+// sur mobile, où les colonnes — et parfois les boutons d'action — sortent de
+// l'écran) reçoit un léger fondu sur le(s) bord(s) qui cachent du contenu,
+// pour signaler qu'on peut faire glisser. Pas de fondu si tout tient déjà,
+// et le fondu du côté déjà atteint disparaît une fois qu'on y a défilé.
+function updateTableScrollHints(){
+  document.querySelectorAll('.table-wrap').forEach(w=>{
+    const canScroll = w.scrollWidth > w.clientWidth + 1;
+    const atStart = w.scrollLeft <= 1;
+    const atEnd = w.scrollLeft >= w.scrollWidth - w.clientWidth - 1;
+    w.classList.toggle('scroll-fade-left', canScroll && !atStart);
+    w.classList.toggle('scroll-fade-right', canScroll && !atEnd);
+    if(!w.dataset.scrollHintBound){
+      w.dataset.scrollHintBound = '1';
+      w.addEventListener('scroll', updateTableScrollHints, {passive:true});
+    }
+  });
+}
 function afterRender(){
   // Un souci ponctuel de graphique (ex. bibliothèque externe indisponible) ne
   // doit jamais interrompre le reste de l'application (notifications, sync...).
   try{
+    updateTableScrollHints();
     redrawCurrentCharts();
     if(currentView==='analyse'){
       const input = document.getElementById('analyse-search');
@@ -2877,7 +3020,10 @@ async function handleAction(action, id, el){
     // basculant directement sur Type=Unique pour que le champ Date (masqué
     // pour une dépense prévisionnelle) soit visible sans manipulation.
     case 'plan-depense': openDepenseEditModal(id, {modePaiement:'Unique', date:defaultDateForSelectedMonth()}); break;
-    case 'del-depense': { const item=find(mine(state.depenses)); confirmDelete(item.libelle, async ()=>{ state.depenses = state.depenses.filter(x=>x.id!==id); await persist(); await render(); toast('Dépense supprimée'); }); break; }
+    case 'del-depense': { const item=find(mine(state.depenses)); confirmDelete(item.libelle, async ()=>{
+      state.depenses = state.depenses.filter(x=>x.id!==id);
+      state.echVersements = state.echVersements.filter(v=>v.echeanceId!==id);
+      await persist(); await render(); toast('Dépense supprimée'); }); break; }
     case 'toggle-depense-statut': { const item=find(mine(state.depenses)); item.statut = item.statut==='Actif'?'Inactif':'Actif'; await persist(); await render(); toast('Statut mis à jour'); break; }
     case 'goto-depenses': currentView = 'depenses'; await render(); break;
     case 'switch-space': currentSpace = el.dataset.space; currentView = defaultViewForSpace(currentSpace); await render(); break;
@@ -2982,6 +3128,7 @@ async function handleAction(action, id, el){
       state.analyseTerm = val; await persist(); await render(); break; }
 
     /* Échéances (vue calculée) : marquage manuel des mensualités payées */
+    case 'select-ech': echSelectedId = id; await render(); break;
     case 'ech-retirer-mois': {
       const dep = find(mine(state.depenses));
       const key = state.selectedMonth;
@@ -3001,13 +3148,19 @@ async function handleAction(action, id, el){
       await persist(); await render(); toast('Mensualité réintégrée'); break; }
     case 'ech-add-versement': {
       const dep = find(mine(state.depenses));
-      const versExcFields = [{key:'montant', label:'Montant versé (€)', type:'number', step:'0.01', required:true}];
-      openModal('Déclarer un versement exceptionnel', versExcFields, {}, async (data)=>{
-        if(reportFieldErrors(fieldRequiredErrors(versExcFields, data))) return false;
-        const montant = Number(data.montant)||0;
-        dep.montant = Math.max((Number(dep.montant)||0) - montant, 0);
+      openModal('Déclarer un versement', VERS_FIELDS_BASE, {date:defaultDateForSelectedMonth()}, async (data)=>{
+        if(reportFieldErrors(fieldRequiredErrors(VERS_FIELDS_BASE, data))) return false;
+        state.echVersements.push({id:uid(), ownerId:currentUser().id, echeanceId:dep.id, ...data});
         await persist(); await render(); toast('Versement enregistré — mensualités suivantes recalculées'); });
       break; }
+    case 'edit-ech-versement': {
+      const v = find(mine(state.echVersements));
+      openModal('Modifier le versement', VERS_FIELDS_BASE, v, async (data)=>{
+        if(reportFieldErrors(fieldRequiredErrors(VERS_FIELDS_BASE, data))) return false;
+        Object.assign(v, data);
+        await persist(); await render(); toast('Versement mis à jour — mensualités suivantes recalculées'); });
+      break; }
+    case 'del-ech-versement': confirmDelete('ce versement', async ()=>{ state.echVersements = state.echVersements.filter(x=>x.id!==id); await persist(); await render(); toast('Versement supprimé — mensualités suivantes recalculées'); }); break;
 
     /* Objectifs */
     case 'select-obj': objSelectedId = id; await render(); break;
@@ -3030,6 +3183,9 @@ async function handleAction(action, id, el){
     case 'add-versement': openModal(`Verser vers « ${el.dataset.obj} »`, VERS_FIELDS_BASE, {date:defaultDateForSelectedMonth()}, async (data)=>{
       if(reportFieldErrors(fieldRequiredErrors(VERS_FIELDS_BASE, data))) return false;
       state.versements.push({id:uid(), ownerId:currentUser().id, objectifNom:el.dataset.obj, ...data}); await persist(); await render(); toast('Versement enregistré'); }); break;
+    case 'edit-versement': { const v = find(mine(state.versements)); openModal('Modifier le versement', VERS_FIELDS_BASE, v, async (data)=>{
+      if(reportFieldErrors(fieldRequiredErrors(VERS_FIELDS_BASE, data))) return false;
+      Object.assign(v, data); await persist(); await render(); toast('Versement mis à jour'); }); break; }
     case 'del-versement': confirmDelete('ce versement', async ()=>{ state.versements = state.versements.filter(x=>x.id!==id); await persist(); await render(); toast('Versement supprimé'); }); break;
 
     /* Charges */
