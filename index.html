@@ -2848,7 +2848,38 @@ document.addEventListener('keydown', (e)=>{
   if(e.target.classList && e.target.classList.contains('cat-add-input') && e.key==='Enter'){
     e.preventDefault();
     e.target.closest('.cat-add-input-row')?.querySelector('[data-cat-add-confirm]')?.click();
+    return;
   }
+  if(e.key!=='Enter' && e.key!=='Escape') return;
+  if(e.isComposing || e.defaultPrevented) return;
+  // Raccourcis clavier universels : Entrée valide, Échap annule — sur toutes
+  // les fenêtres (modales de saisie, confirmations de suppression, panneaux de filtre).
+  const modalOpen = !!document.querySelector('#modal-root .modal');
+  if(e.key==='Escape'){
+    // Un menu de catégorie ouvert se referme d'abord, sans fermer la modale.
+    const openCat = document.querySelector('.cat-select.open');
+    if(openCat){ e.preventDefault(); openCat.classList.remove('open'); resetCatDropdown(openCat); return; }
+    if(modalOpen){ e.preventDefault(); closeModal(); return; }
+    const panelCancel = (colFilterOpen || chartFilterOpen) && document.querySelector('[data-action="col-filter-cancel"],[data-action="chart-filter-cancel"]');
+    if(panelCancel){ e.preventDefault(); panelCancel.click(); return; }
+    if(notifOpen){ e.preventDefault(); toggleNotifPanel(false); return; }
+    return;
+  }
+  // Entrée : on laisse le comportement natif sur les boutons (activation du bouton
+  // ciblé) et sur les zones de texte multilignes (retour à la ligne).
+  const tag = e.target.tagName;
+  if(tag==='BUTTON' || tag==='TEXTAREA' || tag==='A') return;
+  if(e.target.closest && e.target.closest('.cat-select.open')) return;
+  if(modalOpen){
+    const yes = document.getElementById('del-yes');
+    if(yes){ e.preventDefault(); yes.click(); return; }
+    const form = document.getElementById('modal-form');
+    const submit = form?.querySelector('button[type=submit]');
+    if(form && submit){ e.preventDefault(); form.requestSubmit(submit); }
+    return;
+  }
+  const panelOk = document.querySelector('[data-action="col-filter-ok"],[data-action="chart-filter-ok"]');
+  if(panelOk && (colFilterOpen || chartFilterOpen)){ e.preventDefault(); panelOk.click(); }
 });
 
 document.addEventListener('click', async (e)=>{
