@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solde — trois propositions</title>
+<script>(function(){var p='system';try{p=localStorage.getItem('solde-theme')||'system'}catch(e){}var d=p==='dark'||(p==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';})();</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--ground:#f4f4f2;--surface:#fff;--text:#111;--muted:#5d5d5a;--raised:#e9e9e6;--primary:#111;--on-primary:#fff;color-scheme:light}
+:root[data-theme="dark"]{--ground:#0d0d0c;--surface:#171716;--text:#f4f4f2;--muted:#acaca7;--raised:#262624;--primary:#f4f4f2;--on-primary:#0d0d0c;color-scheme:dark}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ground);color:var(--text);font:400 16px/24px "Geist",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto;padding:40px 24px 80px}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:48px;flex-wrap:wrap}
+h1{font-size:32px;line-height:40px;letter-spacing:-.02em;font-weight:700}
+header p{color:var(--muted);max-width:640px;margin-top:6px}
+.theme-switch{display:flex;gap:2px;padding:3px;border-radius:999px;background:var(--raised)}
+.theme-switch button{display:flex;align-items:center;gap:6px;height:34px;padding:0 14px;border:0;border-radius:999px;background:none;color:var(--muted);font:inherit;font-size:14px;cursor:pointer}
+.theme-switch button[aria-pressed="true"]{background:var(--primary);color:var(--on-primary)}
+.ico{width:16px;height:16px}
+.prop{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,4fr);gap:32px;align-items:start;padding:40px 0}
+.prop+.prop{border-top:1px solid var(--raised)}
+.shot{display:block;border-radius:12px;overflow:hidden;background:var(--surface);transition:transform .25s cubic-bezier(.2,.7,.2,1)}
+.shot:hover{transform:translateY(-4px)}
+.shot img{display:block;width:100%;height:auto}
+.shot .dark{display:none}
+:root[data-theme="dark"] .shot .dark{display:block}
+:root[data-theme="dark"] .shot .light{display:none}
+h2{font-size:28px;line-height:36px;letter-spacing:-.02em;font-weight:700}
+.idea{font-size:18px;line-height:28px;margin:8px 0 16px}
+ul{list-style:none;display:grid;gap:8px;color:var(--muted)}
+ul b{color:var(--text);font-weight:500}
+.open{display:inline-flex;align-items:center;gap:8px;margin-top:24px;height:44px;padding:0 20px;border-radius:999px;background:var(--primary);color:var(--on-primary);text-decoration:none;font-weight:500;transition:transform .12s}
+.open:active{transform:scale(.97)}
+footer{color:var(--muted);font-size:14px;margin-top:24px}
+@media (max-width:900px){.prop{grid-template-columns:1fr;gap:20px}h1{font-size:26px;line-height:32px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div><h1>Solde, trois directions</h1><p>Le même tableau de bord, les mêmes chiffres d'octobre, trois partis pris. Chacune existe en clair, en sombre, et suit le système par défaut ; le choix est partagé entre les trois pages.</p></div>
+    <span id="theme"></span>
+  </header>
+
+  <section class="prop">
+    <a class="shot" href="registre.html" aria-label="Ouvrir Registre"><img class="light" src="apercus/registre-light.jpg" alt="Registre, thème clair" width="1440" height="900"><img class="dark" src="apercus/registre-dark.jpg" alt="Registre, thème sombre" width="1440" height="900" loading="lazy"></a>
+    <div>
+      <h2>A · Registre</h2>
+      <p class="idea">Le mois s'écrit comme une soustraction de livre de comptes : revenu, moins chaque poste, double trait, reste.</p>
+      <ul>
+        <li><b>Pour qui :</b> celui qui veut comprendre d'où vient chaque euro.</li>
+        <li><b>Ton :</b> sobre, précis, zéro couleur dans l'interface ; un seul bleu, sur ce qui reste.</li>
+        <li><b>Pièce maîtresse :</b> le calendrier du mois, jour par jour, avec les achats passés et les prélèvements à venir.</li>
+        <li><b>Typo :</b> Geist, chiffres en Geist Mono alignés en colonnes.</li>
+      </ul>
+      <a class="open" href="registre.html">Ouvrir Registre</a>
+    </div>
+  </section>
+
+  <section class="prop">
+    <a class="shot" href="foyer.html" aria-label="Ouvrir Foyer"><img class="light" src="apercus/foyer-light.jpg" alt="Foyer, thème clair" width="1440" height="900" loading="lazy"><img class="dark" src="apercus/foyer-dark.jpg" alt="Foyer, thème sombre" width="1440" height="900" loading="lazy"></a>
+    <div>
+      <h2>B · Foyer</h2>
+      <p class="idea">Un budget à deux : trois couloirs (Inès, le compte joint, Karim) et une teinte par personne.</p>
+      <ul>
+        <li><b>Pour qui :</b> le couple qui partage les charges et veut voir qui verse quoi.</li>
+        <li><b>Ton :</b> doux et chaleureux, grands arrondis, tuiles pâles, navigation en haut.</li>
+        <li><b>Pièce maîtresse :</b> le foyer ce mois-ci, avec la répartition du compte joint au prorata des revenus.</li>
+        <li><b>Typo :</b> Manrope, les centimes en petit et en gris.</li>
+      </ul>
+      <a class="open" href="foyer.html">Ouvrir Foyer</a>
+    </div>
+  </section>
+
+  <section class="prop">
+    <a class="shot" href="nuit.html" aria-label="Ouvrir Nuit"><img class="light" src="apercus/nuit-light.jpg" alt="Nuit, thème clair" width="1440" height="900" loading="lazy"><img class="dark" src="apercus/nuit-dark.jpg" alt="Nuit, thème sombre" width="1440" height="900" loading="lazy"></a>
+    <div>
+      <h2>C · Nuit</h2>
+      <p class="idea">Le coup d'œil du soir : la dépense cumulée jour après jour, face au mois dernier.</p>
+      <ul>
+        <li><b>Pour qui :</b> celui qui vérifie son allure en fin de journée, souvent sur téléphone.</li>
+        <li><b>Ton :</b> noir chaud, élévation par la clarté, un vert tilleul réservé aux données.</li>
+        <li><b>Pièce maîtresse :</b> la courbe du rythme du mois, et un curseur « Et si je dépense… ».</li>
+        <li><b>Typo :</b> Hanken Grotesk, barre de recherche (raccourci /).</li>
+      </ul>
+      <a class="open" href="nuit.html">Ouvrir Nuit</a>
+    </div>
+  </section>
+  <footer>Données d'exemple (foyer fictif, « aujourd'hui » figé au 29 octobre 2026). Les flèches de mois et la simulation fonctionnent sur les trois pages.</footer>
+</div>
+<script src="shared/data.js"></script>
+<script src="shared/theme.js"></script>
+<script>document.getElementById('theme').innerHTML = Theme.control();</script>
+</body>
+</html>

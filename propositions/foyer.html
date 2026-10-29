@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Solde — Foyer</title>
+<meta name="theme-color" content="#f3f5f7">
+<script>(function(){var p='system';try{p=localStorage.getItem('solde-theme')||'system'}catch(e){}var d=p==='dark'||(p==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';})();</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Proposition B — Foyer.
+   Le budget vu comme un foyer à deux : trois couloirs (Inès, le compte joint, Karim) traversent l'écran.
+   Chaque personne a sa teinte pâle (cobalt pour Inès, vert d'eau pour Karim, 150° d'écart), un seul grand rayon (20 px),
+   et la polarité de l'argent reste calme : les entrées en vert avec un +, les sorties à l'encre, pas de rouge ordinaire.
+   Grille : colonne centrée de 1160 px max, 12 colonnes, gouttière 20 px (12 × 80 + 11 × 20 = 1160). */
+:root{
+  --ground:#f3f5f7; --surface:#ffffff; --raised:#f2f6fa; --active:#e8edf2;
+  --border:#e6e9ed; --rule:#f0f2f4; --control:#d6d9dd;
+  --text:#1b1d1f; --muted:#5c6064;
+  --primary:#1b1d1f; --on-primary:#fff;
+  --me:#1d5fd6; --me-soft:#dcebff; --me-ink:#0a3a80;
+  --them:#1f8a70; --them-soft:#d6f3ea; --them-ink:#0b4a3b;
+  --joint:#5c6064; --joint-soft:#eceff2; --joint-ink:#2b2e31;
+  --positive:#2f7a45; --negative:#c41c29;
+  --chart-1:#1d5fd6; --chart-muted:#cfd5dc; --chart-mark:#0a3a80; --grid:#eceef1; --axis-ink:#5c6064; --ink:#1b1d1f;
+  --r-card:20px; --r-in:12px; --r-chip:8px; --gap:20px;
+  --font:"Manrope",Inter,system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#101214; --surface:#181b1e; --raised:#1f2327; --active:#272c31;
+  --border:#23272b; --rule:#22262a; --control:#3a4046;
+  --text:#eef1f4; --muted:#a7adb4;
+  --primary:#eef1f4; --on-primary:#101214;
+  --me:#7aaaf7; --me-soft:#16263f; --me-ink:#b9d3fb;
+  --them:#5cc9a7; --them-soft:#123129; --them-ink:#a9e8d4;
+  --joint:#a7adb4; --joint-soft:#23272c; --joint-ink:#dfe3e7;
+  --positive:#6cc98a; --negative:#f0646a;
+  --chart-1:#7aaaf7; --chart-muted:#353b42; --chart-mark:#b9d3fb; --grid:#262a2f; --axis-ink:#a7adb4; --ink:#eef1f4;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --ground:#101214; --surface:#181b1e; --raised:#1f2327; --active:#272c31;
+  --border:#23272b; --rule:#22262a; --control:#3a4046;
+  --text:#eef1f4; --muted:#a7adb4;
+  --primary:#eef1f4; --on-primary:#101214;
+  --me:#7aaaf7; --me-soft:#16263f; --me-ink:#b9d3fb;
+  --them:#5cc9a7; --them-soft:#123129; --them-ink:#a9e8d4;
+  --joint:#a7adb4; --joint-soft:#23272c; --joint-ink:#dfe3e7;
+  --positive:#6cc98a; --negative:#f0646a;
+  --chart-1:#7aaaf7; --chart-muted:#353b42; --chart-mark:#b9d3fb; --grid:#262a2f; --axis-ink:#a7adb4; --ink:#eef1f4;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ground);color:var(--text);font:400 15px/22px var(--font);-webkit-font-smoothing:antialiased;min-height:100vh}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+.ico{width:18px;height:18px;flex:none}
+.num{font-variant-numeric:tabular-nums}
+:focus-visible{outline:2px solid var(--me);outline-offset:2px;border-radius:8px}
+
+/* Pas de barre latérale : une barre du haut avec la marque, les rubriques et le thème, au-dessus d'une colonne centrée. */
+.top{position:sticky;top:0;z-index:20;background:var(--ground)}
+.top-in{max-width:1208px;margin:0 auto;height:64px;display:flex;align-items:center;gap:24px;padding:0 24px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;letter-spacing:-.01em;text-decoration:none;color:inherit}
+.brand svg{width:30px;height:30px}
+.tabs{display:flex;gap:2px;flex:1;overflow-x:auto;scrollbar-width:none}
+.tabs a{height:36px;display:flex;align-items:center;padding:0 14px;border-radius:999px;color:var(--muted);text-decoration:none;font-size:14px;font-weight:500;white-space:nowrap;transition:background .15s,color .15s}
+.tabs a:hover{color:var(--text);background:var(--active)}
+.tabs a[aria-current="page"]{background:var(--surface);color:var(--text);box-shadow:0 0 0 1px var(--border)}
+.theme-switch{display:flex;gap:2px;padding:3px;border-radius:999px;background:var(--active)}
+.theme-switch button{width:32px;height:30px;border-radius:999px;display:grid;place-items:center;color:var(--muted);transition:background .2s,color .2s,transform .12s}
+.theme-switch button:hover{color:var(--text)}
+.theme-switch button:active{transform:scale(.92)}
+.theme-switch button[aria-pressed="true"]{background:var(--surface);color:var(--text)}
+.theme-switch .ico{width:16px;height:16px}
+.people{display:flex}
+.av{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-weight:600;font-size:13px;flex:none}
+.av.me{background:var(--me-soft);color:var(--me-ink)}
+.av.them{background:var(--them-soft);color:var(--them-ink)}
+.people .av+.av{margin-left:-6px;box-shadow:0 0 0 2px var(--ground)}
+
+.page{max-width:1208px;margin:0 auto;padding:24px 24px 64px}
+.head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:24px}
+h1{font-size:28px;line-height:36px;font-weight:600;letter-spacing:-.02em}
+.sub{color:var(--muted);margin-top:4px}
+.sub b{color:var(--text);font-weight:600}
+.month-pick{display:flex;align-items:center;gap:4px;background:var(--surface);border-radius:999px;padding:4px;box-shadow:0 0 0 1px var(--border)}
+.month-pick button{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--muted);transition:background .15s,color .15s}
+.month-pick button:hover{background:var(--raised);color:var(--text)}
+.month-pick span{min-width:132px;text-align:center;font-weight:600}
+.btn{height:44px;padding:0 20px;border-radius:999px;font-weight:600;display:inline-flex;align-items:center;gap:8px;transition:transform .12s,opacity .15s}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--primary);color:var(--on-primary)}
+.btn-primary:hover{opacity:.9}
+.head-actions{display:flex;gap:12px;align-items:center}
+
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--gap)}
+.card{background:var(--surface);border-radius:var(--r-card);padding:24px;min-width:0;border:1px solid var(--border)}
+.card h2{font-size:20px;line-height:28px;font-weight:600;letter-spacing:-.01em}
+.card-head{display:flex;justify-content:space-between;align-items:center;gap:4px 12px;flex-wrap:wrap;margin-bottom:16px}
+.muted{color:var(--muted)}
+.small{font-size:14px;line-height:20px}
+.link{color:var(--me);font-weight:600;font-size:14px;text-decoration:none}
+.link:hover{text-decoration:underline}
+
+/* Le reste à vivre, avec la simulation sous la main. */
+.hero{grid-column:span 5;display:flex;flex-direction:column}
+.hero .who{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.big{font-size:36px;line-height:44px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.big .c{color:var(--muted);font-size:24px}
+.big.neg{color:var(--negative)}
+.perday{margin-top:6px;color:var(--muted)}
+.perday b{color:var(--text);font-weight:600}
+.days{display:flex;gap:4px;margin:20px 0 6px}
+.days span{flex:1;height:28px;border-radius:6px;background:var(--raised);transition:background .3s}
+.days span.past{background:var(--active)}
+.days span.left{background:var(--me-soft)}
+.days span.today{background:var(--me)}
+.days-legend{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
+.sim{margin-top:auto;padding-top:20px}
+.sim-box{background:var(--raised);border-radius:var(--r-in);padding:14px 16px}
+.sim label{font-weight:600;font-size:14px}
+.sim-row{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
+.field{display:flex;align-items:center;height:40px;width:132px;background:var(--surface);border-radius:10px;padding:0 12px;box-shadow:0 0 0 1px var(--control);transition:box-shadow .15s}
+.field:focus-within{box-shadow:0 0 0 2px var(--me)}
+.field input{border:0;background:none;outline:0;width:100%;text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+.field span{color:var(--muted);margin-left:6px}
+.chip{height:40px;padding:0 14px;border-radius:999px;background:var(--surface);font-weight:600;font-size:14px;box-shadow:0 0 0 1px var(--border);transition:transform .12s,background .15s}
+.chip:hover{background:var(--me-soft);color:var(--me-ink)}
+.chip:active{transform:scale(.95)}
+.sim-out{margin-top:10px;font-size:14px;color:var(--muted)}
+.sim-out b{color:var(--text);font-weight:600}
+.sim-out .neg{color:var(--negative);font-weight:600}
+
+/* Les trois couloirs : Inès → compte joint ← Karim. */
+.lanes{grid-column:span 7}
+.lane-grid{display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:12px}
+.lane{border-radius:var(--r-in);padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.lane.me{background:var(--me-soft);color:var(--me-ink)}
+.lane.them{background:var(--them-soft);color:var(--them-ink)}
+.lane.joint{background:var(--joint-soft);color:var(--joint-ink)}
+.lane-top{display:flex;align-items:center;gap:8px;font-weight:600}
+.lane .av{width:26px;height:26px;font-size:12px;background:var(--surface)}
+.lane .sum{font-size:24px;line-height:30px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--text)}
+.lane .cap{font-size:13px;line-height:18px;opacity:.85}
+.lane ul{list-style:none;display:grid;gap:6px;font-size:13px}
+.lane li{display:flex;justify-content:space-between;gap:8px}
+.lane li span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lane li span:last-child{font-variant-numeric:tabular-nums;white-space:nowrap}
+.flow{display:flex;height:10px;border-radius:999px;overflow:hidden;gap:3px;margin:16px 0 8px}
+.flow span{transition:flex-grow .5s cubic-bezier(.2,.7,.2,1)}
+.flow .m{background:var(--me)} .flow .t{background:var(--them)}
+.flow-legend{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
+.flow-legend b{color:var(--text);font-weight:600}
+
+/* Prochaines échéances : des tuiles de date, dans l'ordre. */
+.ech{grid-column:1/-1}
+.ech-row{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}
+.bill{border-radius:var(--r-in);background:var(--raised);padding:14px;display:flex;flex-direction:column;gap:4px;min-width:0;transition:transform .15s}
+.bill:hover{transform:translateY(-2px)}
+.bill .date{display:flex;align-items:baseline;gap:6px}
+.bill .date b{font-size:24px;line-height:28px;font-weight:600}
+.bill .date span{color:var(--muted);font-size:13px}
+.bill .what{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:6px}
+.bill .amt{font-variant-numeric:tabular-nums}
+.tag{align-self:flex-start;font-size:12px;line-height:20px;padding:0 8px;border-radius:var(--r-chip);font-weight:600;white-space:nowrap}
+.tag.me{background:var(--me-soft);color:var(--me-ink)}
+.tag.joint{background:var(--joint-soft);color:var(--joint-ink)}
+.tag.save{background:var(--them-soft);color:var(--them-ink)}
+
+.pots{grid-column:span 5;display:flex;flex-direction:column}
+.pots-foot{margin-top:auto;background:var(--raised);border-radius:var(--r-in);padding:12px 16px;font-size:14px;color:var(--muted)}
+.pots-foot b{color:var(--text);font-weight:600}
+.cat.total{background:var(--me-soft);color:var(--me-ink);text-decoration:none}
+.cat.total .d{color:inherit}
+.pot{display:grid;grid-template-columns:56px 1fr;gap:14px;align-items:center;padding:12px 0}
+.pot+.pot{border-top:1px solid var(--rule)}
+.ring{width:56px;height:56px}
+.pot .t{font-weight:600}
+.pot .s{font-size:14px;color:var(--muted)}
+.pot .s b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+
+.year{grid-column:span 7}
+.chart-legend{display:flex;gap:14px;font-size:13px;color:var(--muted)}
+.chart-legend span{display:inline-flex;align-items:center;gap:6px}
+[data-chart]{position:relative}
+
+.spend{grid-column:1/-1}
+.cats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.cat{border-radius:var(--r-in);padding:14px 16px;background:var(--raised)}
+.cat .n{display:flex;justify-content:space-between;font-weight:600}
+.cat .v{font-size:22px;line-height:30px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:6px}
+.cat .d{font-size:13px;color:var(--muted)}
+.cat .d.up{color:var(--negative);font-weight:600}
+.cat .bar{height:6px;border-radius:999px;background:var(--surface);margin-top:10px;overflow:hidden}
+.cat .bar span{display:block;height:100%;border-radius:999px;background:var(--me);transition:width .5s cubic-bezier(.2,.7,.2,1)}
+
+@media (max-width:1100px){
+  .hero,.lanes,.pots,.year{grid-column:1/-1}
+  .ech-row{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .tabs{display:none}
+  .top-in{justify-content:space-between}
+}
+@media (max-width:700px){
+  .top-in{padding:0 16px;height:56px}
+  .page{padding:12px 16px 40px}
+  .head{flex-direction:column;align-items:stretch}
+  .head-actions{justify-content:space-between}
+  .month-pick span{min-width:112px}
+  .btn-primary{width:44px;padding:0;justify-content:center}
+  .btn-primary span{display:none}
+  .card{padding:18px}
+  .lane-grid{grid-template-columns:1fr}
+  .ech-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cats{grid-template-columns:1fr 1fr}
+  .people{display:none}
+  .big{font-size:32px;line-height:40px}
+  :root{--gap:14px}
+}
+@media (prefers-reduced-motion: reduce){ *{transition:none !important} }
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <a class="brand" href="#"><svg viewBox="0 0 30 30" aria-hidden="true"><circle cx="11" cy="15" r="8.5" fill="var(--me)"/><circle cx="19" cy="15" r="8.5" fill="var(--them)" opacity=".9"/><circle cx="19" cy="15" r="8.5" fill="none"/></svg>Solde</a>
+  <nav class="tabs" id="tabs" aria-label="Rubriques"></nav>
+  <span id="theme"></span>
+  <span class="people" aria-label="Foyer : Inès et Karim"><span class="av me">I</span><span class="av them">K</span></span>
+</div></header>
+<main class="page" id="main"></main>
+<script src="shared/data.js"></script>
+<script src="shared/theme.js"></script>
+<script src="shared/charts.js"></script>
+<script>
+const { mois, echeances, annee, fmt, icon, esc, NAV, TODAY, r2 } = Solde;
+let cur = { y: TODAY.y, m: TODAY.m }, simAmount = 0;
+document.getElementById('tabs').innerHTML = NAV.slice(0, 7).map((n, i) => `<a href="#${n.id}" ${i === 0 ? 'aria-current="page"' : ''}>${i === 0 ? 'Accueil' : n.label}</a>`).join('');
+document.getElementById('theme').innerHTML = Theme.control({ labels: false });
+const money = (v) => { const p = fmt.parts(v); return `${p.signe}${p.euros}<span class="c">${p.cents} ${p.devise}</span>`; };
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
+const ringSVG = (part, color) => { const r = 24, c = 2 * Math.PI * r; return `<svg class="ring" viewBox="0 0 56 56" role="img" aria-label="${fmt.pct(part)}"><circle cx="28" cy="28" r="${r}" fill="none" stroke="var(--raised)" stroke-width="6"/><circle cx="28" cy="28" r="${r}" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${c * part} ${c}" transform="rotate(-90 28 28)" style="transition:stroke-dasharray .6s"/><text x="28" y="32" text-anchor="middle" font-size="12" font-weight="600" fill="currentColor">${Math.round(part * 100)}%</text></svg>`; };
+
+function render(first) {
+  const d = mois(cur.y, cur.m), neg = d.reste < 0, ech = echeances(6);
+  const prev = cur.m > 0 ? mois(cur.y, cur.m - 1) : null;
+  const old = document.getElementById('fig')?.dataset.value;
+  const sub = d.courant ? `Il te reste <b>${fmt.eur(d.reste)}</b> jusqu'au ${d.nbJours} ${d.nom}. Les courses sont plus hautes que d'habitude (<b>${fmt.signe(d.ecartCourses)}</b>).`
+    : d.passe ? `${cap(d.nom)} s'est terminé à <b>${fmt.signe(d.reste)}</b>.` : `${cap(d.nom)} en prévision : <b>${fmt.eur(d.reste)}</b> avant les achats du quotidien.`;
+
+  const dayCells = Array.from({ length: d.nbJours }, (_, i) => { const j = i + 1; const c = d.courant ? (j < TODAY.d ? 'past' : j === TODAY.d ? 'today' : 'left') : d.passe ? 'past' : 'left'; return `<span class="${c}" title="${j} ${d.nom}"></span>`; }).join('');
+  const prevCats = prev ? Object.fromEntries(prev.repartition.map((r) => [r.label, r.value])) : {};
+  const maxCat = d.repartition[0]?.value || 1;
+
+  document.getElementById('main').innerHTML = `
+    <div class="head">
+      <div><h1>${d.courant ? 'Bonsoir Inès' : cap(d.label)}</h1><p class="sub">${sub}</p></div>
+      <div class="head-actions">
+        <div class="month-pick"><button data-step="-1" aria-label="Mois précédent">${icon('chevL')}</button><span aria-live="polite">${cap(d.label)}</span><button data-step="1" aria-label="Mois suivant">${icon('chevR')}</button></div>
+        <button class="btn btn-primary" aria-label="Ajouter une dépense">${icon('plus')}<span>Ajouter</span></button>
+      </div>
+    </div>
+    <div class="grid">
+      <section class="card hero" aria-labelledby="t-reste">
+        <div class="who"><span class="av me">I</span><h2 id="t-reste" class="small muted" style="font-size:15px;font-weight:500">${neg ? 'Dépassement' : 'Mon reste à vivre'}</h2></div>
+        <div class="big ${neg ? 'neg' : ''}" id="fig" data-value="${old ?? d.reste}">${money(old != null ? Number(old) : d.reste)}</div>
+        <p class="perday">${d.parJour != null ? `<b>${fmt.eur(d.parJour)}</b> par jour pendant ${fmt.plural(d.joursRestants, 'jour', 'jours')}` : `sur <b>${fmt.eur(d.revenu)}</b> de revenu`}</p>
+        <div class="days" aria-hidden="true">${dayCells}</div>
+        <div class="days-legend"><span>1 ${Solde.MOIS_COURT[d.m]}</span><span>${d.courant ? `aujourd'hui, le ${TODAY.d}` : ''}</span><span>${d.nbJours} ${Solde.MOIS_COURT[d.m]}</span></div>
+        ${d.passe ? '' : `<div class="sim"><div class="sim-box">
+          <label for="sim">Et si je dépense…</label>
+          <div class="sim-row"><div class="field"><input id="sim" inputmode="decimal" autocomplete="off" placeholder="0" value="${simAmount || ''}" aria-describedby="sim-out"><span>€</span></div>${[20, 50, 120].map((v) => `<button class="chip" data-sim="${v}">${v} €</button>`).join('')}</div>
+          <p class="sim-out" id="sim-out" aria-live="polite">${simText(d)}</p>
+        </div></div>`}
+      </section>
+
+      <section class="card lanes" aria-labelledby="t-lanes">
+        <div class="card-head"><h2 id="t-lanes">Le foyer ce mois-ci</h2><a class="link" href="#compteJoint">Compte joint</a></div>
+        <div class="lane-grid">
+          <div class="lane me">
+            <div class="lane-top"><span class="av">I</span>Inès</div>
+            <div><div class="sum">${fmt.eur(d.revenu)}</div><div class="cap">revenu du mois</div></div>
+            <ul>
+              <li><span>Abonnements</span><span>${fmt.eur(d.postes.abonnements)}</span></li>
+              <li><span>Charges</span><span>${fmt.eur(d.postes.charges)}</span></li>
+              <li><span>Achats</span><span>${fmt.eur(d.postes.achats)}</span></li>
+              <li><span>Épargne</span><span>${fmt.eur(d.postes.epargne)}</span></li>
+            </ul>
+          </div>
+          <div class="lane joint">
+            <div class="lane-top">${icon('home')}Compte joint</div>
+            <div><div class="sum">${fmt.eur(d.joint.total)}</div><div class="cap">charges communes</div></div>
+            <ul>${d.joint.charges.map((c) => `<li><span>${esc(c.libelle)}</span><span>${fmt.eur(c.montant)}</span></li>`).join('')}</ul>
+          </div>
+          <div class="lane them">
+            <div class="lane-top"><span class="av">K</span>Karim</div>
+            <div><div class="sum">${fmt.eur(d.joint.virementPartenaire)}</div><div class="cap">sa part du joint, ${fmt.pct(d.joint.partPartenaire)}</div></div>
+            <ul><li><span>Virement</span><span>le 1<sup>er</sup></span></li><li><span>Calculée sur</span><span>les revenus</span></li></ul>
+          </div>
+        </div>
+        <div class="flow" role="img" aria-label="Part d'Inès ${fmt.pct(d.joint.partMoi)}, part de Karim ${fmt.pct(d.joint.partPartenaire)}"><span class="m" style="flex-grow:${d.joint.partMoi}"></span><span class="t" style="flex-grow:${d.joint.partPartenaire}"></span></div>
+        <div class="flow-legend"><span>Inès verse <b>${fmt.eur(d.joint.virementMoi)}</b> · ${fmt.pct(d.joint.partMoi)}</span><span>Karim verse <b>${fmt.eur(d.joint.virementPartenaire)}</b> · ${fmt.pct(d.joint.partPartenaire)}</span></div>
+      </section>
+
+      <section class="card ech" aria-labelledby="t-ech">
+        <div class="card-head"><h2 id="t-ech">Ce qui arrive</h2><a class="link" href="#echeances">Toutes les échéances</a></div>
+        <div class="ech-row">${ech.map((e) => `<article class="bill"><div class="date"><b>${e.jour}</b><span>${Solde.MOIS_COURT[e.m]} · ${fmt.dans(e.dans)}</span></div><div class="what">${esc(e.libelle)}</div><div class="amt">${fmt.eur(e.montant)}</div><span class="tag ${e.poste === 'joint' ? 'joint' : e.poste === 'epargne' ? 'save' : 'me'}">${e.poste === 'joint' ? 'Compte joint' : e.poste === 'epargne' ? 'Épargne' : 'Mon compte'}</span></article>`).join('')}</div>
+      </section>
+
+      <section class="card spend" aria-labelledby="t-spend">
+        <div class="card-head"><h2 id="t-spend">Mes achats du quotidien</h2><span class="muted small num">${fmt.eur(d.postes.achats)}${prev ? ` · ${fmt.signe(r2(d.postes.achats - prev.postes.achats))} vs ${prev.nom}` : ''}</span></div>
+        ${d.repartition.length ? `<div class="cats">${d.repartition.slice(0, 7).map((r) => { const dv = prevCats[r.label] != null ? r2(r.value - prevCats[r.label]) : null; const high = r.label === 'Courses' && d.ecartCourses > 20; return `<div class="cat"><div class="n"><span>${esc(r.label)}</span><span class="muted small">${fmt.pct(r.value / d.postes.achats)}</span></div><div class="v">${fmt.eur(r.value)}</div><div class="d ${high ? 'up' : ''}">${high ? `${fmt.signe(d.ecartCourses)} vs un mois habituel` : dv == null ? '—' : `${fmt.signe(dv)} vs ${prev.nom}`}</div><div class="bar"><span style="width:${(r.value / maxCat * 100).toFixed(1)}%"></span></div></div>`; }).join('')}<a class="cat total" href="#depenses"><div class="n"><span>Tout le mois</span></div><div class="v">${fmt.plural(d.sorties.filter((x) => x.poste === 'achats').length, 'ticket', 'tickets')}</div><div class="d">${fmt.eur(d.postes.achats)} au total</div><div class="d" style="margin-top:10px;color:var(--me);font-weight:600">Voir les dépenses →</div></a></div>` : `<p class="muted">Rien de saisi pour ${d.label} : seuls les prélèvements fixes sont prévus.</p>`}
+      </section>
+
+      <section class="card pots" aria-labelledby="t-pots">
+        <div class="card-head"><h2 id="t-pots">Nos cagnottes</h2><a class="link" href="#objectifs">Gérer</a></div>
+        ${d.objectifs.map((o, i) => `<div class="pot">${ringSVG(o.part, i ? 'var(--them)' : 'var(--me)')}<div><div class="t">${esc(o.libelle)}</div><div class="s"><b>${fmt.eur0(o.epargne)}</b> sur ${fmt.eur0(o.cible)} · ${o.atteint ? 'atteint' : `encore ${fmt.eur0(o.restant)}, pour ${o.echeance}`}</div></div></div>`).join('')}
+        <p class="pots-foot">Mis de côté ce mois-ci : <b>${fmt.eur(d.postes.epargne)}</b>, versé le 3 ${d.nom}.</p>
+      </section>
+
+      <section class="card year" aria-labelledby="t-year">
+        <div class="card-head"><h2 id="t-year">Ce qui reste chaque mois</h2><div class="chart-legend" id="legend"></div></div>
+        <div data-chart id="chart"></div>
+      </section>
+    </div>`;
+  const fig = document.getElementById('fig');
+  if (first) fig.innerHTML = money(d.reste), fig.dataset.value = d.reste; else Theme.tween(fig, d.reste, money);
+  drawChart(d);
+}
+function simText(d) {
+  if (!simAmount) return `Choisis un montant pour voir ce qu'il resterait.`;
+  const r = r2(d.reste - simAmount);
+  if (r < 0) return `<span class="neg">Tu dépasserais de ${fmt.eur(-r)}</span> d'ici la fin du mois.`;
+  return `Il resterait <b>${fmt.eur(r)}</b>${d.joursRestants ? `, soit <b>${fmt.eur(r / d.joursRestants)}</b> par jour` : ''}.`;
+}
+function drawChart(d) {
+  const a = annee();
+  // Le reste de chaque mois ; le mois affiché porte la teinte, les autres restent pâles, novembre est une prévision.
+  Charts.bars(document.getElementById('chart'), {
+    labels: a.labels, values: a.restes.map((v, i) => (i === a.prevision ? 0 : Math.max(0, v))), highlight: d.m,
+    format: Charts.fmt.money('EUR', 0), height: () => (innerWidth < 700 ? 180 : 230),
+    reference: { value: r2(a.restes.slice(0, a.courant).reduce((s, v) => s + v, 0) / a.courant), label: 'moyenne' },
+  });
+  document.getElementById('legend').innerHTML = `<span>Novembre : à venir</span>`;
+}
+document.addEventListener('click', (e) => {
+  const s = e.target.closest('[data-step]');
+  if (s) { const n = new Date(cur.y, cur.m + Number(s.dataset.step), 1); if (n.getFullYear() !== 2026 || n.getMonth() > 10) return; cur = { y: 2026, m: n.getMonth() }; render(); return; }
+  const c = e.target.closest('[data-sim]'); if (c) { simAmount = Number(c.dataset.sim); document.getElementById('sim').value = c.dataset.sim; updateSim(); }
+});
+document.addEventListener('input', (e) => { if (e.target.id === 'sim') { simAmount = Math.max(0, parseFloat(e.target.value.replace(/\s/g, '').replace(',', '.')) || 0); updateSim(); } });
+function updateSim() { const d = mois(cur.y, cur.m); document.getElementById('sim-out').innerHTML = simText(d); const fig = document.getElementById('fig'); Theme.tween(fig, r2(d.reste - simAmount), money, 300); fig.classList.toggle('neg', d.reste - simAmount < 0); }
+Theme.onChange(() => { if (document.getElementById('chart')) drawChart(mois(cur.y, cur.m)); });
+render(true);
+</script>
+</body>
+</html>

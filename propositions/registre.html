@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Solde — Registre</title>
+<meta name="theme-color" content="#f2f4f7">
+<script>(function(){var p='system';try{p=localStorage.getItem('solde-theme')||'system'}catch(e){}var d=p==='dark'||(p==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';})();</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;700&family=Geist+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* Proposition A — Registre.
+   Le mois s'écrit comme une soustraction de livre de comptes : revenu, moins chaque poste, double trait, reste.
+   Aucune couleur dans le chrome ; un seul bleu, sur ce qui reste (le segment du reste, les jours qui restent).
+   Grille : canvas fluide, 12 colonnes, gouttière 12 px ; à 1440 : 1440 − 248 (nav) − 2 × 32 = 1128 = 12 × 83 + 11 × 12. */
+:root{
+  --ground:#f2f4f7; --surface:#ffffff; --raised:#eef0f3; --active:#e4e7eb;
+  --border:#e3e6ea; --rule:#eef0f2; --control:#cfd4da;
+  --text:#0a0a0a; --muted:#596069; --faint:#6b7079;
+  --primary:#141414; --on-primary:#ffffff;
+  --hue:#1d5fbf; --hue-soft:#e3ecf9; --hue-ink:#0f3d82;
+  --positive:#2e7d32; --negative:#c4242a;
+  --chart-1:#1d5fbf; --chart-up:#7d838c; --chart-muted:#c9ced5; --chart-mark:#0a0a0a; --grid:#e6e8eb; --axis-ink:#5c626b; --ink:#0a0a0a;
+  --radius:8px; --radius-c:6px; --gap:12px;
+  --font:"Geist",Inter,system-ui,sans-serif; --mono:"Geist Mono",ui-monospace,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0b0c0e; --surface:#141518; --raised:#1c1e22; --active:#24272c;
+  --border:#22252a; --rule:#1d2024; --control:#3a3e45;
+  --text:#f3f4f6; --muted:#a3a9b2; --faint:#8e949d;
+  --primary:#f3f4f6; --on-primary:#0b0c0e;
+  --hue:#6ea3f7; --hue-soft:#15243a; --hue-ink:#a9c8fb;
+  --positive:#5cc28a; --negative:#f0646a;
+  --chart-1:#6ea3f7; --chart-up:#8d939c; --chart-muted:#3b4048; --chart-mark:#f3f4f6; --grid:#23262b; --axis-ink:#9aa0a9; --ink:#f3f4f6;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --ground:#0b0c0e; --surface:#141518; --raised:#1c1e22; --active:#24272c;
+  --border:#22252a; --rule:#1d2024; --control:#3a3e45;
+  --text:#f3f4f6; --muted:#a3a9b2; --faint:#8e949d;
+  --primary:#f3f4f6; --on-primary:#0b0c0e;
+  --hue:#6ea3f7; --hue-soft:#15243a; --hue-ink:#a9c8fb;
+  --positive:#5cc28a; --negative:#f0646a;
+  --chart-1:#6ea3f7; --chart-up:#8d939c; --chart-muted:#3b4048; --chart-mark:#f3f4f6; --grid:#23262b; --axis-ink:#9aa0a9; --ink:#f3f4f6;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--ground);color:var(--text);font:400 14px/20px var(--font);-webkit-font-smoothing:antialiased;min-height:100vh}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+.ico{width:16px;height:16px;flex:none}
+.num,.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+:focus-visible{outline:2px solid var(--hue);outline-offset:2px;border-radius:4px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* Shell : plan ouvert, la nav sur le fond de page, un seul filet. */
+.shell{display:grid;grid-template-columns:248px minmax(0,1fr);min-height:100vh}
+.nav{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;padding:20px 12px 16px;border-right:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 8px 18px}
+.mark{width:28px;height:28px;flex:none;color:var(--text)}
+.brand b{font-weight:700;font-size:16px;letter-spacing:-.01em}
+.brand small{display:block;color:var(--muted);font-size:12px;line-height:16px}
+.scope{display:flex;align-items:center;justify-content:space-between;margin:0 4px 16px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-size:13px}
+.scope span{color:var(--muted)}
+.nav-label{font-size:12px;color:var(--muted);padding:0 10px;margin:8px 0 6px}
+.nav a{display:flex;align-items:center;gap:10px;height:32px;margin-bottom:2px;padding:0 10px;border-radius:var(--radius-c);color:var(--muted);text-decoration:none;font-size:14px;transition:background .15s,color .15s}
+.nav a:hover{color:var(--text);background:var(--raised)}
+.nav a[aria-current="page"]{background:var(--active);color:var(--text);font-weight:500}
+.nav .grow{flex:1}
+.user{display:flex;align-items:center;gap:10px;padding:10px 8px 0;margin-top:12px;border-top:1px solid var(--rule)}
+.avatar{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:500;background:var(--hue-soft);color:var(--hue-ink);flex:none}
+.avatar.k{background:var(--raised);color:var(--text)}
+.user div{flex:1;min-width:0}
+.user small{display:block;color:var(--muted);font-size:12px;line-height:16px}
+
+.theme-switch{display:flex;gap:2px;padding:2px;border-radius:var(--radius);background:var(--raised);margin:12px 0 0}
+.theme-switch button{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap;height:28px;border-radius:var(--radius-c);font-size:12px;color:var(--muted);transition:background .15s,color .15s}
+.theme-switch button:hover{color:var(--text)}
+.theme-switch button[aria-pressed="true"]{background:var(--surface);color:var(--text);box-shadow:0 0 0 1px var(--border)}
+.theme-switch .ico{width:14px;height:14px}
+
+.topbar{display:none}
+.main{padding:28px 32px 48px;min-width:0}
+
+/* Titre : un nom, la phrase de constat, puis les actions. */
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px}
+h1{font-size:24px;line-height:32px;font-weight:700;letter-spacing:-.02em}
+.constat{color:var(--muted);font-size:14px;margin-top:2px}
+.constat b{color:var(--text);font-weight:500}
+.actions{display:flex;gap:8px;align-items:center}
+.stepper{display:flex;align-items:center;height:36px;border:1px solid var(--control);border-radius:var(--radius-c);background:var(--surface)}
+.stepper button{width:34px;height:34px;display:grid;place-items:center;color:var(--muted)}
+.stepper button:hover{color:var(--text)}
+.stepper button:active .ico{transform:translateX(var(--nudge,0))}
+.stepper span{min-width:118px;text-align:center;font-weight:500}
+.btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:var(--radius-c);font-weight:500;transition:transform .12s, opacity .15s}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--primary);color:var(--on-primary)}
+.btn-primary:hover{opacity:.88}
+
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--gap)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 24px;min-width:0}
+.card h2{font-size:16px;line-height:24px;font-weight:500}
+.card-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px}
+.card-head .meta{color:var(--muted);font-size:12px}
+.link{color:var(--text);font-weight:500;font-size:13px;text-decoration:none;border-bottom:1px solid var(--control)}
+.link:hover{border-color:var(--text)}
+
+/* Le mois */
+.month{grid-column:1/-1;display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:0;padding:0}
+.month>section{padding:24px}
+.month>section+section{border-left:1px solid var(--rule)}
+.lead-label{color:var(--muted);font-size:13px}
+.lead{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:4px 0 2px}
+.lead .figure{font-family:var(--font);font-size:36px;line-height:44px;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.lead .figure .c{color:var(--muted);font-weight:500}
+.lead .figure.neg{color:var(--negative)}
+.perday{color:var(--muted)}
+.perday b{color:var(--text);font-weight:500}
+
+.track{position:relative;display:flex;height:10px;margin:18px 0 8px;border-radius:2px;overflow:hidden;background:var(--raised)}
+.track span{display:block;height:100%;transition:flex-grow .45s cubic-bezier(.2,.7,.2,1)}
+.track .debite{background:var(--text)}
+.track .avenir,.hatch{background:repeating-linear-gradient(135deg,var(--chart-muted) 0 2px,transparent 2px 5px)} /* taste-skill-ignore: hachure « à venir », pas un dégradé */
+.track .reste{background:var(--hue)}
+.track-legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.track-legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+
+.ledger{width:100%;border-collapse:collapse;margin-top:18px}
+.ledger td{padding:11px 0;border-bottom:1px solid var(--rule);vertical-align:baseline}
+.ledger td:last-child{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.ledger .op{width:22px;color:var(--muted);font-family:var(--mono)}
+.ledger small{color:var(--muted);font-size:12px;margin-left:8px}
+.ledger tr.total td{border-bottom:0;border-top:3px double var(--text);padding-top:12px;font-weight:700}
+.ledger tr.total td:last-child{color:var(--hue)}
+.ledger tr.total.neg td:last-child{color:var(--negative)}
+
+/* Le calendrier du mois : les jours passés, aujourd'hui, les jours qui restent en bleu, les prélèvements marqués. */
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.cal .dow{font-size:11px;color:var(--muted);text-align:center;padding-bottom:2px}
+.day{position:relative;height:44px;border-radius:4px;padding:4px 5px;font-size:12px;line-height:14px;color:var(--faint);background:var(--ground)}
+.day.past{background:transparent;color:var(--faint)}
+.day.today{box-shadow:inset 0 0 0 1.5px var(--text);color:var(--text);background:var(--surface)}
+.day.left{background:var(--hue-soft);color:var(--hue-ink)}
+.day.past .amt{color:var(--muted)}
+.day .amt{position:absolute;left:5px;right:5px;bottom:4px;font-family:var(--mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.day.bill::after{content:"";position:absolute;top:6px;right:6px;width:6px;height:6px;border-radius:50%;background:currentColor}
+.cal-note{margin-top:12px;font-size:13px;color:var(--muted)}
+.cal-note b{color:var(--text);font-weight:500}
+
+.sim{margin-top:20px;padding-top:18px;border-top:1px solid var(--rule)}
+.sim label{display:block;font-weight:500;margin-bottom:8px}
+.sim-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.field{display:flex;align-items:center;height:36px;width:140px;border:1px solid var(--control);border-radius:var(--radius-c);background:var(--surface);padding:0 10px;transition:border-color .15s}
+.field:focus-within{border-color:var(--hue)}
+.field input{width:100%;border:0;background:none;outline:0;font-family:var(--mono);text-align:right}
+.field span{color:var(--muted);margin-left:6px}
+.chip{height:36px;padding:0 12px;border-radius:var(--radius-c);background:var(--raised);font-family:var(--mono);font-size:13px;transition:background .15s,transform .12s}
+.chip:hover{background:var(--active)}
+.chip:active{transform:scale(.96)}
+.sim-out{margin-top:10px;min-height:20px;color:var(--muted)}
+.sim-out b{color:var(--text);font-weight:500}
+.sim-out .neg{color:var(--negative);font-weight:500}
+
+/* Listes */
+.rows{list-style:none}
+.rows li{display:grid;grid-template-columns:132px minmax(0,1fr) auto;align-items:center;gap:12px;min-height:46px;border-bottom:1px solid var(--rule)}
+.rows li:last-child{border-bottom:0}
+.rows .when{font-size:13px}
+.rows .when small{color:var(--muted);font-size:12px;margin-left:6px}
+.rows .what{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rows .what small{color:var(--muted);font-size:12px;margin-left:6px}
+.rows .amt{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
+
+.rep{list-style:none;display:grid;gap:12px}
+.rep li{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;align-items:baseline}
+.rep .amt{font-family:var(--mono);text-align:right}
+.rep .bar{grid-column:1/-1;height:2px;margin-top:6px;background:var(--rule);position:relative}
+.rep .bar span{position:absolute;inset:0 auto 0 0;background:var(--chart-muted);transform-origin:left;transition:width .45s cubic-bezier(.2,.7,.2,1)}
+.rep li:first-child .bar span{background:var(--text)}
+.rep .pct{color:var(--muted);font-size:12px;margin-left:6px}
+.rep .over{color:var(--negative);font-size:12px;margin-left:6px}
+
+.goal{padding:4px 0 14px;border-bottom:1px solid var(--rule);margin-bottom:14px}
+.goal:last-child{border:0;margin:0;padding-bottom:0}
+.goal-top{display:flex;justify-content:space-between;gap:12px;margin-bottom:8px}
+.goal-top .amt{font-family:var(--mono)}
+.goal-top small{color:var(--muted);font-size:12px}
+.progress{height:6px;border-radius:999px;background:var(--raised);overflow:hidden}
+.progress span{display:block;height:100%;background:var(--text);border-radius:999px;transition:width .45s cubic-bezier(.2,.7,.2,1)}
+.goal-ends{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;margin-top:6px}
+.split{display:flex;height:6px;border-radius:999px;overflow:hidden;gap:2px;margin:10px 0 8px}
+.split span:first-child{background:var(--text)}
+.split span:last-child{background:var(--chart-muted)}
+.who{display:flex;justify-content:space-between;font-size:13px}
+.who b{font-family:var(--mono);font-weight:500}
+.who small{color:var(--muted)}
+.chart-legend{display:flex;gap:14px;font-size:12px;color:var(--muted)}
+.chart-legend span{display:inline-flex;align-items:center;gap:6px}
+[data-chart]{position:relative}
+
+.c-ech{grid-column:span 6}.c-rep{grid-column:span 6}.c-year{grid-column:span 8}.c-side{grid-column:span 4;display:grid;gap:var(--gap);align-content:start}
+
+@media (max-width:1100px){
+  .shell{grid-template-columns:1fr}
+  .nav{display:none}
+  .nav.open{display:flex;position:fixed;inset:0;z-index:30;background:var(--ground);height:auto;border:0;padding-top:64px;overflow:auto}
+  .topbar{display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:40;height:52px;padding:0 16px;background:var(--ground);border-bottom:1px solid var(--border)}
+  .topbar b{flex:1;font-size:15px}
+  .topbar .theme-switch{margin:0}
+  .topbar .theme-switch button{width:32px;flex:none}
+  .icon-btn{width:36px;height:36px;display:grid;place-items:center;border-radius:var(--radius-c)}
+  .icon-btn .ico{width:20px;height:20px}
+  .main{padding:20px 20px 40px}
+  .c-year{grid-column:1/-1}.c-side{grid-column:1/-1;grid-template-columns:1fr 1fr}
+}
+@media (max-width:760px){
+  .main{padding:16px 16px 32px}
+  .head{flex-direction:column;align-items:stretch}
+  .actions{justify-content:space-between}
+  .stepper span{min-width:104px}
+  .month{grid-template-columns:1fr}
+  .month>section{padding:20px 16px}
+  .month>section+section{border-left:0;border-top:1px solid var(--rule)}
+  .card{padding:16px}
+  .card.month{padding:0}
+  .rows li{grid-template-columns:72px minmax(0,1fr) auto}
+  .rows .when small{display:block;margin:0}
+  .c-ech,.c-rep,.c-side{grid-column:1/-1}
+  .c-side{grid-template-columns:1fr}
+  .lead .figure{font-size:32px;line-height:40px}
+  .rows li{min-height:52px}
+  .btn-primary span{display:none}
+  .btn-primary{width:36px;padding:0;justify-content:center}
+}
+@media (prefers-reduced-motion: reduce){ *{transition:none !important} }
+</style>
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <button class="icon-btn" id="menu" aria-label="Ouvrir la navigation" aria-expanded="false" aria-controls="nav"></button>
+    <b>Tableau de bord</b>
+    <span id="theme-top"></span>
+  </header>
+  <nav class="nav" id="nav" aria-label="Navigation principale">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 28 28" aria-hidden="true"><rect x=".75" y=".75" width="26.5" height="26.5" rx="6" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7 10h14M7 15.5h9M7 19h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M19.5 15.5v3.5" stroke="var(--hue)" stroke-width="2.4" stroke-linecap="round"/></svg>
+      <div><b>Solde</b><small>Foyer Inès &amp; Karim</small></div>
+    </div>
+    <div class="scope"><span>Espace</span>Finance</div>
+    <div class="nav-label">Mon budget</div>
+    <div id="nav-items"></div>
+    <div class="grow"></div>
+    <a href="#parametres"><svg class="ico"></svg>Paramètres</a>
+    <div id="theme-nav"></div>
+    <div class="user"><span class="avatar">I</span><div>Inès<small>Administratrice</small></div></div>
+  </nav>
+  <main class="main" id="main"></main>
+</div>
+<script src="shared/data.js"></script>
+<script src="shared/theme.js"></script>
+<script src="shared/charts.js"></script>
+<script>
+const { mois, echeances, annee, fmt, icon, esc, NAV, TODAY, r2 } = Solde;
+let cur = { y: TODAY.y, m: TODAY.m };
+let simAmount = 0;
+
+document.getElementById('menu').innerHTML = icon('menu');
+document.getElementById('nav-items').innerHTML = NAV.map((n, i) => `<a href="#${n.id}" ${i === 0 ? 'aria-current="page"' : ''}>${icon(n.icon)}${n.label}</a>`).join('');
+document.querySelector('a[href="#parametres"] svg').outerHTML = icon('settings');
+document.getElementById('theme-nav').innerHTML = Theme.control();
+document.getElementById('theme-top').innerHTML = Theme.control({ labels: false });
+document.getElementById('menu').addEventListener('click', (e) => {
+  const nav = document.getElementById('nav'), open = nav.classList.toggle('open');
+  e.currentTarget.setAttribute('aria-expanded', open); e.currentTarget.innerHTML = icon(open ? 'close' : 'menu');
+});
+
+const money = (v) => { const p = fmt.parts(v); return `${p.signe}${p.euros}<span class="c">${p.cents}</span> ${p.devise}`; };
+
+function render(first) {
+  const d = mois(cur.y, cur.m);
+  const neg = d.reste < 0;
+  const ech = echeances(6);
+  const resteSim = r2(d.reste - simAmount);
+
+  let constat;
+  if (d.courant) constat = `<b>${fmt.eur(d.reste)}</b> pour les ${d.joursRestants} derniers jours du mois${d.ecartCourses > 20 ? ` · courses : ${fmt.signe(d.ecartCourses)} par rapport à un mois habituel` : ''}`;
+  else if (d.passe) constat = `Mois clos · terminé à <b>${fmt.signe(d.reste)}</b>, ${fmt.pct(d.totalSorties / d.revenu)} du revenu dépensé ou épargné`;
+  else constat = `Prévisionnel · seuls les prélèvements fixes sont connus, <b>${fmt.eur(d.reste)}</b> restent avant les achats du quotidien`;
+
+  const scale = Math.max(d.revenu, d.totalSorties);
+  const lignes = [
+    ['−', 'Abonnements', fmt.plural(d.nbAbonnements, 'abonnement', 'abonnements'), d.postes.abonnements],
+    ['−', 'Charges', 'crédit et assurance auto', d.postes.charges],
+    ['−', 'Achats du quotidien', `${d.sorties.filter((s) => s.poste === 'achats').length} tickets`, d.postes.achats],
+    ['−', 'Compte joint', `ta part : ${fmt.pct(d.joint.partMoi)}`, d.postes.joint],
+    ['−', 'Épargne', fmt.plural(d.objectifs.filter((o) => o.versementMois > 0).length, 'objectif', 'objectifs'), d.postes.epargne],
+  ];
+
+  // Le calendrier : décalage du 1er (lundi en premier).
+  const first1 = (new Date(d.y, d.m, 1).getDay() + 6) % 7;
+  const billsByDay = {}; d.sorties.filter((s) => s.fixe && s.poste !== 'joint').forEach((s) => { (billsByDay[s.jour] ||= []).push(s); });
+  const cells = [];
+  for (let i = 0; i < first1; i++) cells.push('<div aria-hidden="true"></div>');
+  for (let j = 1; j <= d.nbJours; j++) {
+    const past = j < d.jourCourant || d.passe, today = d.courant && j === TODAY.d, left = (d.courant && j >= TODAY.d) || d.futur;
+    const bills = billsByDay[j] || [];
+    const billAmt = bills.reduce((s, b) => s + b.montant, 0);
+    const cls = ['day', past && !today ? 'past' : '', today ? 'today' : '', left && !today ? 'left' : '', bills.length && !past ? 'bill' : ''].join(' ');
+    const label = `${j} ${d.nom}${bills.length ? ` : ${bills.map((b) => `${b.libelle} ${fmt.eur(b.montant)}`).join(', ')}` : ''}`;
+    const quot = r2(d.sorties.filter((s) => s.poste === 'achats' && s.jour === j).reduce((t, s) => t + s.montant, 0));
+    const amt = bills.length && !past ? fmt.eur0(billAmt) : past && quot > 0 ? fmt.eur0(quot) : '';
+    cells.push(`<div class="${cls}" title="${esc(label)}${past && quot > 0 ? ` · achats ${fmt.eur(quot)}` : ''}">${j}${amt ? `<span class="amt">${amt}</span>` : ''}</div>`);
+  }
+  const prochains = d.aVenir.filter((s) => s.poste !== 'joint').slice(0, 2);
+
+  document.getElementById('main').innerHTML = `
+    <div class="head">
+      <div>
+        <h1>Tableau de bord</h1>
+        <p class="constat">${constat}</p>
+      </div>
+      <div class="actions">
+        <div class="stepper"><button data-step="-1" aria-label="Mois précédent" style="--nudge:-2px">${icon('chevL')}</button><span aria-live="polite">${d.nom[0].toUpperCase() + d.nom.slice(1)} ${d.y}</span><button data-step="1" aria-label="Mois suivant" style="--nudge:2px">${icon('chevR')}</button></div>
+        <button class="btn btn-primary" aria-label="Ajouter une dépense">${icon('plus')}<span>Ajouter une dépense</span></button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <article class="card month">
+        <section aria-labelledby="t-reste">
+          <h2 class="lead-label" id="t-reste">${neg ? 'Dépassement' : 'Reste à vivre'} · ${d.label}</h2>
+          <div class="lead">
+            <div class="figure ${neg ? 'neg' : ''}" id="fig" data-value="${first ? d.reste : (document.getElementById('fig')?.dataset.value ?? d.reste)}">${money(d.reste)}</div>
+            <div class="perday">${d.parJour != null ? `soit <b class="mono">${fmt.eur(d.parJour)}</b> par jour, ${fmt.plural(d.joursRestants, 'jour', 'jours')} restants` : `sur ${fmt.eur(d.revenu)} de revenu`}</div>
+          </div>
+          <div class="track" role="img" aria-label="Débité ${fmt.eur(d.debite)}, à venir ${fmt.eur(d.engage)}, reste ${fmt.eur(Math.max(0, d.reste))}">
+            <span class="debite" style="flex-grow:${d.debite / scale}"></span>
+            <span class="avenir" style="flex-grow:${d.engage / scale}"></span>
+            <span class="reste" style="flex-grow:${Math.max(0, d.reste) / scale}"></span>
+          </div>
+          <div class="track-legend">
+            <span><i style="background:var(--text)"></i>Débité <span class="mono">${fmt.eur(d.debite)}</span></span>
+            <span><i class="hatch"></i>À venir <span class="mono">${fmt.eur(d.engage)}</span></span>
+            <span><i style="background:var(--hue)"></i>Reste <span class="mono">${fmt.eur(Math.max(0, d.reste))}</span></span>
+          </div>
+          <table class="ledger" aria-label="Le calcul du mois">
+            <tr><td class="op"></td><td>Revenu<small>salaire et prime transport</small></td><td>${fmt.eur(d.revenu)}</td></tr>
+            ${lignes.map(([op, l, s, v]) => `<tr><td class="op">${op}</td><td>${l}<small>${s}</small></td><td>${fmt.eur(v)}</td></tr>`).join('')}
+            <tr class="total ${neg ? 'neg' : ''}"><td class="op">=</td><td>${neg ? 'Dépassement' : 'Reste à vivre'}</td><td>${fmt.eur(d.reste)}</td></tr>
+          </table>
+        </section>
+        <section aria-labelledby="t-cal">
+          <div class="card-head"><h2 id="t-cal">${d.nom[0].toUpperCase() + d.nom.slice(1)}, jour par jour</h2><span class="meta">● prélèvement à venir · gris : achats du jour</span></div>
+          <div class="cal">
+            ${['lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.', 'dim.'].map((x) => `<div class="dow">${x}</div>`).join('')}
+            ${cells.join('')}
+          </div>
+          <p class="cal-note">${d.courant ? (prochains.length ? `Encore prélevé ce mois-ci : ${prochains.map((p) => `<b>${esc(p.libelle)}</b> le ${p.jour} (<span class="mono">${fmt.eur(p.montant)}</span>)`).join(' et ')}, déjà déduits du reste.` : 'Plus aucun prélèvement ce mois-ci.') : d.passe ? `Mois terminé le ${d.nbJours} ${d.nom}.` : `${fmt.plural(d.sorties.length, 'prélèvement prévu', 'prélèvements prévus')}, pour <span class="mono">${fmt.eur(d.totalSorties)}</span>.`}</p>
+          ${d.passe ? '' : `
+          <div class="sim">
+            <label for="sim">Et si je dépense…</label>
+            <div class="sim-row">
+              <div class="field"><input id="sim" inputmode="decimal" autocomplete="off" value="${simAmount ? String(simAmount).replace('.', ',') : ''}" placeholder="0,00" aria-describedby="sim-out"><span>€</span></div>
+              ${[20, 50, 120].map((v) => `<button class="chip" data-sim="${v}">${v} €</button>`).join('')}
+            </div>
+            <p class="sim-out" id="sim-out" aria-live="polite">${simText(d, resteSim)}</p>
+          </div>`}
+        </section>
+      </article>
+
+      <article class="card c-ech">
+        <div class="card-head"><h2>Prochaines échéances</h2><a class="link" href="#echeances">Tout voir</a></div>
+        <ul class="rows">
+          ${ech.map((e) => `<li><div class="when">${fmt.jour(e)}<small>${fmt.dans(e.dans)}</small></div><div class="what">${esc(e.libelle)}<small>${esc(e.categorie)}</small></div><div class="amt">${fmt.eur(e.montant)}</div></li>`).join('')}
+        </ul>
+      </article>
+
+      <article class="card c-rep">
+        <div class="card-head"><h2>Achats du quotidien</h2><span class="meta mono">${fmt.eur(d.postes.achats)}</span></div>
+        ${d.repartition.length ? `<ol class="rep">${d.repartition.slice(0, 6).map((r) => `<li><span>${esc(r.label)}<span class="pct">${fmt.pct(r.value / d.postes.achats)}</span>${r.label === 'Courses' && d.ecartCourses > 20 ? `<span class="over">${fmt.signe(d.ecartCourses)} vs habitude</span>` : ''}</span><span class="amt">${fmt.eur(r.value)}</span><span class="bar"><span style="width:${(r.value / d.repartition[0].value * 100).toFixed(1)}%"></span></span></li>`).join('')}</ol>`
+          : `<p class="constat">Aucun achat saisi pour ${d.label} : seuls les prélèvements fixes sont prévus.</p>`}
+      </article>
+
+      <article class="card c-year">
+        <div class="card-head"><h2>Revenus et sorties, ${d.y}</h2><div class="chart-legend" id="legend"></div></div>
+        <div data-chart id="year" style="--chart-1:var(--chart-up);--chart-mark:var(--hue)"></div>
+      </article>
+
+      <div class="c-side">
+        <article class="card">
+          <div class="card-head"><h2>Objectifs d'épargne</h2><a class="link" href="#objectifs">Gérer</a></div>
+          ${d.objectifs.map((o) => `<div class="goal"><div class="goal-top"><span>${esc(o.libelle)}<br><small>${o.atteint ? 'atteint' : `${fmt.eur(o.versementMois)} ce mois · objectif ${o.echeance}`}</small></span><span class="amt">${fmt.pct(o.part)}</span></div><div class="progress" role="img" aria-label="${fmt.eur(o.epargne)} sur ${fmt.eur(o.cible)}"><span style="width:${(o.part * 100).toFixed(1)}%"></span></div><div class="goal-ends"><span class="mono">${fmt.eur0(o.epargne)}</span><span class="mono">${fmt.eur0(o.cible)}</span></div></div>`).join('')}
+        </article>
+        <article class="card">
+          <div class="card-head"><h2>Compte joint</h2><span class="meta mono">${fmt.eur(d.joint.total)}</span></div>
+          <div class="split" role="img" aria-label="Inès ${fmt.pct(d.joint.partMoi)}, Karim ${fmt.pct(d.joint.partPartenaire)}"><span style="flex-grow:${d.joint.partMoi}"></span><span style="flex-grow:${d.joint.partPartenaire}"></span></div>
+          <div class="who"><span>Inès <small>${fmt.pct(d.joint.partMoi)}</small></span><b>${fmt.eur(d.joint.virementMoi)}</b></div>
+          <div class="who" style="margin-top:6px"><span>Karim <small>${fmt.pct(d.joint.partPartenaire)}</small></span><b>${fmt.eur(d.joint.virementPartenaire)}</b></div>
+        </article>
+      </div>
+    </div>`;
+
+  const fig = document.getElementById('fig');
+  if (!first) { const to = d.reste; fig.dataset.value = fig.dataset.value; Theme.tween(fig, to, money); }
+  drawYear(d);
+}
+
+function simText(d, resteSim) {
+  if (!simAmount) return `Saisis un montant pour voir ce qu'il resterait ${d.courant ? `d'ici le ${d.nbJours}` : 'sur le mois'}.`;
+  if (resteSim < 0) return `<span class="neg">Dépassement de ${fmt.eur(-resteSim)}</span> à la fin du mois.`;
+  return `Il resterait <b class="mono">${fmt.eur(resteSim)}</b>${d.joursRestants ? `, soit <b class="mono">${fmt.eur(resteSim / d.joursRestants)}</b> par jour` : ''}.`;
+}
+
+function drawYear(d) {
+  const a = annee();
+  const el = document.getElementById('year');
+  const res = Charts.diverging(el, {
+    labels: a.labels, up: a.revenus, down: a.sorties, above: 'Revenus', below: 'Sorties',
+    mark: [d.m], markLabel: d.label, markSide: 'both', partial: a.prevision,
+    format: Charts.fmt.money('EUR', 0), height: () => (innerWidth < 760 ? 180 : 300),
+  });
+  document.getElementById('legend').replaceChildren(res.legend);
+}
+
+document.addEventListener('click', (e) => {
+  const s = e.target.closest('[data-step]');
+  if (s) {
+    const n = new Date(cur.y, cur.m + Number(s.dataset.step), 1);
+    if (n.getFullYear() !== 2026 || n.getMonth() > 10) return;
+    cur = { y: n.getFullYear(), m: n.getMonth() }; render(); return;
+  }
+  const c = e.target.closest('[data-sim]');
+  if (c) { simAmount = Number(c.dataset.sim); const inp = document.getElementById('sim'); inp.value = c.dataset.sim; updateSim(); }
+});
+document.addEventListener('input', (e) => { if (e.target.id === 'sim') { simAmount = Math.max(0, parseFloat(e.target.value.replace(/\s/g, '').replace(',', '.')) || 0); updateSim(); } });
+function updateSim() {
+  const d = mois(cur.y, cur.m);
+  document.getElementById('sim-out').innerHTML = simText(d, r2(d.reste - simAmount));
+  const track = document.querySelector('.track .reste'), scale = Math.max(d.revenu, d.totalSorties);
+  track.style.flexGrow = Math.max(0, d.reste - simAmount) / scale;
+  const fig = document.getElementById('fig'); Theme.tween(fig, r2(d.reste - simAmount), money, 300);
+  fig.classList.toggle('neg', d.reste - simAmount < 0);
+}
+Theme.onChange(() => { if (document.getElementById('year')) drawYear(mois(cur.y, cur.m)); });
+render(true);
+</script>
+</body>
+</html>

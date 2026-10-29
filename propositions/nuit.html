@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Solde — Nuit</title>
+<meta name="theme-color" content="#0e0d0c">
+<script>(function(){var p='system';try{p=localStorage.getItem('solde-theme')||'system'}catch(e){}var d=p==='dark'||(p==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';})();</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Proposition C — Nuit.
+   Pensée pour le coup d'œil du soir : un noir chaud de maison (#0e0d0c), l'élévation par la seule clarté, aucune bordure
+   sur les cartes. Une seule teinte, un vert tilleul, et uniquement sur les données : la courbe du mois, le reste, la jauge.
+   L'élément central : le rythme du mois, la dépense cumulée jour après jour face au mois précédent.
+   Grille : nav 224 + barre du haut 56 ; canvas 12 colonnes, gouttière 14 px ; à 1440 : 1440 − 224 − 2 × 28 = 1160 = 12 × 83,83 + 11 × 14. */
+:root{
+  --ground:#fbfaf8; --surface:#ffffff; --raised:#f1efec; --active:#e9e6e2;
+  --border:#e8e5e1; --rule:#efece8; --control:#d3cfca;
+  --text:#141210; --muted:#5f5a54; --faint:#6e6862;
+  --primary:#141210; --on-primary:#ffffff;
+  --hue:#4d7c0f; --hue-ink:#3b6108; --hue-soft:#eaf5d3;
+  --positive:#4d7c0f; --negative:#c4242a;
+  --chart-1:#4d7c0f; --chart-2:#b8b2ab; --chart-muted:#d6d1cb; --grid:#efece8; --axis-ink:#6e6862; --ink:#141210;
+  --r-card:20px; --r-in:12px; --gap:14px;
+  --font:"Hanken Grotesk",Inter,system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --ground:#0e0d0c; --surface:#181715; --raised:#242220; --active:#2c2a27;
+  --border:#1f1d1b; --rule:#232120; --control:#45423e;
+  --text:#ffffff; --muted:#b4b0ab; --faint:#959089;
+  --primary:#ffffff; --on-primary:#0e0d0c;
+  --hue:#c6f24e; --hue-ink:#c6f24e; --hue-soft:#222a10;
+  --positive:#c6f24e; --negative:#f0646a;
+  --chart-1:#c6f24e; --chart-2:#6b6762; --chart-muted:#3a3835; --grid:#262422; --axis-ink:#959089; --ink:#ffffff;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --ground:#0e0d0c; --surface:#181715; --raised:#242220; --active:#2c2a27;
+  --border:#1f1d1b; --rule:#232120; --control:#45423e;
+  --text:#ffffff; --muted:#b4b0ab; --faint:#959089;
+  --primary:#ffffff; --on-primary:#0e0d0c;
+  --hue:#c6f24e; --hue-ink:#c6f24e; --hue-soft:#222a10;
+  --positive:#c6f24e; --negative:#f0646a;
+  --chart-1:#c6f24e; --chart-2:#6b6762; --chart-muted:#3a3835; --grid:#262422; --axis-ink:#959089; --ink:#ffffff;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ground);color:var(--text);font:400 14px/20px var(--font);-webkit-font-smoothing:antialiased;min-height:100vh}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+.ico{width:16px;height:16px;flex:none}
+.num{font-variant-numeric:tabular-nums}
+:focus-visible{outline:2px solid var(--hue);outline-offset:2px;border-radius:8px}
+
+.shell{display:grid;grid-template-columns:224px minmax(0,1fr);grid-template-rows:56px 1fr;min-height:100vh}
+.side{grid-row:1/3;border-right:1px solid var(--border);padding:0 12px 16px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.brand{height:56px;display:flex;align-items:center;gap:10px;padding:0 8px;font-weight:600;font-size:16px}
+.brand svg{width:24px;height:24px}
+.side nav{margin-top:12px}
+.side .lbl{font-size:12px;color:var(--faint);padding:0 10px;margin:14px 0 6px}
+.side a{display:flex;align-items:center;gap:10px;height:32px;padding:0 10px;margin-bottom:2px;border-radius:8px;color:var(--muted);text-decoration:none;transition:color .15s,background .15s}
+.side a:hover{color:var(--text);background:var(--raised)}
+.side a[aria-current="page"]{color:var(--text);background:var(--raised)}
+:root[data-theme="dark"] .side a[aria-current="page"]{background:none}
+.side .grow{flex:1}
+.top{display:flex;align-items:center;gap:12px;padding:0 28px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--ground);z-index:10}
+.search{flex:1;max-width:420px;display:flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:999px;background:var(--raised);color:var(--faint)}
+.search input{flex:1;border:0;background:none;outline:0;color:var(--text)}
+.search input::placeholder{color:var(--faint)}
+.search kbd{font:inherit;font-size:12px;color:var(--faint)}
+.top .sp{flex:1}
+.month{display:flex;align-items:center;gap:2px;height:36px;border-radius:999px;background:var(--raised);padding:0 2px}
+.month button{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;color:var(--muted);transition:background .15s,color .15s}
+.month button:hover{background:var(--active);color:var(--text)}
+.month span{min-width:112px;text-align:center;font-weight:500}
+.theme-switch{display:flex;gap:2px;height:36px;padding:2px;border-radius:999px;background:var(--raised)}
+.theme-switch button{width:34px;border-radius:999px;display:grid;place-items:center;color:var(--faint);transition:background .2s,color .2s}
+.theme-switch button:hover{color:var(--text)}
+.theme-switch button[aria-pressed="true"]{background:var(--primary);color:var(--on-primary)}
+.btn{height:36px;padding:0 16px;border-radius:999px;display:inline-flex;align-items:center;gap:6px;font-weight:500;background:var(--primary);color:var(--on-primary);transition:transform .12s,opacity .15s}
+.btn:hover{opacity:.88}.btn:active{transform:scale(.96)}
+.me{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--raised);font-weight:500;font-size:13px}
+.burger{display:none;width:36px;height:36px;place-items:center;border-radius:50%}
+
+.main{padding:24px 28px 56px;min-width:0}
+.head{margin-bottom:18px}
+h1{font-size:20px;line-height:28px;font-weight:600}
+.head p{color:var(--muted);margin-top:2px}
+.head p b{color:var(--text);font-weight:500}
+.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--gap)}
+.card{background:var(--surface);border-radius:var(--r-card);padding:22px;min-width:0}
+:root[data-theme="light"] .card{box-shadow:0 0 0 1px var(--border)}
+.card h2{font-size:16px;line-height:24px;font-weight:600}
+.card-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px}
+.meta{color:var(--faint);font-size:12px}
+.link{color:var(--text);font-weight:500;font-size:13px;text-decoration:none;opacity:.8}
+.link:hover{opacity:1;text-decoration:underline}
+
+/* Le rythme : chiffres en tête, courbe dessous. */
+.pace{grid-column:span 8}
+.figs{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;margin-bottom:18px}
+.figs>div{padding:0 18px;border-left:1px solid var(--rule)}
+.figs>div:first-child{padding-left:0;border:0}
+.figs .l{color:var(--muted);font-size:13px}
+.figs .v{font-size:24px;line-height:32px;font-weight:500;font-variant-numeric:tabular-nums;margin-top:2px;white-space:nowrap}
+.figs .lead .v{font-size:32px;line-height:40px;font-weight:600;color:var(--hue-ink)}
+.figs .lead .v.neg{color:var(--negative)}
+.figs .s{color:var(--faint);font-size:12px;margin-top:2px;white-space:nowrap}
+.figs .s.up{color:var(--negative)}
+.chart-legend{display:flex;gap:16px;font-size:12px;color:var(--muted)}
+.chart-legend span{display:inline-flex;align-items:center;gap:6px}
+[data-chart]{position:relative}
+
+/* Le simulateur : un curseur et la jauge du reste. */
+.side-col{grid-column:span 4;display:grid;gap:var(--gap);align-content:start}
+.sim .amount{font-size:32px;line-height:40px;font-weight:600;font-variant-numeric:tabular-nums;margin:6px 0 12px}
+.sim input[type=range]{width:100%;accent-color:var(--hue);height:28px}
+.sim .ends{display:flex;justify-content:space-between;color:var(--faint);font-size:12px}
+.gauge{height:12px;border-radius:999px;background:var(--raised);overflow:hidden;margin:16px 0 8px;display:flex}
+.gauge span{height:100%;transition:flex-grow .25s ease}
+.gauge .left{background:var(--hue);border-radius:999px}
+.gauge .sim-part{background:repeating-linear-gradient(135deg,var(--chart-2) 0 2px,transparent 2px 5px)} /* taste-skill-ignore: hachure de la dépense simulée */
+.sim-out{color:var(--muted)}
+.sim-out b{color:var(--text);font-weight:500}
+.sim-out .neg{color:var(--negative);font-weight:500}
+.pills{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+.pill{height:30px;padding:0 12px;border-radius:999px;background:var(--raised);font-size:13px;transition:background .15s,transform .12s}
+.pill:hover{background:var(--active)}.pill:active{transform:scale(.95)}
+.pill[aria-pressed="true"]{background:var(--primary);color:var(--on-primary)}
+
+.joint .bar{display:flex;gap:3px;height:8px;margin:4px 0 12px}
+.joint .bar span{border-radius:999px;background:var(--text)}
+.joint .bar span+span{background:var(--chart-2)}
+.joint .row{display:flex;justify-content:space-between;padding:6px 0}
+.joint .row b{font-weight:500;font-variant-numeric:tabular-nums}
+.joint .row small{color:var(--faint);margin-left:6px}
+
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{font-weight:400;font-size:12px;color:var(--faint);text-align:left;padding:0 0 8px}
+.tbl th.r,.tbl td.r{text-align:right}
+.tbl td{padding:0;height:46px;border-top:1px solid var(--rule);white-space:nowrap}
+.tbl td.r{font-variant-numeric:tabular-nums;font-weight:500}
+.tbl td .sub{color:var(--faint);font-size:12px;margin-left:8px}
+.tbl tr{transition:background .15s}
+.tbl tbody tr:hover td{background:var(--raised)}
+.tbl tbody tr td:first-child{padding-left:8px;border-radius:8px 0 0 8px}
+.tbl tbody tr td:last-child{padding-right:8px;border-radius:0 8px 8px 0}
+.tbl th:first-child{padding-left:8px}.tbl th:last-child{padding-right:8px}
+.st{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.st i{width:6px;height:6px;border-radius:50%;background:var(--chart-2)}
+.st.soon{color:var(--text)}.st.soon i{background:var(--hue)}
+
+.c-ech{grid-column:span 7}.c-rep{grid-column:span 5}.c-last{grid-column:span 7}.c-goals{grid-column:span 5}
+.rep{list-style:none;display:grid;gap:12px}
+.rep li{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px}
+.rep .v{font-variant-numeric:tabular-nums;font-weight:500;text-align:right}
+.rep .bar{grid-column:1/-1;height:4px;border-radius:999px;background:var(--raised);margin-top:6px;overflow:hidden}
+.rep .bar span{display:block;height:100%;border-radius:999px;background:var(--chart-2);transition:width .5s cubic-bezier(.2,.7,.2,1)}
+.rep li.hot .bar span{background:var(--negative)}
+.rep .n small{color:var(--faint);margin-left:6px}
+.rep li.hot .n small{color:var(--negative)}
+
+.goal{padding:10px 0}
+.goal+.goal{border-top:1px solid var(--rule)}
+.goal .t{display:flex;justify-content:space-between}
+.goal .t b{font-weight:500;font-variant-numeric:tabular-nums}
+.goal .track{height:8px;border-radius:999px;background:var(--raised);margin:10px 0 6px;overflow:hidden}
+.goal .track span{display:block;height:100%;background:var(--text);border-radius:999px;transition:width .5s}
+.goal .e{display:flex;justify-content:space-between;color:var(--faint);font-size:12px;font-variant-numeric:tabular-nums}
+
+@media (max-width:1100px){
+  .shell{grid-template-columns:minmax(0,1fr)}
+  .search{display:none}
+  .side{display:none}
+  .side.open{display:flex;position:fixed;inset:56px 0 0;height:auto;z-index:30;background:var(--ground);border:0;overflow:auto}
+  .burger{display:grid}
+  .pace,.side-col,.c-ech,.c-rep,.c-last,.c-goals{grid-column:1/-1}
+  .side-col{grid-template-columns:1fr 1fr}
+}
+@media (max-width:720px){
+  .top{padding:0 12px;gap:8px}
+  .search,.btn span,.me{display:none}
+  .btn{width:36px;padding:0;justify-content:center}
+  .month span{min-width:92px;font-size:13px}
+  .main{padding:16px 16px 40px}
+  .card{padding:18px}
+  .figs{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 0}
+  .figs .lead{grid-column:1/-1}
+  .figs>div{padding:0 10px}
+  .figs>div:nth-child(2){padding-left:0;border:0}
+  .figs .v{font-size:20px;line-height:28px}
+  .tbl td .sub{display:none}
+  .tbl td{white-space:normal}
+  .card-head{flex-wrap:wrap}
+  .side-col{grid-template-columns:1fr}
+  .tbl .hide-s{display:none}
+}
+@media (prefers-reduced-motion: reduce){ *{transition:none !important} }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="side" id="side">
+    <div class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M12 1.5a10.5 10.5 0 0 1 0 21Z" fill="var(--hue)"/></svg>Solde</div>
+    <nav aria-label="Navigation principale"><div class="lbl">Finance</div><div id="nav"></div></nav>
+    <div class="grow"></div>
+    <a href="#parametres" id="settings"></a>
+  </aside>
+  <header class="top">
+    <button class="burger" id="burger" aria-label="Ouvrir la navigation" aria-expanded="false"></button>
+    <label class="search"><span id="s-ico"></span><input placeholder="Chercher une dépense, un libellé…" aria-label="Chercher"><kbd>/</kbd></label>
+    <span class="sp"></span>
+    <div class="month"><button data-step="-1" aria-label="Mois précédent" id="prev"></button><span id="mlabel" aria-live="polite"></span><button data-step="1" aria-label="Mois suivant" id="next"></button></div>
+    <span id="theme"></span>
+    <button class="btn" aria-label="Ajouter une dépense" id="add"></button>
+    <span class="me" title="Inès">I</span>
+  </header>
+  <main class="main" id="main"></main>
+</div>
+<script src="shared/data.js"></script>
+<script src="shared/theme.js"></script>
+<script src="shared/charts.js"></script>
+<script>
+const { mois, echeances, fmt, icon, esc, NAV, TODAY, r2, MOIS_COURT } = Solde;
+let cur = { y: TODAY.y, m: TODAY.m }, simAmount = 0;
+document.getElementById('nav').innerHTML = NAV.map((n, i) => `<a href="#${n.id}" ${i === 0 ? 'aria-current="page"' : ''}>${icon(n.icon)}${n.label}</a>`).join('');
+document.getElementById('settings').innerHTML = icon('settings') + 'Paramètres';
+document.getElementById('s-ico').innerHTML = icon('search');
+document.getElementById('prev').innerHTML = icon('chevL'); document.getElementById('next').innerHTML = icon('chevR');
+document.getElementById('add').innerHTML = icon('plus') + '<span>Dépense</span>';
+document.getElementById('burger').innerHTML = icon('menu');
+document.getElementById('theme').innerHTML = Theme.control({ labels: false });
+document.getElementById('burger').addEventListener('click', (e) => { const o = document.getElementById('side').classList.toggle('open'); e.currentTarget.setAttribute('aria-expanded', o); e.currentTarget.innerHTML = icon(o ? 'close' : 'menu'); });
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
+
+function render(first) {
+  const d = mois(cur.y, cur.m), neg = d.reste < 0;
+  const prev = cur.m > 0 ? mois(cur.y, cur.m - 1) : null;
+  document.getElementById('mlabel').textContent = cap(d.label);
+  const jour = d.courant ? TODAY.d : d.nbJours;
+  const depAuJour = d.futur ? 0 : d.cumul[jour - 1];
+  const prevAuJour = prev ? prev.cumul[Math.min(jour, prev.nbJours) - 1] : null;
+  const ecart = prevAuJour != null && !d.futur ? r2(depAuJour - prevAuJour) : null;
+  const old = document.getElementById('fig')?.dataset.value;
+  const ech = echeances(5);
+  const tickets = d.sorties.filter((s) => s.poste === 'achats').slice(-5).reverse();
+  const maxRep = d.repartition[0]?.value || 1;
+  const head = d.courant ? `Au ${TODAY.d}, tu as dépensé <b>${fmt.eur(depAuJour)}</b>, ${ecart > 0 ? `<b>${fmt.eur(ecart)} de plus</b>` : `<b>${fmt.eur(-ecart)} de moins</b>`} qu'en ${prev.nom} au même jour. Les courses expliquent l'essentiel.`
+    : d.passe ? `${cap(d.nom)} est clos : ${fmt.eur(d.totalSorties)} sortis, ${fmt.signe(d.reste)} à la fin.` : `${cap(d.nom)} n'a pas commencé : ${fmt.eur(d.totalSorties)} de prélèvements déjà prévus.`;
+
+  document.getElementById('main').innerHTML = `
+    <div class="head"><h1>Tableau de bord</h1><p>${head}</p></div>
+    <div class="grid">
+      <section class="card pace" aria-labelledby="t-pace">
+        <div class="figs">
+          <div class="lead"><h2 class="l" id="t-pace" style="font-weight:400;font-size:13px">${neg ? 'Dépassement' : 'Reste à vivre'}</h2><div class="v ${neg ? 'neg' : ''}" id="fig" data-value="${old ?? d.reste}">${fmt.eur(old != null ? Number(old) : d.reste)}</div><div class="s">${d.parJour != null ? `${fmt.eur(d.parJour)} par jour, ${fmt.plural(d.joursRestants, 'jour', 'jours')}` : 'mois clos'}</div></div>
+          <div><div class="l">Dépensé au ${jour}</div><div class="v">${fmt.eur0(depAuJour)}</div><div class="s ${ecart > 0 ? 'up' : ''}">${ecart == null ? '—' : `${fmt.signe(ecart)} vs ${MOIS_COURT[prev.m]}`}</div></div>
+          <div><div class="l">À venir</div><div class="v">${fmt.eur0(d.engage)}</div><div class="s">${fmt.plural(d.aVenir.length, 'prélèvement', 'prélèvements')}</div></div>
+          <div><div class="l">Revenu</div><div class="v">${fmt.eur0(d.revenu)}</div><div class="s">le 1<sup>er</sup> du mois</div></div>
+        </div>
+        <div class="card-head" style="margin-bottom:4px"><h2 style="font-weight:500;font-size:14px">Dépense cumulée, jour par jour</h2><div class="chart-legend" id="legend"></div></div>
+        <div data-chart id="chart"></div>
+      </section>
+
+      <div class="side-col">
+        <section class="card sim" aria-labelledby="t-sim">
+          <h2 id="t-sim">Et si je dépense…</h2>
+          ${d.passe ? `<p class="sim-out" style="margin-top:8px">Le mois est clos ; choisis octobre ou novembre pour simuler.</p>` : `
+          <div class="amount" id="sim-amt">${fmt.eur(simAmount)}</div>
+          <input type="range" id="sim" min="0" max="300" step="5" value="${simAmount}" aria-label="Montant de la dépense" aria-describedby="sim-out">
+          <div class="ends"><span>0 €</span><span>300 €</span></div>
+          <div class="gauge" aria-hidden="true"><span class="left" id="g-left"></span><span class="sim-part" id="g-sim"></span></div>
+          <p class="sim-out" id="sim-out" aria-live="polite"></p>
+          <div class="pills">${[['Un plein', 70], ['Courses de la semaine', 95], ['Un resto à deux', 60]].map(([l, v]) => `<button class="pill" data-sim="${v}" aria-pressed="${simAmount === v}">${l} · ${v} €</button>`).join('')}</div>`}
+        </section>
+        <section class="card joint" aria-labelledby="t-joint">
+          <div class="card-head"><h2 id="t-joint">Compte joint</h2><span class="meta num">${fmt.eur(d.joint.total)} / mois</span></div>
+          <div class="bar" role="img" aria-label="Inès ${fmt.pct(d.joint.partMoi)}, Karim ${fmt.pct(d.joint.partPartenaire)}"><span style="flex-grow:${d.joint.partMoi}"></span><span style="flex-grow:${d.joint.partPartenaire}"></span></div>
+          <div class="row"><span>Inès<small>${fmt.pct(d.joint.partMoi)}</small></span><b>${fmt.eur(d.joint.virementMoi)}</b></div>
+          <div class="row"><span>Karim<small>${fmt.pct(d.joint.partPartenaire)}</small></span><b>${fmt.eur(d.joint.virementPartenaire)}</b></div>
+        </section>
+      </div>
+
+      <section class="card c-ech" aria-labelledby="t-ech">
+        <div class="card-head"><h2 id="t-ech">Prochains prélèvements</h2><a class="link" href="#echeances">Tout voir</a></div>
+        <table class="tbl"><thead><tr><th>Date</th><th>Libellé</th><th class="hide-s">Poste</th><th class="r">Montant</th></tr></thead>
+        <tbody>${ech.map((e) => `<tr><td><span class="st ${e.dans <= 2 ? 'soon' : ''}"><i></i>${fmt.jour(e)}</span></td><td>${esc(e.libelle)}<span class="sub">${fmt.dans(e.dans)}</span></td><td class="hide-s" style="color:var(--muted)">${esc(e.categorie)}</td><td class="r">${fmt.eur(e.montant)}</td></tr>`).join('')}</tbody></table>
+      </section>
+
+      <section class="card c-rep" aria-labelledby="t-rep">
+        <div class="card-head"><h2 id="t-rep">Où part le quotidien</h2><span class="meta num">${fmt.eur(d.postes.achats)}</span></div>
+        ${d.repartition.length ? `<ol class="rep">${d.repartition.slice(0, 5).map((r) => { const hot = r.label === 'Courses' && d.ecartCourses > 20; return `<li class="${hot ? 'hot' : ''}"><span class="n">${esc(r.label)}<small>${hot ? `${fmt.signe(d.ecartCourses)} vs habitude` : fmt.pct(r.value / d.postes.achats)}</small></span><span class="v">${fmt.eur(r.value)}</span><span class="bar"><span style="width:${(r.value / maxRep * 100).toFixed(1)}%"></span></span></li>`; }).join('')}</ol>` : `<p class="sim-out">Aucun achat saisi pour ${d.label}.</p>`}
+      </section>
+
+      <section class="card c-last" aria-labelledby="t-last">
+        <div class="card-head"><h2 id="t-last">Derniers achats</h2><a class="link" href="#depenses">Toutes les dépenses</a></div>
+        ${tickets.length ? `<table class="tbl"><thead><tr><th>Jour</th><th>Où</th><th class="hide-s">Catégorie</th><th class="r">Montant</th></tr></thead><tbody>${tickets.map((t) => `<tr><td>${t.jour} ${MOIS_COURT[d.m]}</td><td>${esc(t.libelle)}</td><td class="hide-s" style="color:var(--muted)">${esc(t.categorie)}</td><td class="r">${fmt.eur(t.montant)}</td></tr>`).join('')}</tbody></table>` : `<p class="sim-out">Pas encore d'achat ce mois-ci.</p>`}
+      </section>
+
+      <section class="card c-goals" aria-labelledby="t-goals">
+        <div class="card-head"><h2 id="t-goals">Objectifs</h2><a class="link" href="#objectifs">Gérer</a></div>
+        ${d.objectifs.map((o) => `<div class="goal"><div class="t"><span>${esc(o.libelle)}</span><b>${fmt.pct(o.part)}</b></div><div class="track" role="img" aria-label="${fmt.eur(o.epargne)} sur ${fmt.eur(o.cible)}"><span style="width:${(o.part * 100).toFixed(1)}%"></span></div><div class="e"><span>${fmt.eur0(o.epargne)} · +${fmt.eur0(o.versementMois)} ce mois</span><span>${fmt.eur0(o.cible)} en ${o.echeance}</span></div></div>`).join('')}
+        <div class="goal"><div class="t"><span>Mis de côté ce mois-ci</span><b>${fmt.eur(d.postes.epargne)}</b></div></div>
+      </section>
+    </div>`;
+  const fig = document.getElementById('fig');
+  if (first) { fig.textContent = fmt.eur(d.reste); fig.dataset.value = d.reste; } else Theme.tween(fig, d.reste, fmt.eur);
+  if (!d.passe) updateSim(true);
+  drawChart(d, prev);
+}
+
+function drawChart(d, prev) {
+  const labels = Array.from({ length: d.nbJours }, (_, i) => `${i + 1} ${MOIS_COURT[d.m]}`);
+  const series = [{ name: cap(d.nom), values: d.cumul }];
+  if (prev) series.push({ name: `${cap(prev.nom)}`, values: labels.map((_, i) => prev.cumul[Math.min(i, prev.nbJours - 1)]), colour: getComputedStyle(document.documentElement).getPropertyValue('--chart-2').trim() });
+  Charts.line(document.getElementById('chart'), {
+    labels, series, format: Charts.fmt.money('EUR', 0), height: () => (innerWidth < 720 ? 190 : 300),
+    today: d.courant ? TODAY.d - 1 : null, todayLabel: "Aujourd'hui", xAt: [0, 6, 13, 20, 27].filter((i) => i < d.nbJours),
+    reference: { value: d.revenu, label: `Revenu ${fmt.eur0(d.revenu)}` },
+    legend: document.getElementById('legend'),
+  });
+}
+function updateSim(silent) {
+  const d = mois(cur.y, cur.m), r = r2(d.reste - simAmount);
+  const tot = Math.max(d.reste, simAmount, 1);
+  document.getElementById('sim-amt').textContent = fmt.eur(simAmount);
+  document.getElementById('g-left').style.flexGrow = Math.max(0, r) / tot;
+  document.getElementById('g-sim').style.flexGrow = Math.min(simAmount, Math.max(d.reste, 0)) / tot;
+  document.getElementById('sim-out').innerHTML = !simAmount ? `Fais glisser pour voir ce qu'il resterait sur ${fmt.eur(d.reste)}.`
+    : r < 0 ? `<span class="neg">Dépassement de ${fmt.eur(-r)}</span> à la fin du mois.`
+    : `Il resterait <b>${fmt.eur(r)}</b>${d.joursRestants ? `, soit <b>${fmt.eur(r / d.joursRestants)}</b> par jour` : ''}.`;
+  document.querySelectorAll('.pill').forEach((p) => p.setAttribute('aria-pressed', String(Number(p.dataset.sim) === simAmount)));
+  if (!silent) { const fig = document.getElementById('fig'); Theme.tween(fig, r, fmt.eur, 260); fig.classList.toggle('neg', r < 0); }
+}
+document.addEventListener('click', (e) => {
+  const s = e.target.closest('[data-step]');
+  if (s) { const n = new Date(cur.y, cur.m + Number(s.dataset.step), 1); if (n.getFullYear() !== 2026 || n.getMonth() > 10) return; cur = { y: 2026, m: n.getMonth() }; render(); return; }
+  const p = e.target.closest('[data-sim]'); if (p) { simAmount = Number(p.dataset.sim); document.getElementById('sim').value = simAmount; updateSim(); }
+});
+document.addEventListener('input', (e) => { if (e.target.id === 'sim') { simAmount = Number(e.target.value); updateSim(); } });
+document.addEventListener('keydown', (e) => { if (e.key === '/' && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); document.querySelector('.search input').focus(); } });
+Theme.onChange(() => { if (document.getElementById('chart')) drawChart(mois(cur.y, cur.m), cur.m > 0 ? mois(cur.y, cur.m - 1) : null); });
+render(true);
+</script>
+</body>
+</html>
