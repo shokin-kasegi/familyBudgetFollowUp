@@ -510,6 +510,11 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
 
 /* ---------- Messagerie ---------- */
 .messages-list{display:flex;flex-direction:column;gap:10px;max-height:280px;overflow-y:auto;padding:4px 2px;}
+
+/* ---------- Mouvement réduit ---------- */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important;scroll-behavior:auto !important;}
+}
 </style>
 </head>
 <body>
@@ -517,11 +522,11 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
 <div id="auth-root"></div>
 <div id="shell">
   <nav class="sidebar" id="sidebar"></nav>
-  <button class="sidebar-expand-btn" data-action="toggle-sidebar-collapse" title="Afficher la navigation"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+  <button class="sidebar-expand-btn" data-action="toggle-sidebar-collapse" title="Afficher la navigation" aria-label="Afficher la navigation"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
   <div id="overlay-scrim"></div>
   <main>
     <div class="mobile-topbar">
-      <button id="burger"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+      <button id="burger" aria-label="Ouvrir la navigation"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
       <span class="display" style="font-weight:600;font-size:15px;" id="mobile-title">Solde</span>
       <span style="width:22px;"></span>
     </div>
@@ -529,14 +534,14 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
   </main>
 </div>
 
-<button id="claude-fab" style="display:none;">
-  <svg viewBox="0 0 24 24"><path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.97-4.03 9-9 9-1.5 0-2.9-.36-4.14-1L3 21l1.14-3.6A8.96 8.96 0 0 1 3 12c0-4.97 4.03-9 9-9s9 4.03 9 9Z"/></svg>
+<button id="claude-fab" style="display:none;" aria-label="Ouvrir l'assistant">
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.97-4.03 9-9 9-1.5 0-2.9-.36-4.14-1L3 21l1.14-3.6A8.96 8.96 0 0 1 3 12c0-4.97 4.03-9 9-9s9 4.03 9 9Z"/></svg>
 </button>
 <div id="claude-panel"></div>
 <div id="notif-panel"></div>
 
 <div id="modal-root"></div>
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 
 <script>
@@ -583,7 +588,7 @@ const ICONS = {
   eyeOff:'<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.9 19.9 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a19.9 19.9 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
   message:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>'
 };
-function icon(name){ return `<svg viewBox="0 0 24 24">${ICONS[name]||''}</svg>`; }
+function icon(name){ return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${ICONS[name]||''}</svg>`; }
 
 /* ============================== STATE ============================== */
 // Email de contact recevant les demandes de création de compte — à renseigner.
@@ -1314,7 +1319,7 @@ function renderSidebar(){
     <div class="brand">
       <div class="brand-mark">${icon('logo')}</div>
       <div><div class="brand-name">Solde</div><div class="brand-sub">Budget personnel</div></div>
-      <button class="icon-btn" data-action="toggle-sidebar-collapse" title="Masquer la navigation" style="margin-left:auto;">${icon('chevL')}</button>
+      <button class="icon-btn" data-action="toggle-sidebar-collapse" title="Masquer la navigation" style="margin-left:auto;" aria-label="Masquer la navigation">${icon('chevL')}</button>
     </div>
     <div class="space-switch">
       ${SPACES.map(s=>`<button class="space-switch-btn ${currentSpace===s.id?'active':''}" data-action="switch-space" data-space="${s.id}">${icon(s.icon)}${s.label}</button>`).join('')}
@@ -1326,7 +1331,7 @@ function renderSidebar(){
     <div class="sidebar-user">
       <div class="avatar" style="background:${avatarColor(me)}">${initials(me)}</div>
       <div class="info"><div class="name">${me?me.displayName:''}</div><div class="role">${me?me.role:''}</div></div>
-      <button class="icon-btn" data-action="logout" title="Se déconnecter">${icon('logout')}</button>
+      <button class="icon-btn" data-action="logout" title="Se déconnecter" aria-label="Se déconnecter">${icon('logout')}</button>
     </div>
     <div class="sidebar-foot">Données stockées sur cet appareil, synchronisées via GitHub si connecté.</div>
   `;
@@ -1351,10 +1356,11 @@ function avatarColor(u){
 function openModal(title, fields, values, onSave, extraHtml){
   const root = document.getElementById('modal-root');
   const isEdit = !!(values && values.id);
+  if(!document.querySelector('#modal-root .modal')) modalReturnFocus = document.activeElement;
   root.innerHTML = `
     <div class="modal-overlay" id="ov">
-      <div class="modal">
-        <h3>${title}</h3>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <h3 id="modal-title">${title}</h3>
         <form id="modal-form">
           ${fields.map(f=>fieldHTML(f, values)).join('')}
           ${extraHtml||''}
@@ -1408,25 +1414,25 @@ function openModal(title, fields, values, onSave, extraHtml){
     if(result===false) return;
     closeModal();
   };
-  setTimeout(()=>{ const first = document.querySelector('#modal-form input:not([type=hidden]),#modal-form select'); if(first) first.focus(); }, 50);
+  setTimeout(()=>{ const first = document.querySelector('#modal-form input:not([type=hidden]),#modal-form select') || document.getElementById('del-yes') || modalFocusables()[0]; if(first) first.focus(); }, 50);
 }
 function fieldHTML(f, values){
   const val = values && values[f.key]!==undefined && values[f.key]!==null ? values[f.key] : (f.default!==undefined?f.default:'');
   const hiddenAttr = f.showIf && !f.showIf(values||{}) ? ' hidden' : '';
   if(f.type==='select'){
     const opts = f.options.map(o=> typeof o==='object' ? o : {value:o, label:o});
-    return `<div class="field"${hiddenAttr}><label>${f.label}</label><select id="f_${f.key}">${opts.map(o=>`<option value="${o.value}" ${String(o.value)===String(val)?'selected':''}>${o.label}</option>`).join('')}</select></div>`;
+    return `<div class="field"${hiddenAttr}><label for="f_${f.key}">${f.label}</label><select id="f_${f.key}">${opts.map(o=>`<option value="${o.value}" ${String(o.value)===String(val)?'selected':''}>${o.label}</option>`).join('')}</select></div>`;
   }
   if(f.type==='category'){
     return categoryFieldHTML(f, val, hiddenAttr);
   }
   if(f.type==='checkbox'){
-    return `<div class="field"${hiddenAttr} style="display:flex;align-items:center;gap:9px;"><input id="f_${f.key}" type="checkbox" ${val?'checked':''} style="width:16px;height:16px;accent-color:#FFFFFF;"><label style="margin:0;font-size:13px;color:var(--text);">${f.label}</label></div>`;
+    return `<div class="field"${hiddenAttr} style="display:flex;align-items:center;gap:9px;"><input id="f_${f.key}" type="checkbox" ${val?'checked':''} style="width:16px;height:16px;accent-color:#FFFFFF;"><label for="f_${f.key}" style="margin:0;font-size:13px;color:var(--text);">${f.label}</label></div>`;
   }
   if(f.type==='password'){
-    return `<div class="field"${hiddenAttr}><label>${f.label}</label><div class="pw-wrap"><input id="f_${f.key}" type="password" value="${val||''}" placeholder="${f.placeholder||''}" autocomplete="${f.autocomplete||'current-password'}"><button type="button" class="pw-toggle" data-toggle-pw="f_${f.key}">${icon('eye')}</button></div></div>`;
+    return `<div class="field"${hiddenAttr}><label for="f_${f.key}">${f.label}</label><div class="pw-wrap"><input id="f_${f.key}" type="password" value="${val||''}" placeholder="${f.placeholder||''}" autocomplete="${f.autocomplete||'current-password'}"><button type="button" class="pw-toggle" data-toggle-pw="f_${f.key}" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>`;
   }
-  return `<div class="field"${hiddenAttr}><label>${f.label}</label><input id="f_${f.key}" type="${f.type||'text'}" ${f.step?`step="${f.step}"`:''} value="${val===0?0:(val||'')}" placeholder="${f.placeholder||''}"></div>`;
+  return `<div class="field"${hiddenAttr}><label for="f_${f.key}">${f.label}</label><input id="f_${f.key}" type="${f.type||'text'}" ${f.step?`step="${f.step}"`:''} value="${val===0?0:(val||'')}" placeholder="${f.placeholder||''}"></div>`;
 }
 function attrEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
 // Champ « Catégorie » personnalisable : au lieu d'un <select> figé, un menu
@@ -1436,10 +1442,10 @@ function attrEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/
 function categoryFieldHTML(f, val, hiddenAttr){
   const hasVal = val!==undefined && val!==null && val!=='';
   return `<div class="field cat-field"${hiddenAttr||''} data-cat-type="${f.categoryType}" data-cat-key="${f.key}">
-    <label>${f.label}</label>
+    <label id="lbl_${f.key}">${f.label}</label>
     <input type="hidden" id="f_${f.key}" value="${attrEsc(val)}">
     <div class="cat-select">
-      <button type="button" class="cat-select-btn" data-cat-toggle>
+      <button type="button" class="cat-select-btn" data-cat-toggle aria-expanded="false" aria-labelledby="lbl_${f.key}">
         <span class="cat-select-label ${hasVal?'':'is-placeholder'}">${hasVal?val:'Choisir une catégorie'}</span>
         ${icon('chevD')}
       </button>
@@ -1456,15 +1462,15 @@ function categoryDropdownListHTML(type, currentValue){
   const rows = cats.map(c=>`
     <div class="cat-option ${c.nom===currentValue?'is-selected':''}">
       <span class="cat-option-label" data-cat-select="${attrEsc(c.nom)}">${c.nom}</span>
-      <button type="button" class="cat-option-del" data-cat-delete="${c.id}" title="Supprimer cette catégorie">${icon('x')}</button>
+      <button type="button" class="cat-option-del" data-cat-delete="${c.id}" title="Supprimer cette catégorie" aria-label="Supprimer cette catégorie">${icon('x')}</button>
     </div>`).join('');
   const empty = cats.length===0 ? `<div class="field-note" style="padding:8px 9px;">Aucune catégorie pour l'instant.</div>` : '';
   return `${ghost}${rows}${empty}
     <div class="cat-add-row" data-cat-add-toggle>${icon('plus')}<span>Autre…</span></div>
     <div class="cat-add-input-row" hidden>
       <input type="text" class="cat-add-input" placeholder="Nouvelle catégorie" maxlength="40">
-      <button type="button" class="cat-add-confirm" data-cat-add-confirm title="Ajouter">${icon('check')}</button>
-      <button type="button" class="cat-add-cancel" data-cat-add-cancel title="Annuler">${icon('x')}</button>
+      <button type="button" class="cat-add-confirm" data-cat-add-confirm title="Ajouter" aria-label="Ajouter">${icon('check')}</button>
+      <button type="button" class="cat-add-cancel" data-cat-add-cancel title="Annuler" aria-label="Annuler">${icon('x')}</button>
     </div>`;
 }
 function resetCatDropdown(wrap){
@@ -1472,8 +1478,19 @@ function resetCatDropdown(wrap){
   const inputRow = wrap.querySelector('.cat-add-input-row');
   if(addRow) addRow.hidden = false;
   if(inputRow) inputRow.hidden = true;
+  wrap.querySelector('[data-cat-toggle]')?.setAttribute('aria-expanded', String(wrap.classList.contains('open')));
 }
-function closeModal(){ document.getElementById('modal-root').innerHTML=''; }
+// Élément qui avait le focus avant l'ouverture de la modale : on le lui rend à la fermeture.
+let modalReturnFocus = null;
+function closeModal(){
+  document.getElementById('modal-root').innerHTML='';
+  if(modalReturnFocus && modalReturnFocus.isConnected) modalReturnFocus.focus();
+  modalReturnFocus = null;
+}
+function modalFocusables(){
+  return Array.from(document.querySelectorAll('#modal-root .modal :is(button, input, select, textarea, [tabindex]:not([tabindex="-1"]))'))
+    .filter(el=>!el.disabled && el.type!=='hidden' && el.offsetParent!==null);
+}
 function markFieldError(key, msg){
   const input = document.getElementById('f_'+key);
   const field = input?.closest('.field');
@@ -1662,17 +1679,17 @@ function renderDashboard(){
 }
 function monthStepperHTML(key, target){
   return `<div class="stepper">
-    <button data-stepper="${target}" data-dir="-1">${icon('chevL')}</button>
+    <button data-stepper="${target}" data-dir="-1" aria-label="Mois précédent">${icon('chevL')}</button>
     <span class="label display">${monthLabel(key)}</span>
-    <button data-stepper="${target}" data-dir="1">${icon('chevR')}</button>
+    <button data-stepper="${target}" data-dir="1" aria-label="Mois suivant">${icon('chevR')}</button>
   </div>`;
 }
 function yearStepperHTML(year, target){
   target = target || 'annuelle';
   return `<div class="stepper">
-    <button data-year-step="-1" data-year-target="${target}">${icon('chevL')}</button>
+    <button data-year-step="-1" data-year-target="${target}" aria-label="Année précédente">${icon('chevL')}</button>
     <span class="label display">${year}</span>
-    <button data-year-step="1" data-year-target="${target}">${icon('chevR')}</button>
+    <button data-year-step="1" data-year-target="${target}" aria-label="Année suivante">${icon('chevR')}</button>
   </div>`;
 }
 
@@ -1759,7 +1776,7 @@ function chartFilterButtonHTML(chartKey, secondDimLabel){
   const active = chartFilterActive(chartKey);
   const isOpen = chartFilterOpen === chartKey;
   return `<span class="th-filter-wrap chart-filter-wrap">
-    <button class="th-filter-btn ${active?'active':''}" data-action="toggle-chart-filter" data-chart="${chartKey}" title="Filtrer le graphique">${icon('filterDown')}</button>
+    <button class="th-filter-btn ${active?'active':''}" data-action="toggle-chart-filter" data-chart="${chartKey}" title="Filtrer le graphique" aria-label="Filtrer le graphique">${icon('filterDown')}</button>
     ${isOpen ? chartFilterPanelHTML(chartKey, secondDimLabel) : ''}
   </span>`;
 }
@@ -1914,7 +1931,7 @@ function renderRevenus(){
           <td>${r.libelle}</td><td><span class="pill pill-dim">${r.categorie}</span></td>
           <td class="num" style="color:var(--teal)">${fmtEUR(r.montant)}</td>
           <td>${fmtDate(r.dateDebut)}</td><td>${r.dateFin?fmtDate(r.dateFin):'Illimité'}</td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-revrec" data-id="${r.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-revrec" data-id="${r.id}">${icon('trash')}</button></td>
+          <td class="row-actions"><button class="icon-btn" data-action="edit-revrec" data-id="${r.id}" aria-label="Modifier">${icon('edit')}</button><button class="icon-btn del" data-action="del-revrec" data-id="${r.id}" aria-label="Supprimer">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
         <tfoot><tr><td colspan="2">Total mensuel</td><td class="num" style="color:var(--teal)">${fmtEUR(rr.reduce((s,r)=>s+Number(r.montant),0))}</td><td colspan="3"></td></tr></tfoot>
       </table></div>`)}
@@ -1937,7 +1954,7 @@ function renderRevenus(){
         <tbody>${re.map(r=>`<tr>
           <td>${fmtDate(r.date)}</td><td>${r.libelle}</td><td><span class="pill pill-dim">${r.categorie}</span></td>
           <td class="num" style="color:${r.montant>=0?'var(--teal)':'var(--coral)'}">${fmtEUR(r.montant)}</td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-revexc" data-id="${r.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-revexc" data-id="${r.id}">${icon('trash')}</button></td>
+          <td class="row-actions"><button class="icon-btn" data-action="edit-revexc" data-id="${r.id}" aria-label="Modifier">${icon('edit')}</button><button class="icon-btn del" data-action="del-revexc" data-id="${r.id}" aria-label="Supprimer">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
       </table></div>`)}
     </div>
@@ -2026,7 +2043,7 @@ function colFilterHeaderHTML(table, columns, col, arr){
   const f = tableFilterState(table);
   const active = !!f.selected[col] || f.sortCol===col;
   const isOpen = colFilterOpen && colFilterOpen.table===table && colFilterOpen.col===col;
-  return `<th><span class="th-filter-wrap">${c.label}<button class="th-filter-btn ${active?'active':''}" data-action="toggle-col-filter" data-table="${table}" data-col="${col}">${icon('filterDown')}</button>${isOpen ? colFilterPanelHTML(table, columns, col, arr) : ''}</span></th>`;
+  return `<th><span class="th-filter-wrap">${c.label}<button class="th-filter-btn ${active?'active':''}" data-action="toggle-col-filter" data-table="${table}" data-col="${col}" aria-label="Filtrer ou trier la colonne">${icon('filterDown')}</button>${isOpen ? colFilterPanelHTML(table, columns, col, arr) : ''}</span></th>`;
 }
 function colFilterPanelHTML(table, columns, col, arr){
   const c = columns[col];
@@ -2108,7 +2125,7 @@ function renderDepenses(){
           <td class="num">${fmtEURPrecise(monthlyCost(d))}</td>
           <td>${d.compte}</td>
           <td><button class="pill ${d.statut==='Actif'?'pill-teal':'pill-dim'}" data-action="toggle-depense-statut" data-id="${d.id}" style="cursor:pointer;">${d.statut}</button></td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-depense" data-id="${d.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}">${icon('trash')}</button></td>
+          <td class="row-actions"><button class="icon-btn" data-action="edit-depense" data-id="${d.id}" aria-label="Modifier">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}" aria-label="Supprimer">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
         <tfoot><tr><td colspan="2">Total mensuel (actives)</td><td class="num" style="color:var(--violet)">${fmtEUR(abonnementsTotalMensuel())}</td><td colspan="4"></td></tr></tfoot>
       </table></div>`}
@@ -2124,7 +2141,7 @@ function renderDepenses(){
           <td>${d.libelle}</td><td><span class="pill pill-dim">${d.categorie}</span></td>
           <td><span class="pill ${prioritePillClass(d.priorite)}">${d.priorite||'Basse'}</span></td>
           <td class="num">${fmtEUR(d.montant)}</td>
-          <td class="row-actions"><button class="btn btn-ghost btn-sm" data-action="plan-depense" data-id="${d.id}">${icon('calendar')}Planifier une date</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}">${icon('trash')}</button></td>
+          <td class="row-actions"><button class="btn btn-ghost btn-sm" data-action="plan-depense" data-id="${d.id}">${icon('calendar')}Planifier une date</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}" aria-label="Supprimer">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
       </table></div>
     </div>` : ''}
@@ -2150,7 +2167,7 @@ function renderDepenses(){
           <td>${echelonne ? `Échelonné (${depenseNbMensualites(d)}x)` : 'En une fois'}</td>
           <td class="num">${fmtEUR(d.montant)}</td>
           <td class="num">${fmtEURPrecise(depenseMensualiteDuMois(d,key))}</td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-depense" data-id="${d.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}">${icon('trash')}</button></td>
+          <td class="row-actions"><button class="icon-btn" data-action="edit-depense" data-id="${d.id}" aria-label="Modifier">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}" aria-label="Supprimer">${icon('trash')}</button></td>
         </tr>`;}).join('')}</tbody>
         <tfoot><tr><td colspan="5">${tableFilterActive('depenses')?'Total (filtré)':'Total'} ${monthLabel(key)}</td><td class="num">${fmtEUR(list.reduce((s,d)=>s+depenseMensualiteDuMois(d,key),0))}</td><td></td></tr></tfoot>
       </table></div>`)}
@@ -2397,7 +2414,7 @@ function renderEchSummary(d, key){
           ? `<button class="btn btn-ghost btn-sm" data-action="ech-reintegrer-mois" data-id="${d.id}">${icon('refresh')}Réintégrer ce mois</button>`
           : `<button class="btn btn-ghost btn-sm" data-action="ech-retirer-mois" data-id="${d.id}">${icon('x')}Retirer ce mois</button>`) : ''}
         ${!done ? `<button class="btn btn-ghost btn-sm" data-action="ech-add-versement" data-id="${d.id}">${icon('wallet')}Verser</button>` : ''}
-        <button class="icon-btn" data-action="edit-depense" data-id="${d.id}">${icon('edit')}</button>
+        <button class="icon-btn" data-action="edit-depense" data-id="${d.id}" aria-label="Modifier">${icon('edit')}</button>
       </div>
     </div>
   `;
@@ -2461,7 +2478,7 @@ function renderEchVersements(d, key){
         <tbody>${versList.map(v=>`<tr>
           <td>${fmtDate(v.date)}</td>
           <td class="num" style="color:var(--teal)">${fmtEUR(v.montant)}</td><td class="wrap">${v.note||'—'}</td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-ech-versement" data-id="${v.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-ech-versement" data-id="${v.id}">${icon('trash')}</button></td>
+          <td class="row-actions"><button class="icon-btn" data-action="edit-ech-versement" data-id="${v.id}" aria-label="Modifier">${icon('edit')}</button><button class="icon-btn del" data-action="del-ech-versement" data-id="${v.id}" aria-label="Supprimer">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
         <tfoot><tr><td>Total versé ce mois</td><td class="num" style="color:var(--teal)">${fmtEUR(versAll.reduce((s,v)=>s+Number(v.montant),0))}</td><td colspan="2"></td></tr></tfoot>
       </table></div>`)}
@@ -2553,8 +2570,8 @@ function renderObjSummary(o){
       </div>
       <div class="row-actions" style="margin-top:16px;justify-content:flex-start;">
         <button class="btn btn-ghost btn-sm" data-action="add-versement" data-obj="${o.nom}">${icon('plus')}Verser</button>
-        <button class="icon-btn" data-action="edit-obj" data-id="${o.id}">${icon('edit')}</button>
-        <button class="icon-btn del" data-action="del-obj" data-id="${o.id}">${icon('trash')}</button>
+        <button class="icon-btn" data-action="edit-obj" data-id="${o.id}" aria-label="Modifier">${icon('edit')}</button>
+        <button class="icon-btn del" data-action="del-obj" data-id="${o.id}" aria-label="Supprimer">${icon('trash')}</button>
       </div>
     </div>
   `;
@@ -2581,7 +2598,7 @@ function renderObjVersements(o, key){
         <tbody>${versList.map(v=>`<tr>
           <td>${fmtDate(v.date)}</td>
           <td class="num" style="color:var(--teal)">${fmtEUR(v.montant)}</td><td class="wrap">${v.note||'—'}</td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-versement" data-id="${v.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-versement" data-id="${v.id}">${icon('trash')}</button></td>
+          <td class="row-actions"><button class="icon-btn" data-action="edit-versement" data-id="${v.id}" aria-label="Modifier">${icon('edit')}</button><button class="icon-btn del" data-action="del-versement" data-id="${v.id}" aria-label="Supprimer">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
         <tfoot><tr><td>Total versé ce mois</td><td class="num" style="color:var(--teal)">${fmtEUR(versAll.reduce((s,v)=>s+Number(v.montant),0))}</td><td colspan="2"></td></tr></tfoot>
       </table></div>`)}
@@ -2634,7 +2651,7 @@ function renderCharges(){
           <td>${c.categorie}</td><td><span class="pill pill-dim">${c.type}</span></td><td class="wrap">${c.description||'—'}</td>
           <td class="num">${fmtEUR(c.budget)}</td><td>${c.compte}</td>
           <td style="font-size:12px;color:var(--text-dim);">${c.dateDebut?fmtDate(c.dateDebut):'—'} → ${c.dateFin?fmtDate(c.dateFin):'Illimité'}</td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-charge" data-id="${c.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-charge" data-id="${c.id}">${icon('trash')}</button></td>
+          <td class="row-actions"><button class="icon-btn" data-action="edit-charge" data-id="${c.id}" aria-label="Modifier">${icon('edit')}</button><button class="icon-btn del" data-action="del-charge" data-id="${c.id}" aria-label="Supprimer">${icon('trash')}</button></td>
         </tr>`;}).join('')}</tbody>
         <tfoot><tr><td colspan="3">Total actif ${monthLabel(key)}</td><td class="num">${fmtEUR(chargesTotalMois(key))}</td><td colspan="3"></td></tr></tfoot>
       </table></div>`)}
@@ -2724,7 +2741,7 @@ function renderCompteJoint(){
             return `<tr><td>${d.nom}</td><td><span class="pill pill-dim">${d.cat}</span></td><td class="num">${fmtEURPrecise(d.montant)}</td>
             <td class="row-actions">${pending
               ? `<span class="pill pill-amber">Suppression demandée</span>`
-              : `<button class="icon-btn del" data-action="request-delete-expense" data-item-id="${d.id}" data-item-type="${d.itemType}" data-item-label="${d.nom.replace(/"/g,'&quot;')}" title="Demander la suppression">${icon('trash')}</button>`}</td>
+              : `<button class="icon-btn del" data-action="request-delete-expense" data-item-id="${d.id}" data-item-type="${d.itemType}" data-item-label="${d.nom.replace(/"/g,'&quot;')}" title="Demander la suppression" aria-label="Demander la suppression">${icon('trash')}</button>`}</td>
           </tr>`;}).join('')}</tbody>
         </table></div>`}
       </div>
@@ -2748,7 +2765,7 @@ function renderCompteJoint(){
       </div>
       <div class="cp-foot" style="border-top:none;padding:12px 0 0;">
         <input type="text" id="msg-input" placeholder="Écris un message…" enterkeyhint="send" autocomplete="off">
-        <button class="cp-send" data-action="send-message">${icon('send')}</button>
+        <button class="cp-send" data-action="send-message" aria-label="Envoyer">${icon('send')}</button>
       </div>
     </div>
   `;
@@ -2845,6 +2862,16 @@ document.addEventListener('change', async (e)=>{
   if(e.target.id==='import-file-input' && e.target.files[0]){ importDataFile(e.target.files[0]); }
 });
 document.addEventListener('keydown', (e)=>{
+  // Tab reste à l'intérieur de la modale ouverte (piège de focus).
+  if(e.key==='Tab' && document.querySelector('#modal-root .modal')){
+    const els = modalFocusables();
+    if(!els.length) return;
+    const first = els[0], last = els[els.length-1];
+    const outside = !els.includes(document.activeElement);
+    if(e.shiftKey && (outside || document.activeElement===first)){ e.preventDefault(); last.focus(); }
+    else if(!e.shiftKey && (outside || document.activeElement===last)){ e.preventDefault(); first.focus(); }
+    return;
+  }
   if(e.target.classList && e.target.classList.contains('cat-add-input') && e.key==='Enter'){
     e.preventDefault();
     e.target.closest('.cat-add-input-row')?.querySelector('[data-cat-add-confirm]')?.click();
@@ -2903,6 +2930,7 @@ document.addEventListener('click', async (e)=>{
     const wasOpen = wrap.classList.contains('open');
     document.querySelectorAll('.cat-select.open').forEach(w=>{ w.classList.remove('open'); resetCatDropdown(w); });
     if(!wasOpen) wrap.classList.add('open');
+    catToggle.setAttribute('aria-expanded', String(!wasOpen));
     return;
   }
   const catSelectEl = e.target.closest('[data-cat-select]');
@@ -2912,7 +2940,8 @@ document.addEventListener('click', async (e)=>{
     document.getElementById('f_'+field.dataset.catKey).value = nom;
     const label = field.querySelector('.cat-select-label');
     label.textContent = nom; label.classList.remove('is-placeholder');
-    field.querySelector('.cat-select').classList.remove('open');
+    const catWrap = field.querySelector('.cat-select');
+    catWrap.classList.remove('open'); resetCatDropdown(catWrap);
     clearFieldError(field.dataset.catKey);
     return;
   }
@@ -2962,7 +2991,8 @@ document.addEventListener('click', async (e)=>{
     const label = field.querySelector('.cat-select-label');
     label.textContent = result.cat.nom; label.classList.remove('is-placeholder');
     field.querySelector('.cat-dropdown').innerHTML = categoryDropdownListHTML(type, hidden.value);
-    field.querySelector('.cat-select').classList.remove('open');
+    const catWrap = field.querySelector('.cat-select');
+    catWrap.classList.remove('open'); resetCatDropdown(catWrap);
     clearFieldError(field.dataset.catKey);
     toast('Catégorie ajoutée');
     return;
@@ -3533,7 +3563,7 @@ function renderSetupScreen(){
   const syncOptionHTML = `
     <button type="button" class="btn btn-ghost" id="sync-token-btn" style="width:100%;justify-content:center;margin-bottom:10px;">${icon('cloud')}J'ai déjà un compte — entrer mon jeton d'accès</button>
     <div id="sync-token-fields" style="display:none;">
-      <div class="field"><label>Jeton d'accès</label><div class="pw-wrap"><input id="sy-token" type="password" placeholder="github_pat_..."><button type="button" class="pw-toggle" data-toggle-pw="sy-token">${icon('eye')}</button></div></div>
+      <div class="field"><label for="sy-token">Jeton d'accès</label><div class="pw-wrap"><input id="sy-token" type="password" placeholder="github_pat_..."><button type="button" class="pw-toggle" data-toggle-pw="sy-token" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>
       <div class="field-note" style="margin-top:-8px;margin-bottom:14px;">Ce jeton t'a été envoyé par email par la personne qui administre ce budget.</div>
       <button type="button" class="btn btn-primary" id="sy-connect" style="width:100%;justify-content:center;">${icon('check')}Synchroniser et me connecter</button>
     </div>`;
@@ -3574,7 +3604,7 @@ function renderAdminCodeScreen(){
       <div class="auth-sub">La création du compte administrateur est protégée par un code à usage unique.</div>
       <div id="auth-error-slot"></div>
       <form id="setup-code-form">
-        <div class="field"><label>Code d'accès</label><input id="su-code" type="text" placeholder="XXXX-XXXX-XXXX" required autocomplete="off" style="letter-spacing:1px;text-transform:uppercase;"></div>
+        <div class="field"><label for="su-code">Code d'accès</label><input id="su-code" type="text" placeholder="XXXX-XXXX-XXXX" required autocomplete="off" style="letter-spacing:1px;text-transform:uppercase;"></div>
         <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Continuer</button>
       </form>
       <button type="button" class="btn btn-ghost" id="back-to-setup-btn" style="width:100%;justify-content:center;margin-top:10px;">Retour</button>
@@ -3624,10 +3654,10 @@ function renderSetupAdminForm(verifiedCode){
       <div class="auth-sub">Code validé — crée maintenant l'unique compte administrateur de ce budget.</div>
       <div id="auth-error-slot"></div>
       <form id="setup-form">
-        <div class="field"><label>Nom affiché</label><input id="su-name" type="text" placeholder="Toi" required></div>
-        <div class="field"><label>Identifiant</label><input id="su-username" type="text" placeholder="admin" required autocomplete="username"></div>
-        <div class="field"><label>Mot de passe</label><div class="pw-wrap"><input id="su-pass" type="password" placeholder="••••••••" required autocomplete="new-password"><button type="button" class="pw-toggle" data-toggle-pw="su-pass">${icon('eye')}</button></div></div>
-        <div class="field"><label>Confirmer le mot de passe</label><div class="pw-wrap"><input id="su-pass2" type="password" placeholder="••••••••" required autocomplete="new-password"><button type="button" class="pw-toggle" data-toggle-pw="su-pass2">${icon('eye')}</button></div></div>
+        <div class="field"><label for="su-name">Nom affiché</label><input id="su-name" type="text" placeholder="Toi" required></div>
+        <div class="field"><label for="su-username">Identifiant</label><input id="su-username" type="text" placeholder="admin" required autocomplete="username"></div>
+        <div class="field"><label for="su-pass">Mot de passe</label><div class="pw-wrap"><input id="su-pass" type="password" placeholder="••••••••" required autocomplete="new-password"><button type="button" class="pw-toggle" data-toggle-pw="su-pass" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>
+        <div class="field"><label for="su-pass2">Confirmer le mot de passe</label><div class="pw-wrap"><input id="su-pass2" type="password" placeholder="••••••••" required autocomplete="new-password"><button type="button" class="pw-toggle" data-toggle-pw="su-pass2" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>
         <div class="field" style="display:flex;align-items:center;gap:9px;"><input id="su-remember" type="checkbox" style="width:16px;height:16px;accent-color:#FFFFFF;"><label style="margin:0;font-size:13px;color:var(--text);">Rester connecté (${REMEMBER_DAYS} jours)</label></div>
         <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Créer le compte administrateur</button>
       </form>
@@ -3681,8 +3711,8 @@ function renderLoginScreen(){
       <div class="auth-sub">Accède à ton budget partagé.</div>
       <div id="auth-error-slot"></div>
       <form id="login-form">
-        <div class="field"><label>Identifiant</label><input id="li-username" type="text" required autocomplete="username"></div>
-        <div class="field"><label>Mot de passe</label><div class="pw-wrap"><input id="li-pass" type="password" required autocomplete="current-password"><button type="button" class="pw-toggle" data-toggle-pw="li-pass">${icon('eye')}</button></div></div>
+        <div class="field"><label for="li-username">Identifiant</label><input id="li-username" type="text" required autocomplete="username"></div>
+        <div class="field"><label for="li-pass">Mot de passe</label><div class="pw-wrap"><input id="li-pass" type="password" required autocomplete="current-password"><button type="button" class="pw-toggle" data-toggle-pw="li-pass" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>
         <div class="field" style="display:flex;align-items:center;gap:9px;"><input id="li-remember" type="checkbox" style="width:16px;height:16px;accent-color:#FFFFFF;"><label style="margin:0;font-size:13px;color:var(--text);">Rester connecté (${REMEMBER_DAYS} jours)</label></div>
         <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Se connecter</button>
       </form>
@@ -3716,10 +3746,10 @@ function renderAccountRequestScreen(){
       <div class="auth-sub">Remplis ces informations — la personne qui administre ce budget les recevra et pourra approuver ou refuser ta demande.</div>
       <div id="auth-error-slot"></div>
       <form id="account-request-form">
-        <div class="field"><label>Ton nom</label><input id="ar-nom" type="text" required></div>
-        <div class="field"><label>Ton email (pour qu'on puisse te recontacter)</label><input id="ar-email" type="email" required></div>
-        <div class="field"><label>Identifiant souhaité</label><input id="ar-username" type="text" placeholder="ex. julie"></div>
-        <div class="field"><label>Pourquoi ce compte ? (optionnel)</label><textarea id="ar-message" rows="3" placeholder="Ex. je fais partie de la famille, on veut partager le budget du foyer..."></textarea></div>
+        <div class="field"><label for="ar-nom">Ton nom</label><input id="ar-nom" type="text" required></div>
+        <div class="field"><label for="ar-email">Ton email (pour qu'on puisse te recontacter)</label><input id="ar-email" type="email" required></div>
+        <div class="field"><label for="ar-username">Identifiant souhaité</label><input id="ar-username" type="text" placeholder="ex. julie"></div>
+        <div class="field"><label for="ar-message">Pourquoi ce compte ? (optionnel)</label><textarea id="ar-message" rows="3" placeholder="Ex. je fais partie de la famille, on veut partager le budget du foyer..."></textarea></div>
         <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Envoyer la demande</button>
       </form>
       <button type="button" class="btn btn-ghost" id="back-to-login-btn" style="width:100%;justify-content:center;margin-top:10px;">Retour</button>
@@ -3780,7 +3810,7 @@ function renderAnalyse(){
     <div class="page-head"><div><div class="page-title">Analyse</div><div class="page-sub">Combien tu as dépensé pour un poste précis, mois par mois</div></div></div>
 
     <div class="card" style="margin-bottom:16px;">
-      <div class="field"><label>Rechercher un poste (ex. Netflix, Tabac...)</label>
+      <div class="field"><label for="analyse-search">Rechercher un poste (ex. Netflix, Tabac…)</label>
         <div class="kv-input-row">
           <input id="analyse-search" type="text" list="analyse-suggestions" placeholder="Netflix, Tabac, Loyer..." value="${term.replace(/"/g,'&quot;')}">
           <button class="btn btn-primary btn-sm" data-action="run-analyse">${icon('search')}Chercher</button>
@@ -3863,10 +3893,10 @@ function renderParametres(){
           <div class="avatar" style="background:${avatarColor(u)}">${initials(u)}</div>
           <div class="info"><div class="name">${u.displayName} ${u.id===me.id?'<span style="color:var(--text-faint);font-weight:400;">(toi)</span>':''}</div>
             <div class="meta">@${u.username} · ${u.role==='admin'?'Administrateur':'Membre'}${u.jointWith ? ' · Compte joint avec '+((authState.users.find(x=>x.id===u.jointWith)||{}).displayName||'?') : ''}</div></div>
-          ${(isAdmin() && u.role!=='admin') ? `<button class="icon-btn" data-action="export-user-data" data-id="${u.id}" title="Exporter ses données">${icon('arrowDown')}</button>
-            <button class="icon-btn del" data-action="wipe-user-data" data-id="${u.id}" title="Vider ses données">${icon('refresh')}</button>` : ''}
-          ${(isAdmin() || u.id===me.id) ? `<button class="icon-btn" data-action="edit-user" data-id="${u.id}">${icon('edit')}</button>` : ''}
-          ${(isAdmin() && u.id!==me.id) ? `<button class="icon-btn del" data-action="del-user" data-id="${u.id}">${icon('trash')}</button>` : ''}
+          ${(isAdmin() && u.role!=='admin') ? `<button class="icon-btn" data-action="export-user-data" data-id="${u.id}" title="Exporter ses données" aria-label="Exporter ses données">${icon('arrowDown')}</button>
+            <button class="icon-btn del" data-action="wipe-user-data" data-id="${u.id}" title="Vider ses données" aria-label="Vider ses données">${icon('refresh')}</button>` : ''}
+          ${(isAdmin() || u.id===me.id) ? `<button class="icon-btn" data-action="edit-user" data-id="${u.id}" aria-label="Modifier">${icon('edit')}</button>` : ''}
+          ${(isAdmin() && u.id!==me.id) ? `<button class="icon-btn del" data-action="del-user" data-id="${u.id}" aria-label="Supprimer">${icon('trash')}</button>` : ''}
         </div>`).join('')}
       ${isAdmin() ? `<button class="btn btn-ghost btn-sm" data-action="add-user" style="margin-top:14px;">${icon('plus')}Ajouter un compte</button>` : ''}
 
@@ -3998,7 +4028,7 @@ function renderJointRequestsSection(){
       html += `<div class="user-row"><div class="avatar" style="background:${avatarColor(u)}">${initials(u)}</div>
         <div class="info"><div class="name">${u.displayName}</div><div class="meta">@${u.username}</div></div>
         ${sent
-          ? `<span class="pill pill-amber">En attente</span><button class="icon-btn" data-action="cancel-joint-request" data-id="${sent.id}">${icon('x')}</button>`
+          ? `<span class="pill pill-amber">En attente</span><button class="icon-btn" data-action="cancel-joint-request" data-id="${sent.id}" aria-label="Annuler la demande">${icon('x')}</button>`
           : `<button class="btn btn-ghost btn-sm" data-action="send-joint-request" data-to="${u.id}">${icon('plus')}Proposer</button>`}
       </div>`;
     });
@@ -4006,7 +4036,7 @@ function renderJointRequestsSection(){
     // Un membre ne voit pas la liste des autres comptes : il saisit l'identifiant
     // de la personne à qui il veut proposer un compte joint.
     html += `<div class="sub" style="margin:${incoming.length?'16px':'0'} 0 8px;font-weight:600;color:var(--text);">Proposer un compte joint</div>
-      <div class="field"><label>Identifiant de la personne</label>
+      <div class="field"><label for="joint-target-username">Identifiant de la personne</label>
         <div class="kv-input-row"><input id="joint-target-username" type="text" placeholder="identifiant"><button class="btn btn-primary btn-sm" data-action="send-joint-request-by-username">${icon('plus')}Proposer</button></div>
       </div>
       <div id="joint-target-error" class="auth-error" style="display:none;"></div>`;
@@ -4349,7 +4379,7 @@ function renderGithubSection(){
   const cfg = ghConfig();
   if(!ghConfigured()){
     return `
-      <div class="field"><label>Jeton d'accès</label><div class="pw-wrap"><input id="gh-token" type="password" placeholder="github_pat_..."><button type="button" class="pw-toggle" data-toggle-pw="gh-token">${icon('eye')}</button></div></div>
+      <div class="field"><label for="gh-token">Jeton d'accès</label><div class="pw-wrap"><input id="gh-token" type="password" placeholder="github_pat_..."><button type="button" class="pw-toggle" data-toggle-pw="gh-token" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>
       <div class="field-note" style="margin-top:-8px;margin-bottom:14px;">Ce budget est relié à un seul dépôt fixe — seul le jeton d'accès est à saisir, sur chaque appareil.</div>
       <button class="btn btn-primary btn-sm" data-action="gh-connect">${icon('cloud')}Connecter</button>
       ${exportImportHTML()}`;
@@ -4380,7 +4410,7 @@ function renderClaudeSection(){
   const key = claudeKey();
   if(!key){
     return `
-      <div class="field"><label>Clé API Anthropic</label>
+      <div class="field"><label for="claude-key-input">Clé API Anthropic</label>
         <div class="kv-input-row"><input id="claude-key-input" type="password" placeholder="sk-ant-..."><button class="btn btn-primary btn-sm" data-action="save-claude-key">Activer</button></div>
         <div class="field-note">Crée une clé sur console.anthropic.com → API Keys. Des frais d'usage s'appliquent selon ta consommation.</div>
       </div>`;
@@ -4412,8 +4442,8 @@ function renderNotifPanel(){
       <div class="avatar" style="background:${avatarColor(from)};width:32px;height:32px;font-size:12px;">${initials(from)}</div>
       <div class="info"><div class="name">${from?from.displayName:'?'}</div><div class="meta">souhaite un compte joint avec toi</div></div>
       <div class="row-actions" style="gap:6px;">
-        <button class="icon-btn" data-action="accept-joint-request" data-id="${r.id}" style="color:var(--teal);">${icon('check')}</button>
-        <button class="icon-btn del" data-action="decline-joint-request" data-id="${r.id}">${icon('x')}</button>
+        <button class="icon-btn" data-action="accept-joint-request" data-id="${r.id}" style="color:var(--teal);" aria-label="Accepter">${icon('check')}</button>
+        <button class="icon-btn del" data-action="decline-joint-request" data-id="${r.id}" aria-label="Refuser">${icon('x')}</button>
       </div>
     </div>`);
   });
@@ -4444,13 +4474,13 @@ function renderNotifPanel(){
       <div class="avatar" style="background:${avatarColor(from)};width:32px;height:32px;font-size:12px;">${initials(from)}</div>
       <div class="info"><div class="name">${r.itemLabel}</div><div class="meta">${from?from.displayName:'?'} souhaite retirer cette ligne du compte joint</div></div>
       <div class="row-actions" style="gap:6px;">
-        <button class="icon-btn" data-action="approve-expense-delete" data-id="${r.id}" style="color:var(--teal);">${icon('check')}</button>
-        <button class="icon-btn del" data-action="decline-expense-delete" data-id="${r.id}">${icon('x')}</button>
+        <button class="icon-btn" data-action="approve-expense-delete" data-id="${r.id}" style="color:var(--teal);" aria-label="Approuver la suppression">${icon('check')}</button>
+        <button class="icon-btn del" data-action="decline-expense-delete" data-id="${r.id}" aria-label="Refuser la suppression">${icon('x')}</button>
       </div>
     </div>`);
   });
   panel.innerHTML = `
-    <div class="notif-head"><span>Notifications</span><button class="icon-btn" data-action="close-notif">${icon('x')}</button></div>
+    <div class="notif-head"><span>Notifications</span><button class="icon-btn" data-action="close-notif" aria-label="Fermer">${icon('x')}</button></div>
     <div class="notif-body">
       ${items.length===0 ? `<div class="cp-empty">${icon('bell')}<br>Rien de nouveau.</div>` : items.join('')}
     </div>`;
@@ -4492,13 +4522,13 @@ function toggleChat(force){
 function renderChatPanel(){
   const panel = document.getElementById('claude-panel');
   panel.innerHTML = `
-    <div class="cp-head"><span class="dot"></span><span class="t">Assistant budget</span><button class="icon-btn" data-action="close-chat">${icon('x')}</button></div>
+    <div class="cp-head"><span class="dot"></span><span class="t">Assistant budget</span><button class="icon-btn" data-action="close-chat" aria-label="Fermer">${icon('x')}</button></div>
     <div class="cp-body" id="cp-body">
       ${chatHistory.length===0 ? `<div class="cp-empty">${icon('bot')}<br>Demande-moi des conseils sur ton budget, ou comment tu pourrais faire évoluer ce site.</div>` : chatHistory.map(m=>`<div class="cp-msg ${m.role}">${escapeHTML(m.content)}</div>`).join('')}
     </div>
     <div class="cp-foot">
       <textarea id="cp-input" placeholder="Écris un message…" enterkeyhint="send"></textarea>
-      <button class="cp-send" id="cp-send">${icon('send')}</button>
+      <button class="cp-send" id="cp-send" aria-label="Envoyer">${icon('send')}</button>
     </div>`;
   const body = document.getElementById('cp-body'); body.scrollTop = body.scrollHeight;
   const input = document.getElementById('cp-input');
