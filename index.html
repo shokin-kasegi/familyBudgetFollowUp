@@ -2648,9 +2648,14 @@ function charge_fields(){
     {key:'description', label:'Description', placeholder:'Appartement'},
     {key:'budget', label:'Budget mensuel (€)', type:'number', step:'0.01', required:true},
     {key:'compte', label:'Compte', type:'select', options:compteOptions()},
-    {key:'dateDebut', label:'Date de début', type:'date', showIf:(v)=>v.type==='Temporaire'},
-    {key:'dateFin', label:'Date de fin', type:'date', showIf:(v)=>v.type==='Temporaire'},
+    {key:'dateDebut', label:'Date de début', type:'date', required:true},
+    {key:'dateFin', label:'Date de fin (vide = illimité)', type:'date'},
   ];
+}
+function chargeDateErrors(data){
+  const errors = fieldRequiredErrors(charge_fields(), data);
+  if(data.dateDebut && data.dateFin && data.dateFin < data.dateDebut) errors.push(['dateFin','La date de fin doit être après la date de début']);
+  return errors;
 }
 
 /* ============================== COMPTE JOINT ============================== */
@@ -3220,11 +3225,11 @@ async function handleAction(action, id, el){
     case 'del-versement': confirmDelete('ce versement', async ()=>{ state.versements = state.versements.filter(x=>x.id!==id); await persist(); await render(); toast('Versement supprimé'); }); break;
 
     /* Charges */
-    case 'add-charge': openModal('Ajouter une charge', charge_fields(), {type:'Fixe', compte: jointPartner() ? 'Compte Joint' : 'Compte Perso'}, async (data)=>{
-      if(reportFieldErrors(fieldRequiredErrors(charge_fields(), data))) return false;
+    case 'add-charge': openModal('Ajouter une charge', charge_fields(), {type:'Fixe', compte: jointPartner() ? 'Compte Joint' : 'Compte Perso', dateDebut: defaultDateForSelectedMonth()}, async (data)=>{
+      if(reportFieldErrors(chargeDateErrors(data))) return false;
       state.charges.push({id:uid(), ownerId:currentUser().id, notes:'', ...data}); await persist(); await render(); toast('Charge ajoutée'); }); break;
     case 'edit-charge': openModal('Modifier la charge', charge_fields(), find(mine(state.charges)), async (data)=>{
-      if(reportFieldErrors(fieldRequiredErrors(charge_fields(), data))) return false;
+      if(reportFieldErrors(chargeDateErrors(data))) return false;
       Object.assign(find(mine(state.charges)), data); await persist(); await render(); toast('Charge mise à jour'); }); break;
     case 'del-charge': { const item=find(mine(state.charges)); confirmDelete(item.categorie, async ()=>{ state.charges = state.charges.filter(x=>x.id!==id); await persist(); await render(); toast('Charge supprimée'); }); break; }
 
