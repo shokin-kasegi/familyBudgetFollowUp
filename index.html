@@ -364,6 +364,7 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
 .auth-switch{text-align:center;font-size:12.5px;color:var(--text-dim);margin-top:16px;}
 .auth-switch button{color:var(--teal);font-weight:600;}
 .field-note{font-size:11.5px;color:var(--text-faint);margin-top:5px;}
+.temp-cred{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;letter-spacing:.5px;padding:9px 12px;border:1px solid var(--border);border-radius:10px;user-select:all;overflow-wrap:anywhere;}
 .pw-wrap{position:relative;}
 .pw-wrap input{width:100%;padding-right:42px;}
 .pw-toggle{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);}
@@ -402,6 +403,19 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
 .user-row .info{flex:1;min-width:0;}
 .user-row .name{font-size:13.5px;font-weight:600;}
 .user-row .meta{font-size:11.5px;color:var(--text-dim);}
+.user-row .name,.user-row .meta{overflow-wrap:anywhere;}
+.user-row{position:relative;}
+.user-actions{display:flex;gap:12px;flex-shrink:0;} /* même écart qu'avant entre les icônes */
+.user-more{display:none;flex-shrink:0;}
+@media(max-width:480px){
+  .user-more{display:flex;}
+  .user-actions{
+    display:none;position:absolute;right:0;top:calc(100% - 8px);z-index:20;gap:4px;
+    background:#161616;border:1px solid var(--border);border-radius:12px;padding:4px;
+    box-shadow:0 12px 32px rgba(0,0,0,0.5);
+  }
+  .user-row.actions-open .user-actions{display:flex;}
+}
 .sidebar-user{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;margin-bottom:4px;}
 .sidebar-user .info{flex:1;min-width:0;}
 .sidebar-user .name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -588,6 +602,7 @@ const ICONS = {
   chevR:'<polyline points="9 18 15 12 9 6"/>',
   chevU:'<polyline points="18 15 12 9 6 15"/>',
   chevD:'<polyline points="6 9 12 15 18 9"/>',
+  more:'<circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
   menu:'<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>',
   wallet:'<path d="M20 12V7H5a2 2 0 0 1 0-4h13v4"/><path d="M4 7v11a2 2 0 0 0 2 2h14v-6"/><circle cx="17" cy="14" r="1"/>',
   arrowDown:'<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>',
@@ -1400,7 +1415,7 @@ function renderSidebar(){
     <button class="nav-item" data-action="toggle-notif-panel" style="position:relative;">${icon('bell')}<span>Notifications</span>${badge>0?`<span class="notif-badge">${badge}</span>`:''}</button>
     <div class="sidebar-user">
       <div class="avatar" style="background:${avatarColor(me)}">${initials(me)}</div>
-      <div class="info"><div class="name">${esc(me?me.displayName:'')}</div><div class="role">${me?me.role:''}</div></div>
+      <div class="info"><div class="name" title="${attrEsc(me?me.displayName:'')}">${esc(me?me.displayName:'')}</div><div class="role">${me?me.role:''}</div></div>
       <button class="icon-btn" data-action="logout" title="Se déconnecter" aria-label="Se déconnecter">${icon('logout')}</button>
     </div>
     <div class="sidebar-foot">Données stockées sur cet appareil, synchronisées via GitHub si connecté.</div>
@@ -1408,7 +1423,15 @@ function renderSidebar(){
   document.getElementById('mobile-title').textContent = currentView==='parametres' ? 'Paramètres' : (orderedNavItems().find(n=>n.id===currentView)?.label || 'Solde');
   setupNavDragAndDrop();
 }
-function initials(u){ if(!u) return '?'; return (u.displayName||u.username||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
+function initials(u){
+  if(!u) return '?';
+  const name = (u.displayName||u.username||'').trim();
+  const words = name.split(/\s+/).filter(w=>/\p{L}/u.test(w)); // ignore les mots sans lettre (emoji seul…)
+  if(!words.length) return '?';
+  const first = w => [...w].find(ch=>/\p{L}/u.test(ch)) || '';
+  const pick = words.length>1 ? [words[0], words[words.length-1]] : [words[0]];
+  return pick.map(first).join('').toUpperCase();
+}
 function visibleUserRows(me){
   // Un admin voit tout le monde. Un membre ne voit que son propre compte
   // (+ celui de son/sa partenaire de compte joint, puisqu'ils sont déjà liés).
@@ -1510,9 +1533,9 @@ function fieldHTML(f, values){
     return `<div class="field"${hiddenAttr} style="display:flex;align-items:center;gap:9px;"><input id="f_${f.key}" type="checkbox" ${val?'checked':''} style="width:16px;height:16px;accent-color:#FFFFFF;"><label for="f_${f.key}" style="margin:0;font-size:13px;color:var(--text);">${f.label}</label></div>`;
   }
   if(f.type==='password'){
-    return `<div class="field"${hiddenAttr}><label for="f_${f.key}">${f.label}</label><div class="pw-wrap"><input id="f_${f.key}" type="password" value="${attrEsc(val||'')}" placeholder="${f.placeholder||''}" autocomplete="${f.autocomplete||'current-password'}"><button type="button" class="pw-toggle" data-toggle-pw="f_${f.key}" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>`;
+    return `<div class="field"${hiddenAttr}><label for="f_${f.key}">${f.label}</label><div class="pw-wrap"><input id="f_${f.key}" type="password"${f.maxlength?` maxlength="${f.maxlength}"`:''} value="${attrEsc(val||'')}" placeholder="${f.placeholder||''}" autocomplete="${f.autocomplete||'current-password'}"><button type="button" class="pw-toggle" data-toggle-pw="f_${f.key}" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>`;
   }
-  return `<div class="field"${hiddenAttr}><label for="f_${f.key}">${f.label}</label><input id="f_${f.key}" type="${f.type||'text'}" ${f.step?`step="${f.step}"`:''} value="${attrEsc(val===0?0:(val||''))}" placeholder="${f.placeholder||''}"></div>`;
+  return `<div class="field"${hiddenAttr}><label for="f_${f.key}">${f.label}</label><input id="f_${f.key}" type="${f.type||'text'}" ${f.step?`step="${f.step}"`:''}${f.maxlength?` maxlength="${f.maxlength}"`:''} value="${attrEsc(val===0?0:(val||''))}" placeholder="${f.placeholder||''}"></div>`;
 }
 function attrEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
 // Échappe une valeur saisie par l'utilisateur avant de l'insérer dans du HTML (texte ou attribut).
@@ -3025,6 +3048,8 @@ document.addEventListener('keydown', (e)=>{
     // Un menu de catégorie ouvert se referme d'abord, sans fermer la modale.
     const openCat = document.querySelector('.cat-select.open');
     if(openCat){ e.preventDefault(); openCat.classList.remove('open'); resetCatDropdown(openCat); return; }
+    const openUserMenu = !modalOpen && document.querySelector('.user-row.actions-open');
+    if(openUserMenu){ e.preventDefault(); closeUserActionMenus(); openUserMenu.querySelector('.user-more')?.focus(); return; }
     if(modalOpen){ e.preventDefault(); closeModal(); return; }
     const panelCancel = (colFilterOpen || chartFilterOpen) && document.querySelector('[data-action="col-filter-cancel"],[data-action="chart-filter-cancel"]');
     if(panelCancel){ e.preventDefault(); panelCancel.click(); return; }
@@ -3068,6 +3093,8 @@ document.addEventListener('click', async (e)=>{
   document.querySelectorAll('.cat-select.open').forEach(wrap=>{
     if(!e.target.closest('.cat-select')){ wrap.classList.remove('open'); resetCatDropdown(wrap); }
   });
+  // Menu « ••• » d'un compte : tout clic hors de son bouton le referme (y compris le choix d'une action).
+  if(!e.target.closest('.user-more')) closeUserActionMenus();
 
   const catToggle = e.target.closest('[data-cat-toggle]');
   if(catToggle){
@@ -3411,14 +3438,21 @@ async function handleAction(action, id, el){
     case 'logout': stopPolling(); clearSession(); await boot(); toast('Déconnecté'); break;
     case 'toggle-sidebar-collapse': state.navCollapsed = !state.navCollapsed; await persist(); await render(); break;
     case 'reset-nav-order': if(state.navOrder) state.navOrder[el.dataset.space||currentSpace] = null; await persist(); await render(); break;
+    case 'toggle-user-actions': {
+      const row = el.closest('.user-row');
+      const open = !row.classList.contains('actions-open');
+      closeUserActionMenus(row);
+      row.classList.toggle('actions-open', open);
+      el.setAttribute('aria-expanded', String(open));
+      break; }
     case 'add-user': {
-      const addUserFields = userFieldsAdmin(null).concat([{key:'password', label:'Mot de passe', type:'password'}]);
+      const addUserFields = userFieldsAdmin(null).concat(passwordFields('Mot de passe', true));
       openModal('Ajouter un compte', addUserFields, {role:'membre'}, async (data)=>{
-      if(reportFieldErrors(fieldRequiredErrors(addUserFields, data))) return false;
+      if(reportFieldErrors(fieldRequiredErrors(addUserFields, data).concat(userFieldErrors(data)))) return false;
       if(authState.users.some(u=>u.username===data.username.trim().toLowerCase())){ markFieldError('username','Cet identifiant existe déjà'); toast('Cet identifiant existe déjà'); return false; }
       const salt = randomSalt();
-      const passwordHash = await hashPassword(data.password||'changeme', salt);
-      const newUser = {id:uid(), username:data.username.trim().toLowerCase(), displayName:data.displayName, role:data.role, jointWith:null, salt, passwordHash};
+      const passwordHash = await hashPassword(data.password, salt);
+      const newUser = {id:uid(), username:data.username.trim().toLowerCase(), displayName:data.displayName.trim(), role:data.role, jointWith:null, salt, passwordHash};
       authState.users.push(newUser);
       seedDefaultCategoriesDep(newUser.id);
       seedDefaultCategoriesRev(newUser.id);
@@ -3427,13 +3461,35 @@ async function handleAction(action, id, el){
       await Promise.all([persistAuth(), persist()]); await render(); toast('Compte créé — pense à transmettre le jeton d\u2019accès à cette personne par email, il lui sera demandé à sa première connexion.'); }); break; }
     case 'edit-user': {
       const u = find(authState.users);
-      const fields = (isAdmin() ? userFieldsAdmin(u.id) : userFieldsSelf(u.id)).concat([{key:'password', label:'Nouveau mot de passe (optionnel)', type:'password'}]);
-      openModal('Modifier le compte', fields, u, async (data)=>{
-        if(reportFieldErrors(fieldRequiredErrors(fields, data))) return false;
-        u.displayName = data.displayName;
-        if(isAdmin()){ u.username = (data.username||u.username).trim().toLowerCase(); u.role = data.role||u.role; }
-        if(data.password){ u.salt = randomSalt(); u.passwordHash = await hashPassword(data.password, u.salt); }
-        await persistAuth(); await render(); toast('Compte mis à jour'); }); break; }
+      // Identifiant à l'ancien format (antérieur au motif actuel) : l'admin doit le
+      // remplacer. Comme l'identifiant de connexion change, la personne reçoit un
+      // mot de passe à usage unique, à changer à sa première connexion.
+      const legacy = isAdmin() && !isValidUsername(u.username);
+      const resetPassword = legacy && u.id!==currentUser().id;
+      const baseFields = isAdmin() ? userFieldsAdmin(u.id) : userFieldsSelf(u.id);
+      const fields = resetPassword ? baseFields : baseFields.concat(passwordFields('Nouveau mot de passe (optionnel)', false));
+      const legacyNote = legacy ? `<div class="field-note" style="margin:-4px 0 14px;">L'identifiant « @${esc(u.username)} » n'est plus au format accepté (2 à 32 caractères : lettres, chiffres, . _ -). Un nouvel identifiant est proposé ci-dessus, modifiable.${resetPassword ? ` À l'enregistrement, un mot de passe à usage unique sera généré : ${esc(u.displayName)} devra le changer à sa première connexion.` : ''}</div>` : '';
+      openModal('Modifier le compte', fields, legacy ? {...u, username:suggestUsername(u)} : u, async (data)=>{
+        if(reportFieldErrors(fieldRequiredErrors(fields, data).concat(userFieldErrors(data)))) return false;
+        const newUsername = (data.username||u.username).trim().toLowerCase();
+        if(isAdmin()){
+          if(authState.users.some(x=>x.id!==u.id && x.username===newUsername)){
+            markFieldError('username','Cet identifiant existe déjà'); toast('Cet identifiant existe déjà'); return false;
+          }
+          if(u.role==='admin' && data.role!=='admin' && authState.users.filter(x=>x.role==='admin').length<=1){
+            markFieldError('role','Il doit rester au moins un administrateur'); toast('Impossible de rétrograder le dernier admin'); return false;
+          }
+        }
+        u.displayName = data.displayName.trim();
+        if(isAdmin()){ u.username = newUsername; u.role = data.role||u.role; }
+        const tempPassword = resetPassword ? generateTempPassword() : null;
+        const newPassword = tempPassword || data.password;
+        if(newPassword){ u.salt = randomSalt(); u.passwordHash = await hashPassword(newPassword, u.salt); }
+        if(tempPassword) u.mustChangePassword = true;
+        await persistAuth(); await render();
+        // Affiché après la fermeture de ce formulaire (closeModal suit le retour de onSave).
+        if(tempPassword) setTimeout(()=>showTempPasswordModal(u, tempPassword), 0);
+        else toast('Compte mis à jour'); }, legacyNote); break; }
     case 'del-user': { const u=find(authState.users); if(u.role==='admin' && authState.users.filter(x=>x.role==='admin').length<=1) return toast('Impossible de supprimer le dernier admin');
       confirmDelete(u.displayName, async ()=>{
         // Nettoyage : si quelqu'un avait un compte joint actif avec ce compte, on le libère.
@@ -3691,6 +3747,13 @@ async function renderAuthGate(){
   const shell = document.getElementById('shell');
   const session = getSession();
   const loggedIn = session && authState.users.some(u=>u.id===session.userId);
+  const me = loggedIn ? currentUser() : null;
+  if(me && me.mustChangePassword){
+    shell.style.display='none';
+    root.style.display='flex';
+    renderForcePasswordChangeScreen(me);
+    return false;
+  }
   if(loggedIn){
     root.style.display='none'; root.innerHTML='';
     shell.style.display='';
@@ -3882,6 +3945,40 @@ function renderLoginScreen(){
   };
   document.getElementById('ask-account-btn').onclick = renderAccountRequestScreen;
 }
+// Après un mot de passe à usage unique, l'accès reste bloqué tant que la
+// personne n'a pas choisi son propre mot de passe.
+function renderForcePasswordChangeScreen(user){
+  const root = document.getElementById('auth-root');
+  root.innerHTML = `
+    <div class="auth-card">
+      <div class="auth-brand"><div class="brand-mark">${icon('logo')}</div><div><div class="brand-name">Solde</div></div></div>
+      <div class="auth-title">Choisis ton mot de passe</div>
+      <div class="auth-sub">Ton compte a été mis à jour par un administrateur — ton identifiant est désormais <strong>@${esc(user.username)}</strong>. Remplace le mot de passe à usage unique par un mot de passe personnel.</div>
+      <div id="auth-error-slot"></div>
+      <form id="force-pass-form">
+        <input type="text" value="${attrEsc(user.username)}" autocomplete="username" hidden>
+        <div class="field"><label for="fp-pass">Nouveau mot de passe</label><div class="pw-wrap"><input id="fp-pass" type="password" placeholder="8 caractères minimum" required autocomplete="new-password"><button type="button" class="pw-toggle" data-toggle-pw="fp-pass" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>
+        <div class="field"><label for="fp-pass2">Confirmer le mot de passe</label><div class="pw-wrap"><input id="fp-pass2" type="password" required autocomplete="new-password"><button type="button" class="pw-toggle" data-toggle-pw="fp-pass2" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>
+        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Enregistrer et continuer</button>
+      </form>
+      <button type="button" class="btn btn-ghost" id="fp-logout" style="width:100%;justify-content:center;margin-top:10px;">${icon('logout')}Se déconnecter</button>
+    </div>`;
+  document.getElementById('fp-logout').onclick = ()=>{ clearSession(); renderAuthGate(); };
+  document.getElementById('force-pass-form').onsubmit = async (e)=>{
+    e.preventDefault();
+    const pass = document.getElementById('fp-pass').value;
+    const pass2 = document.getElementById('fp-pass2').value;
+    if(pass.length<8) return authError('Le mot de passe doit faire au moins 8 caractères.');
+    if(pass!==pass2) return authError('Les mots de passe ne correspondent pas.');
+    if(await hashPassword(pass, user.salt) === user.passwordHash) return authError('Choisis un mot de passe différent du mot de passe à usage unique.');
+    user.salt = randomSalt();
+    user.passwordHash = await hashPassword(pass, user.salt);
+    delete user.mustChangePassword;
+    await persistAuth();
+    await boot();
+    toast('Mot de passe enregistré');
+  };
+}
 function renderAccountRequestScreen(){
   const root = document.getElementById('auth-root');
   root.innerHTML = `
@@ -4037,11 +4134,8 @@ function renderParametres(){
         <div class="user-row">
           <div class="avatar" style="background:${avatarColor(u)}">${initials(u)}</div>
           <div class="info"><div class="name">${esc(u.displayName)} ${u.id===me.id?'<span style="color:var(--text-faint);font-weight:400;">(toi)</span>':''}</div>
-            <div class="meta">@${esc(u.username)} · ${u.role==='admin'?'Administrateur':'Membre'}${u.jointWith ? ' · Compte joint avec '+esc((authState.users.find(x=>x.id===u.jointWith)||{}).displayName||'?') : ''}</div></div>
-          ${(isAdmin() && u.role!=='admin') ? `<button class="icon-btn" data-action="export-user-data" data-id="${u.id}" title="Exporter ses données" aria-label="Exporter ses données">${icon('arrowDown')}</button>
-            <button class="icon-btn del" data-action="wipe-user-data" data-id="${u.id}" title="Vider ses données" aria-label="Vider ses données">${icon('refresh')}</button>` : ''}
-          ${(isAdmin() || u.id===me.id) ? `<button class="icon-btn" data-action="edit-user" data-id="${u.id}" aria-label="Modifier">${icon('edit')}</button>` : ''}
-          ${(isAdmin() && u.id!==me.id) ? `<button class="icon-btn del" data-action="del-user" data-id="${u.id}" aria-label="Supprimer">${icon('trash')}</button>` : ''}
+            <div class="meta">@${esc(u.username)} · ${u.role==='admin'?'Administrateur':'Membre'}${u.mustChangePassword ? ' · Mot de passe à usage unique en attente' : ''}${u.jointWith ? ' · Compte joint avec '+esc((authState.users.find(x=>x.id===u.jointWith)||{}).displayName||'?') : ''}</div></div>
+          ${userRowActionsHTML(u, me)}
         </div>`).join('')}
       ${isAdmin() ? `<button class="btn btn-ghost btn-sm" data-action="add-user" style="margin-top:14px;">${icon('plus')}Ajouter un compte</button>` : ''}
 
@@ -4074,20 +4168,94 @@ function renderParametres(){
     </div>
   `;
 }
+// Boutons d'action d'une ligne de compte. Sous 480 px ils sont regroupés
+// derrière un bouton « ••• » pour laisser la largeur au nom et à l'identifiant.
+function userRowActionsHTML(u, me){
+  const actions = `${(isAdmin() && u.role!=='admin') ? `<button class="icon-btn" data-action="export-user-data" data-id="${u.id}" title="Exporter ses données" aria-label="Exporter ses données">${icon('arrowDown')}</button>
+            <button class="icon-btn del" data-action="wipe-user-data" data-id="${u.id}" title="Vider ses données" aria-label="Vider ses données">${icon('refresh')}</button>` : ''}
+          ${(isAdmin() || u.id===me.id) ? `<button class="icon-btn" data-action="edit-user" data-id="${u.id}" aria-label="Modifier">${icon('edit')}</button>` : ''}
+          ${(isAdmin() && u.id!==me.id) ? `<button class="icon-btn del" data-action="del-user" data-id="${u.id}" aria-label="Supprimer">${icon('trash')}</button>` : ''}`;
+  if(!actions.trim()) return '';
+  return `<button class="icon-btn user-more" data-action="toggle-user-actions" aria-label="Actions" aria-expanded="false">${icon('more')}</button>
+          <div class="user-actions">${actions}</div>`;
+}
+function closeUserActionMenus(except){
+  document.querySelectorAll('.user-row.actions-open').forEach(row=>{
+    if(row===except) return;
+    row.classList.remove('actions-open');
+    row.querySelector('.user-more')?.setAttribute('aria-expanded','false');
+  });
+}
 function jointWithOptions(excludeId){
   return [{value:'', label:'Aucun'}, ...authState.users.filter(u=>u.id!==excludeId).map(u=>({value:u.id, label:u.displayName}))];
 }
 function userFieldsAdmin(excludeId){
   return [
-    {key:'displayName', label:'Nom affiché', required:true},
-    {key:'username', label:'Identifiant', required:true},
+    {key:'displayName', label:'Nom affiché', required:true, maxlength:60},
+    {key:'username', label:'Identifiant', required:true, maxlength:32},
     {key:'role', label:'Rôle', type:'select', options:['membre','admin']},
   ];
 }
 function userFieldsSelf(excludeId){
   return [
-    {key:'displayName', label:'Nom affiché', required:true},
+    {key:'displayName', label:'Nom affiché', required:true, maxlength:60},
   ];
+}
+// Mot de passe + confirmation : obligatoire à la création, optionnel en modification.
+function passwordFields(label, required){
+  return [
+    {key:'password', label, type:'password', required},
+    {key:'password2', label:'Confirmer le mot de passe', type:'password'},
+  ];
+}
+function isValidUsername(username){ return /^[a-z0-9._-]{2,32}$/.test(username||''); }
+// Proposition d'identifiant valide à partir d'un identifiant à l'ancien format
+// (« Prénom.Nom@exemple.com » → « prenom.nom »), sans collision avec un autre compte.
+function suggestUsername(u){
+  let base = (u.username||'').trim().toLowerCase().split('@')[0]
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9._-]+/g,'.').replace(/^[._-]+|[._-]+$/g,'').slice(0,32);
+  if(base.length<2) base = 'membre';
+  const taken = name => authState.users.some(x=>x.id!==u.id && x.username===name);
+  let candidate = base;
+  for(let i=2; taken(candidate); i++){ const suffix = '-'+i; candidate = base.slice(0, 32-suffix.length)+suffix; }
+  return candidate;
+}
+// Mot de passe à usage unique, lisible à l'oral (sans 0/O, 1/l/I) : XXXX-XXXX-XXXX.
+function generateTempPassword(){
+  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  const chars = [];
+  while(chars.length<12){
+    const b = crypto.getRandomValues(new Uint8Array(1))[0];
+    if(b < 256 - 256 % alphabet.length) chars.push(alphabet[b % alphabet.length]); // sans biais
+  }
+  return chars.join('').replace(/(.{4})(?=.)/g, '$1-');
+}
+function showTempPasswordModal(u, tempPassword){
+  openModal('Mot de passe à usage unique', [], {}, ()=>{}, `
+    <p style="color:var(--text-dim);font-size:13.5px;margin-bottom:12px;">Transmets ces informations à ${esc(u.displayName)}. Le mot de passe ne sera plus affiché ensuite ; il devra être changé à la première connexion.</p>
+    <div class="field"><label>Identifiant</label><div class="temp-cred">${esc(u.username)}</div></div>
+    <div class="field"><label>Mot de passe à usage unique</label><div class="temp-cred">${esc(tempPassword)}</div></div>
+    <div class="modal-actions"><button type="button" class="btn btn-ghost" id="temp-copy">Copier</button>
+    <button type="button" class="btn btn-primary" id="cancel-btn">${icon('check')}C'est noté</button></div>
+  `);
+  document.getElementById('temp-copy').onclick = ()=>{
+    navigator.clipboard.writeText(`Identifiant : ${u.username}\nMot de passe à usage unique : ${tempPassword}`)
+      .then(()=>toast('Copié'), ()=>toast('Copie impossible — note-le à la main'));
+  };
+}
+// Contrôles communs aux formulaires de compte. Les limites sont revérifiées ici
+// (et pas seulement via maxlength) car les comptes peuvent arriver par import
+// ou par la synchro GitHub. Un champ vide est laissé à fieldRequiredErrors.
+function userFieldErrors(data){
+  const errors = [];
+  if(typeof data.displayName==='string' && data.displayName.trim().length>60) errors.push(['displayName','60 caractères maximum']);
+  if(typeof data.username==='string' && data.username.trim() && !isValidUsername(data.username.trim().toLowerCase())) errors.push(['username','2 à 32 caractères : lettres, chiffres, . _ -']);
+  if(data.password){
+    if(data.password.length<8) errors.push(['password','8 caractères minimum']);
+    if(data.password!==data.password2) errors.push(['password2','Les mots de passe ne correspondent pas']);
+  }
+  return errors;
 }
 
 function renderMemberAccountRequests(me){
