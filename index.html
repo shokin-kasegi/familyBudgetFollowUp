@@ -12,11 +12,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wdth,wght@75..100,400..700&display=swap" rel="stylesheet">
+<script>try{var t=localStorage.getItem('solde_theme');if(t==='givre'||t==='lagon'||t==='nuit'){document.documentElement.dataset.theme=t;document.querySelector('meta[name="theme-color"]').content={nuit:'#050506',givre:'#e8ecf2',lagon:'#031a1e'}[t];}}catch(e){}</script>
 <style>
 /* ==========================================================================
    Système de design « Solde » — refonte V1
    Un fond noir calme, un chiffre énorme qui répond à la question du mois, et
-   cinq postes qui ont chacun leur couleur vive, la même partout dans l'app.
+   cinq postes en tons froids bien distincts (bleu roi, turquoise, lavande,
+   glacier, vieux rose) et le reste à vivre en or, la même palette partout
+   dans l’app.
    La couleur porte toujours un sens (un poste), jamais une décoration : elle
    ne sert ni aux boutons, ni aux liens, ni à la navigation.
    ========================================================================== */
@@ -26,13 +29,13 @@
   --bg:#050506; --surface:#111113; --raised:#1a1a1d; --line:#232327; --line-strong:#34343a;
   --text:#f5f5f7; --muted:#a8a8b0; --faint:#8a8a92;
   /* Une couleur par poste */
-  --c-fixe:#0a84ff;      /* abonnements & charges */
-  --c-achats:#ff9f0a;    /* achats */
-  --c-echeances:#ffd60a; /* échéances */
-  --c-joint:#ff375f;     /* compte joint */
-  --c-epargne:#64d2ff;   /* épargne */
-  --c-reste:#30d158;     /* reste à vivre, revenus */
-  --c-over:#ff453a;      /* dépassement */
+  --c-fixe:#4f7bd9;      /* bleu roi — abonnements & charges */
+  --c-achats:#45b1ad;    /* turquoise — achats */
+  --c-echeances:#b49ce8; /* lavande — échéances */
+  --c-joint:#c9d8ea;     /* bleu glacier — compte joint */
+  --c-epargne:#c97f9f;   /* vieux rose — épargne */
+  --c-reste:#d6b77c;     /* or — reste à vivre, revenus */
+  --c-over:#d9735f;      /* terre cuite — dépassement */
   --font:"Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --ease-out:cubic-bezier(.23,1,.32,1);
   --ease-io:cubic-bezier(.77,0,.175,1);
@@ -735,6 +738,234 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
   #notif-panel{bottom:calc(16px + env(safe-area-inset-bottom));}
 }
 
+/* ==========================================================================
+   Verre liquide — trois thèmes au choix (Paramètres › Apparence, ou depuis
+   l'île). Chacun change le fond, la couleur du verre ET le style (rayons,
+   titres, contrôles) : ce ne sont pas trois teintes du même écran.
+   Le verre a besoin de quelque chose à réfracter : un champ de couleurs
+   des postes, très flou, dérive lentement derrière l'app.
+     Nuit  — noir, verre neutre, coins ronds (la V1 passée au verre)
+     Givre — clair, verre dépoli blanc, très arrondi, aéré
+     Lagon — bleu-vert profond, verre teinté, coins nets, titres condensés
+   ========================================================================== */
+:root{
+  --glass:rgba(255,255,255,0.055); --glass-strong:rgba(28,28,32,0.62);
+  --glass-edge:rgba(255,255,255,0.09); --glass-hi:rgba(255,255,255,0.16); --glass-lo:rgba(255,255,255,0.03);
+  --blur:28px; --sat:170%;
+  --field-a:color-mix(in srgb, var(--c-fixe) 28%, transparent);
+  --field-b:color-mix(in srgb, var(--c-achats) 16%, transparent);
+  --field-c:color-mix(in srgb, var(--c-reste) 12%, transparent);
+  --island:rgba(8,8,10,0.72); --island-ink:#f5f5f7; --island-blob:rgba(255,255,255,0.14);
+  --spring:cubic-bezier(.34,1.42,.64,1);
+}
+:root[data-theme="givre"]{
+  color-scheme:light;
+  --bg:#e8ecf2; --surface:#f5f7fa; --raised:#ffffff; --line:rgba(16,24,40,0.09); --line-strong:rgba(16,24,40,0.17);
+  --text:#0c0e12; --muted:#454b57; --faint:#5f6676;
+  --c-fixe:#1d3f8f; --c-achats:#127a76; --c-echeances:#8a55c0; --c-joint:#6f88b4;
+  --c-epargne:#a24a6e; --c-reste:#86661f; --c-over:#b23f2c;
+  --r-card:30px; --r-inner:18px;
+  --shadow-soft:0 24px 60px rgba(30,40,70,0.18);
+  --glass:rgba(255,255,255,0.52); --glass-strong:rgba(255,255,255,0.74);
+  --glass-edge:rgba(255,255,255,0.75); --glass-hi:rgba(255,255,255,0.95); --glass-lo:rgba(16,24,40,0.04);
+  --blur:34px; --sat:190%;
+  --field-a:color-mix(in srgb, #a9bfdc 50%, transparent);
+  --field-b:color-mix(in srgb, #c9d7ea 45%, transparent);
+  --field-c:color-mix(in srgb, #e8d6ad 45%, transparent);
+  --island:rgba(255,255,255,0.7); --island-ink:#0c0e12; --island-blob:rgba(12,14,18,0.08);
+}
+:root[data-theme="lagon"]{
+  --bg:#031a1e; --surface:#06272d; --raised:#0b343c; --line:#0e3d45; --line-strong:#19545e;
+  --text:#ecfdff; --muted:#a3c9ce; --faint:#86afb5;
+  --r-card:12px; --r-inner:8px; --r-ctl:10px;
+  --glass:rgba(110,230,240,0.07); --glass-strong:rgba(6,40,46,0.7);
+  --glass-edge:rgba(150,240,250,0.16); --glass-hi:rgba(200,255,255,0.24); --glass-lo:rgba(150,240,250,0.04);
+  --blur:22px; --sat:150%;
+  --c-fixe:#5f93f5; --c-achats:#6fd0c8; --c-echeances:#cdb2f2; --c-joint:#dce6f2;
+  --c-epargne:#e895b4; --c-reste:#e0c285; --c-over:#ec7e6a;
+  --field-a:color-mix(in srgb, #3f8fa8 26%, transparent);
+  --field-b:color-mix(in srgb, #6f9fc8 18%, transparent);
+  --field-c:color-mix(in srgb, #e0c285 10%, transparent);
+  --island:rgba(2,22,26,0.74); --island-ink:#ecfdff; --island-blob:rgba(120,240,240,0.18);
+}
+:root[data-theme="givre"] body{background:var(--bg);}
+:root[data-theme="givre"] .field input,:root[data-theme="givre"] .field select{color-scheme:light;}
+:root[data-theme="givre"] ::-webkit-scrollbar-thumb{background:rgba(16,24,40,0.18);}
+:root[data-theme="givre"] ::selection{background:rgba(10,111,224,0.2);}
+/* Lagon : titres condensés, en capitales d'affiche, contrôles carrés. */
+:root[data-theme="lagon"] .page-title{font-stretch:75%;font-weight:700;font-size:36px;letter-spacing:-.01em;}
+:root[data-theme="lagon"] .card > h2,:root[data-theme="lagon"] .card-title,:root[data-theme="lagon"] .chart-head h2{font-stretch:80%;font-size:16px;letter-spacing:.01em;color:var(--text);}
+:root[data-theme="lagon"] .stepper button{border-radius:7px;}
+/* Givre : plus d'air, un poids plus léger pour les titres. */
+:root[data-theme="givre"] .page-title{font-weight:600;font-size:30px;}
+:root[data-theme="givre"] .card{padding:28px;}
+
+/* Le champ de couleur derrière le verre */
+body::before{
+  content:'';position:fixed;inset:-20vmax;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(38vmax 30vmax at 18% 12%, var(--field-a), transparent 70%),
+    radial-gradient(34vmax 30vmax at 88% 30%, var(--field-b), transparent 70%),
+    radial-gradient(40vmax 34vmax at 40% 92%, var(--field-c), transparent 70%);
+  animation:field-drift 38s ease-in-out infinite alternate;
+}
+@keyframes field-drift{
+  0%{transform:translate3d(0,0,0) rotate(0deg) scale(1);}
+  50%{transform:translate3d(4vmax,-3vmax,0) rotate(8deg) scale(1.06);}
+  100%{transform:translate3d(-3vmax,2vmax,0) rotate(-6deg) scale(1.02);}
+}
+body{background:var(--bg);isolation:isolate;}
+
+/* Les surfaces deviennent du verre : flou + saturation du fond, un liseré
+   clair en haut (reflet), un bord à peine visible. Pas d'ombre portée. */
+.card,.auth-card,.stepper,.settings-nav button[aria-current="true"]{
+  background:var(--glass);
+  -webkit-backdrop-filter:blur(var(--blur)) saturate(var(--sat));
+  backdrop-filter:blur(var(--blur)) saturate(var(--sat));
+  box-shadow:inset 0 1px 0 var(--glass-hi), inset 0 0 0 1px var(--glass-edge), inset 0 -1px 0 var(--glass-lo);
+}
+.stepper{border-color:transparent;}
+.btn-ghost{
+  background:var(--glass);border-color:var(--glass-edge);
+  -webkit-backdrop-filter:blur(16px) saturate(var(--sat));backdrop-filter:blur(16px) saturate(var(--sat));
+  box-shadow:inset 0 1px 0 var(--glass-hi);
+}
+.modal,#notif-panel,#claude-panel,#toast{
+  background:var(--glass-strong);border-color:var(--glass-edge);
+  -webkit-backdrop-filter:blur(40px) saturate(var(--sat));backdrop-filter:blur(40px) saturate(var(--sat));
+  box-shadow:var(--shadow-soft), inset 0 1px 0 var(--glass-hi);
+}
+.modal-overlay{background:color-mix(in srgb, var(--bg) 45%, transparent);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);}
+
+/* ---------- L'île : le menu ----------
+   Au repos, une pilule en haut au centre : l'icône et le nom de la vue.
+   Touchée, elle se dilate en panneau (largeur, hauteur et rayon suivent un
+   ressort) ; une goutte de verre glisse jusqu'à l'onglet choisi, l'icône
+   rebondit, puis l'île se rétracte en affichant la nouvelle vue. */
+.sidebar,.sidebar-expand-btn,.mobile-topbar{display:none !important;}
+main{padding-top:calc(88px + env(safe-area-inset-top,0px)) !important;}
+#island-wrap{
+  position:fixed;top:calc(14px + env(safe-area-inset-top,0px));left:0;right:0;z-index:120;
+  display:flex;justify-content:center;pointer-events:none;
+}
+#island{
+  pointer-events:auto;position:relative;overflow:hidden;
+  width:var(--iw,220px);height:var(--ih,48px);border-radius:var(--ir,24px);
+  background:var(--island);color:var(--island-ink);
+  -webkit-backdrop-filter:blur(30px) saturate(200%);backdrop-filter:blur(30px) saturate(200%);
+  box-shadow:0 14px 40px rgba(0,0,0,0.28), inset 0 1px 0 var(--glass-hi), inset 0 0 0 1px var(--glass-edge);
+  transition:width .52s var(--spring), height .52s var(--spring), border-radius .52s var(--spring), transform .2s var(--ease-out);
+  view-transition-name:island;
+}
+#island.open{transition-duration:.6s;}
+#island.bump{animation:island-bump .42s var(--spring);}
+@keyframes island-bump{40%{transform:scale(1.06,.94);}}
+/* Reflet mobile : une tache claire suit le pointeur sur le verre. */
+#island::after{
+  content:'';position:absolute;inset:0;pointer-events:none;border-radius:inherit;
+  background:radial-gradient(120px 60px at var(--mx,30%) -10%, var(--glass-hi), transparent 70%);
+  opacity:.7;transition:opacity .3s ease;
+}
+.isl-compact{
+  position:absolute;inset:0;display:flex;align-items:center;gap:10px;padding:0 8px 0 10px;
+  width:100%;height:48px;white-space:nowrap;color:inherit;font-weight:600;font-size:15px;
+  transition:opacity .22s ease, filter .22s ease, transform .3s var(--spring);
+}
+#island.open .isl-compact{opacity:0;filter:blur(6px);transform:scale(.9);pointer-events:none;}
+.isl-compact .mark{width:26px;height:26px;}
+.isl-label{display:inline-flex;align-items:center;gap:8px;overflow:hidden;}
+.isl-label .dot{width:7px;height:7px;}
+.isl-label span{display:inline-block;}
+.isl-label.swap-in span{animation:label-in .5s var(--spring) both;}
+.isl-label.swap-in .dot{animation:dot-in .5s var(--spring) both;}
+@keyframes label-in{from{opacity:0;transform:translateY(14px);filter:blur(4px);}}
+@keyframes dot-in{from{transform:scale(0);}}
+.isl-month{margin-left:auto;font-weight:500;font-size:13px;opacity:.7;font-variant-numeric:tabular-nums;}
+.isl-chev{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--island-blob);flex:none;}
+.isl-chev svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2.2;}
+.isl-badge{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--c-joint);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;}
+
+.isl-panel{
+  position:absolute;top:0;left:0;width:var(--pw,560px);padding:14px;
+  opacity:0;pointer-events:none;transition:opacity .18s ease;
+}
+#island.open .isl-panel{opacity:1;pointer-events:auto;transition:opacity .3s ease .08s;}
+.isl-head{display:flex;align-items:center;gap:10px;padding:2px 4px 12px;}
+.isl-head .mark{width:24px;height:24px;}
+.isl-head b{font-size:16px;font-weight:700;}
+.isl-head .icon-btn{margin-left:auto;color:inherit;}
+.isl-grid{position:relative;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;}
+.isl-item{
+  position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;
+  height:78px;padding:6px 4px;border-radius:calc(var(--r-inner) + 4px);color:inherit;opacity:.78;
+  font-size:12.5px;font-weight:600;text-align:center;line-height:1.15;
+  transition:opacity .2s ease, transform .2s var(--ease-out);
+}
+.isl-item svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.7;transition:transform .2s var(--ease-out);}
+.isl-item[aria-current="page"]{opacity:1;}
+@media (hover:hover){ .isl-item:hover{opacity:1;} .isl-item:hover svg{transform:translateY(-2px);} }
+.isl-item:active{transform:scale(.94);}
+.isl-item .vdot{position:absolute;top:10px;right:calc(50% - 20px);width:7px;height:7px;border-radius:50%;}
+#island.open .isl-item{animation:item-in .46s var(--spring) both;animation-delay:calc(var(--i) * 22ms + 60ms);}
+@keyframes item-in{from{opacity:0;transform:translateY(-10px) scale(.85);}}
+.isl-item.picked svg{animation:icon-pop .5s var(--spring);}
+@keyframes icon-pop{30%{transform:scale(.7) rotate(-8deg);}65%{transform:scale(1.25) rotate(4deg);}}
+/* La goutte : un verre plus clair sous l'onglet actif, qui s'étire en voyageant. */
+.isl-blob{
+  position:absolute;z-index:0;top:0;left:0;border-radius:calc(var(--r-inner) + 4px);
+  background:var(--island-blob);box-shadow:inset 0 1px 0 var(--glass-hi), inset 0 0 0 1px var(--glass-edge);
+  pointer-events:none;transform-origin:center;
+}
+.isl-foot{display:flex;align-items:center;gap:8px;margin-top:12px;padding:12px 4px 0;border-top:1px solid var(--glass-edge);}
+.isl-foot .who{display:flex;align-items:center;gap:9px;min-width:0;flex:1;font-size:14px;font-weight:600;}
+.isl-foot .who span.n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.isl-foot .icon-btn{color:inherit;position:relative;}
+.isl-foot .icon-btn .isl-badge{position:absolute;top:-4px;right:-6px;}
+.theme-swatches{display:flex;gap:6px;padding:4px;border-radius:999px;background:var(--island-blob);}
+.theme-sw{width:26px;height:26px;border-radius:50%;position:relative;transition:transform .2s var(--spring);}
+.theme-sw:active{transform:scale(.85);}
+.theme-sw[aria-pressed="true"]{box-shadow:0 0 0 2px var(--island-ink);}
+.theme-sw[data-theme-pick="nuit"]{background:#0b0b0e;box-shadow:inset 0 0 0 1px rgba(255,255,255,.25);}
+.theme-sw[data-theme-pick="givre"]{background:#eef2f7;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15);}
+.theme-sw[data-theme-pick="lagon"]{background:#0b4650;box-shadow:inset 0 0 0 1px rgba(150,240,250,.35);}
+.theme-sw[aria-pressed="true"][data-theme-pick]{box-shadow:0 0 0 2px var(--island-ink), inset 0 0 0 1px rgba(127,127,127,.4);}
+#island-scrim{
+  position:fixed;inset:0;z-index:110;background:color-mix(in srgb, var(--bg) 35%, transparent);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  opacity:0;pointer-events:none;transition:opacity .3s ease;
+}
+#island-scrim.show{opacity:1;pointer-events:auto;}
+#notif-panel{left:50%;top:calc(76px + env(safe-area-inset-top,0px));bottom:auto !important;transform-origin:top center;transform:translateX(-50%) scale(.96);}
+#notif-panel.open{transform:translateX(-50%) scale(1);}
+@media(max-width:640px){
+  .isl-grid{grid-template-columns:repeat(3,minmax(0,1fr));}
+  .isl-item{height:72px;}
+  main{padding-top:calc(76px + env(safe-area-inset-top,0px)) !important;}
+  #view{padding-top:4px !important;}
+}
+
+/* Paramètres › Apparence : les trois propositions côte à côte. */
+.theme-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px;}
+@media(max-width:640px){.theme-cards{grid-template-columns:1fr;}}
+.theme-card{display:block;text-align:left;border-radius:18px;padding:10px;transition:transform .2s var(--spring);background:var(--glass-lo);box-shadow:inset 0 0 0 1px var(--line-strong);}
+.theme-card:active{transform:scale(.97);}
+.theme-card[aria-pressed="true"]{box-shadow:inset 0 0 0 2px var(--text);}
+.theme-card .prev{display:block;height:112px;border-radius:12px;position:relative;overflow:hidden;margin-bottom:10px;}
+.theme-card .prev i{position:absolute;display:block;}
+.theme-card .nm{display:block;font-weight:650;font-size:15px;}
+.theme-card .ds{font-size:13px;color:var(--muted);margin-top:2px;}
+.nav-order{list-style:none;display:grid;gap:6px;margin-top:14px;max-width:420px;}
+.nav-order li{display:flex;align-items:center;gap:10px;height:44px;padding:0 6px 0 14px;border-radius:12px;background:var(--glass);box-shadow:inset 0 0 0 1px var(--glass-edge);}
+.nav-order li svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;}
+.nav-order li .l{flex:1;font-weight:500;}
+.nav-order li .icon-btn:disabled{opacity:.3;cursor:default;}
+
+@media (prefers-reduced-motion: reduce){
+  body::before{animation:none;}
+  #island,.isl-compact,.isl-panel{transition-duration:.01s !important;}
+  #island.bump,#island.open .isl-item,.isl-item.picked svg,.isl-label.swap-in span,.isl-label.swap-in .dot{animation:none !important;}
+}
+
 /* ---------- Mouvement réduit : plus de déplacement ni de défilement de
    chiffres ; seuls de brefs fondus restent. ---------- */
 @media (prefers-reduced-motion: reduce){
@@ -756,6 +987,8 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
 <div id="auth-root"></div>
 <div id="shell">
   <nav class="sidebar" id="sidebar"></nav>
+  <div id="island-scrim"></div>
+  <div id="island-wrap"><nav id="island" aria-label="Navigation principale"></nav></div>
   <button class="sidebar-expand-btn" data-action="toggle-sidebar-collapse" title="Afficher la navigation" aria-label="Afficher la navigation"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
   <div id="overlay-scrim"></div>
   <main>
@@ -1787,7 +2020,211 @@ function renderSidebar(){
   const mobileMark = document.querySelector('.mobile-topbar .mark');
   if(mobileMark && !mobileMark.childElementCount) mobileMark.outerHTML = markSVG();
   setupNavDragAndDrop();
+  renderIsland();
 }
+/* ============================== THÈMES ============================== */
+// Préférence de l'appareil (pas des données du budget) : elle ne se synchronise pas.
+const THEMES = [
+  {id:'nuit',  label:'Nuit',  desc:'Noir, verre neutre, coins ronds.', meta:'#050506'},
+  {id:'givre', label:'Givre', desc:'Clair, verre dépoli, très arrondi.', meta:'#e8ecf2'},
+  {id:'lagon', label:'Lagon', desc:'Bleu-vert, verre teinté, coins nets.', meta:'#031a1e'},
+];
+function currentTheme(){ const t = document.documentElement.dataset.theme; return THEMES.some(x=>x.id===t) ? t : 'nuit'; }
+async function setTheme(id){
+  if(!THEMES.some(x=>x.id===id) || id===currentTheme()) return;
+  const apply = ()=>{
+    document.documentElement.dataset.theme = id;
+    try{ localStorage.setItem('solde_theme', id); }catch(e){}
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEMES.find(x=>x.id===id).meta);
+    return render();
+  };
+  // Le nouveau thème s'ouvre en cercle depuis le centre de l'île.
+  if(!document.startViewTransition || motionOff()){ await apply(); return; }
+  const isl = document.getElementById('island')?.getBoundingClientRect();
+  const x = isl ? isl.left + isl.width/2 : innerWidth/2, y = isl ? isl.top + isl.height/2 : 0;
+  const r = Math.hypot(Math.max(x, innerWidth-x), Math.max(y, innerHeight-y));
+  const t = document.startViewTransition(apply);
+  await t.ready;
+  document.documentElement.animate({clipPath:[`circle(0 at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`]},
+    {duration:620, easing:'cubic-bezier(.23,1,.32,1)', pseudoElement:'::view-transition-new(root)'});
+}
+function themeSwatchesHTML(){
+  return `<div class="theme-swatches" role="group" aria-label="Thème">${THEMES.map(t=>`<button class="theme-sw" data-theme-pick="${t.id}" aria-pressed="${currentTheme()===t.id}" aria-label="Thème ${t.label}" title="${t.label}"></button>`).join('')}</div>`;
+}
+
+// Vignette d'un thème : son fond, son champ de couleur, une carte de verre et la pilule.
+function themePreviewHTML(id){
+  const P = {
+    nuit:  {bg:'#050506', a:'#4f7bd9', b:'#45b1ad', card:'rgba(255,255,255,.08)', ink:'#f5f5f7', r:10, isl:'#0b0b0e'},
+    givre: {bg:'#e8ecf2', a:'#a9bfdc', b:'#e8d6ad', card:'rgba(255,255,255,.6)', ink:'#0c0e12', r:14, isl:'#ffffff'},
+    lagon: {bg:'#031a1e', a:'#3f8fa8', b:'#6f9fc8', card:'rgba(110,230,240,.10)', ink:'#ecfdff', r:4, isl:'#06272d'},
+  }[id];
+  return `<i style="inset:0;background:${P.bg}"></i>
+    <i style="width:90px;height:90px;border-radius:50%;left:-20px;top:-30px;background:${P.a};opacity:.55;filter:blur(22px)"></i>
+    <i style="width:80px;height:80px;border-radius:50%;right:-10px;bottom:-30px;background:${P.b};opacity:.5;filter:blur(22px)"></i>
+    <i style="left:50%;top:8px;width:64px;height:16px;margin-left:-32px;border-radius:9px;background:${P.isl};box-shadow:inset 0 0 0 1px rgba(127,127,127,.3)"></i>
+    <i style="left:12px;right:12px;top:34px;bottom:12px;border-radius:${P.r}px;background:${P.card};backdrop-filter:blur(8px);box-shadow:inset 0 1px 0 rgba(255,255,255,.3)"></i>
+    <i style="left:24px;top:46px;width:56px;height:20px;border-radius:3px;background:${{nuit:'#d6b77c',givre:'#86661f',lagon:'#e0c285'}[id]}"></i>
+    <i style="left:24px;top:74px;width:60%;height:6px;border-radius:3px;background:${P.ink};opacity:.35"></i>`;
+}
+/* ============================== L'ÎLE ============================== */
+let islandOpen = false;
+let islandPicking = false;
+let islandLastView = null;
+function islandItems(){ return [...orderedNavItems(), {id:'parametres', label:'Paramètres', icon:'settings'}]; }
+function renderIsland(){
+  const isl = document.getElementById('island');
+  if(!isl || islandPicking) return;
+  const me = currentUser();
+  const badge = notifBadgeCount();
+  const item = islandItems().find(n=>n.id===currentView) || {label:'Solde', icon:'dashboard'};
+  const color = VIEW_COLORS[currentView];
+  const showMonth = typeof MONTH_VIEWS!=='undefined' && MONTH_VIEWS.has(currentView) && state.selectedMonth;
+  const changed = islandLastView!==null && islandLastView!==currentView;
+  islandLastView = currentView;
+  isl.innerHTML = `
+    <button class="isl-compact" id="isl-toggle" aria-expanded="${islandOpen}" aria-controls="isl-panel" aria-label="Menu — ${attrEsc(item.label)}">
+      ${markSVG()}
+      <span class="isl-label${changed?' swap-in':''}">${color?`<i class="dot" style="background:${color}" aria-hidden="true"></i>`:''}<span>${esc(item.label)}</span></span>
+      ${showMonth ? `<span class="isl-month">${esc(new Date(Number(state.selectedMonth.slice(0,4)), Number(state.selectedMonth.slice(5,7))-1, 1).toLocaleDateString('fr-FR',{month:'short', year:'numeric'}))}</span>` : `<span class="isl-month"></span>`}
+      ${badge>0 ? `<span class="isl-badge" aria-label="${badge} notifications">${badge}</span>` : ''}
+      <span class="isl-chev" aria-hidden="true">${icon('chevD')}</span>
+    </button>
+    <div class="isl-panel" id="isl-panel" ${islandOpen?'':'inert'}>
+      <div class="isl-head">${markSVG()}<b>Solde</b>
+        <button class="icon-btn" data-island="close" aria-label="Fermer le menu">${icon('x')}</button></div>
+      <div class="isl-grid">
+        <span class="isl-blob" aria-hidden="true"></span>
+        ${islandItems().map((n,i)=>`<button class="isl-item" style="--i:${i}" data-island-nav="${n.id}"${currentView===n.id?' aria-current="page"':''}>${icon(n.icon)}<span>${n.label}</span>${VIEW_COLORS[n.id]?`<i class="vdot" style="background:${VIEW_COLORS[n.id]}" aria-hidden="true"></i>`:''}</button>`).join('')}
+      </div>
+      <div class="isl-foot">
+        <div class="who">${avatarHTML(me, 30)}<span class="n">${esc(me?me.displayName:'')}</span></div>
+        ${themeSwatchesHTML()}
+        <button class="icon-btn" data-island="notifs" aria-label="Notifications">${icon('bell')}${badge>0?`<span class="isl-badge">${badge}</span>`:''}</button>
+        <button class="icon-btn" data-action="logout" aria-label="Se déconnecter">${icon('logout')}</button>
+      </div>
+    </div>`;
+  sizeIsland(false);
+  if(islandOpen) placeBlob(isl.querySelector('.isl-item[aria-current="page"]'), false);
+}
+// L'île passe d'une taille mesurée à l'autre : CSS anime largeur, hauteur et rayon avec un ressort.
+function sizeIsland(){
+  const isl = document.getElementById('island');
+  if(!isl) return;
+  const compact = isl.querySelector('.isl-compact');
+  if(islandOpen){
+    const pw = Math.min(innerWidth - 24, innerWidth <= 640 ? 440 : 600);
+    isl.style.setProperty('--pw', pw+'px');
+    const panel = isl.querySelector('.isl-panel');
+    isl.style.setProperty('--iw', pw+'px');
+    isl.style.setProperty('--ih', panel.scrollHeight+'px');
+    isl.style.setProperty('--ir', '30px');
+  }else{
+    // Largeur naturelle du contenu compact, mesurée hors flux.
+    compact.style.position='static'; compact.style.width='max-content';
+    const w = Math.ceil(compact.getBoundingClientRect().width);
+    compact.style.position=''; compact.style.width='';
+    isl.style.setProperty('--iw', Math.min(innerWidth - 32, Math.max(180, w))+'px');
+    isl.style.setProperty('--ih', '48px');
+    isl.style.setProperty('--ir', '24px');
+  }
+}
+function placeBlob(target, animate){
+  const blob = document.querySelector('#island .isl-blob');
+  if(!blob || !target) { if(blob) blob.style.opacity = 0; return null; }
+  const to = {x:target.offsetLeft, y:target.offsetTop, w:target.offsetWidth, h:target.offsetHeight};
+  const from = blob._at;
+  blob.style.opacity = 1;
+  blob.style.width = to.w+'px'; blob.style.height = to.h+'px';
+  blob.style.transform = `translate(${to.x}px,${to.y}px)`;
+  blob._at = to;
+  if(!animate || !from || motionOff()) return null;
+  // La goutte s'étire dans le sens du trajet, puis reprend sa forme en rebondissant.
+  const dx = to.x - from.x, dy = to.y - from.y;
+  const sx = 1 + Math.min(.45, Math.abs(dx)/600), sy = 1 + Math.min(.35, Math.abs(dy)/300);
+  return blob.animate([
+    {transform:`translate(${from.x}px,${from.y}px) scale(1,1)`},
+    {transform:`translate(${from.x+dx*.55}px,${from.y+dy*.55}px) scale(${sx},${2-sx > .7 ? 2-sx : .7})`, offset:.45},
+    {transform:`translate(${to.x}px,${to.y}px) scale(${1/sx*.98+.04},${sy})`, offset:.75},
+    {transform:`translate(${to.x}px,${to.y}px) scale(1,1)`},
+  ], {duration:440, easing:'cubic-bezier(.3,.7,.3,1)'}).finished.catch(()=>{});
+}
+function setIslandOpen(open, {focus=true}={}){
+  if(open===islandOpen) return;
+  islandOpen = open;
+  const isl = document.getElementById('island');
+  if(!isl) return;
+  isl.classList.toggle('open', open);
+  document.getElementById('island-scrim')?.classList.toggle('show', open);
+  isl.querySelector('#isl-toggle')?.setAttribute('aria-expanded', open);
+  const panel = isl.querySelector('.isl-panel');
+  if(open){ panel.removeAttribute('inert'); toggleNotifPanel(false); }
+  else panel.setAttribute('inert','');
+  sizeIsland();
+  if(open){
+    const cur = isl.querySelector('.isl-item[aria-current="page"]');
+    const blob = isl.querySelector('.isl-blob'); if(blob) blob._at = null;
+    placeBlob(cur, false);
+    if(focus) (cur || isl.querySelector('.isl-item'))?.focus({preventScroll:true});
+  }else if(focus && isl.contains(document.activeElement)) isl.querySelector('#isl-toggle')?.focus({preventScroll:true});
+}
+async function pickIslandItem(btn){
+  const view = btn.dataset.islandNav;
+  if(islandPicking) return;
+  if(view===currentView){ setIslandOpen(false); return; }
+  islandPicking = true;
+  const isl = document.getElementById('island');
+  isl.querySelectorAll('.isl-item[aria-current]').forEach(b=>b.removeAttribute('aria-current'));
+  btn.setAttribute('aria-current','page');
+  btn.classList.add('picked');
+  const travel = placeBlob(btn, true);
+  if(travel && !motionOff()) await Promise.race([travel, new Promise(r=>setTimeout(r,480))]);
+  islandPicking = false;
+  setIslandOpen(false, {focus:false});
+  isl.classList.remove('bump'); void isl.offsetWidth; if(!motionOff()) isl.classList.add('bump');
+  await navigateTo(view);
+  document.getElementById('isl-toggle')?.focus({preventScroll:true});
+}
+document.addEventListener('click', async (e)=>{
+  const t = e.target;
+  if(t.closest && t.closest('#isl-toggle')){ setIslandOpen(!islandOpen); return; }
+  const nav = t.closest && t.closest('[data-island-nav]');
+  if(nav){ e.stopPropagation(); await pickIslandItem(nav); return; }
+  const sw = t.closest && t.closest('[data-theme-pick]');
+  if(sw){ e.stopPropagation(); await setTheme(sw.dataset.themePick); return; }
+  const act = t.closest && t.closest('[data-island]');
+  if(act){
+    e.stopPropagation();
+    if(act.dataset.island==='close') setIslandOpen(false);
+    if(act.dataset.island==='notifs'){ setIslandOpen(false, {focus:false}); toggleNotifPanel(true); }
+    return;
+  }
+  if(t.id==='island-scrim') setIslandOpen(false);
+}, true);
+document.addEventListener('keydown', (e)=>{
+  if(!islandOpen) return;
+  if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); setIslandOpen(false); return; }
+  // Flèches : on se déplace dans la grille des onglets.
+  const items = [...document.querySelectorAll('#island .isl-item')];
+  const i = items.indexOf(document.activeElement);
+  if(i<0 || !/^Arrow/.test(e.key)) return;
+  const cols = getComputedStyle(document.querySelector('#island .isl-grid')).gridTemplateColumns.split(' ').length;
+  const d = {ArrowLeft:-1, ArrowRight:1, ArrowUp:-cols, ArrowDown:cols}[e.key];
+  const next = items[Math.max(0, Math.min(items.length-1, i+d))];
+  e.preventDefault(); next.focus();
+}, true);
+// Le focus qui quitte l'île la referme.
+document.addEventListener('focusin', (e)=>{
+  if(islandOpen && !e.target.closest('#island')) setIslandOpen(false, {focus:false});
+});
+document.addEventListener('pointermove', (e)=>{
+  const isl = document.getElementById('island');
+  if(!isl || e.pointerType!=='mouse') return;
+  const r = isl.getBoundingClientRect();
+  if(e.clientY > r.bottom + 120) return;
+  isl.style.setProperty('--mx', Math.round(((e.clientX - r.left)/r.width)*100)+'%');
+}, {passive:true});
+window.addEventListener('resize', ()=>{ sizeIsland(); if(islandOpen) placeBlob(document.querySelector('#island .isl-item[aria-current="page"]'), false); });
 function initials(u){
   if(!u) return '?';
   const name = (u.displayName||u.username||'').trim();
@@ -3576,7 +4013,7 @@ document.addEventListener('keydown', async (e)=>{
   if(e.key!=='ArrowLeft' && e.key!=='ArrowRight') return;
   if(currentView!=='dashboard' || !currentUser() || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
   if(document.querySelector('#modal-root .modal') || colFilterOpen || chartFilterOpen) return;
-  if(e.target.closest && e.target.closest('input,textarea,select,[contenteditable],#sidebar,.ychart')) return;
+  if(e.target.closest && e.target.closest('input,textarea,select,[contenteditable],#sidebar,#island,.ychart')) return;
   e.preventDefault();
   const dir = e.key==='ArrowLeft' ? -1 : 1;
   motionInstant = true;
@@ -4016,6 +4453,13 @@ async function handleAction(action, id, el){
     /* Auth / users */
     case 'logout': stopPolling(); clearSession(); await boot(); toast('Déconnecté'); break;
     case 'toggle-sidebar-collapse': state.navCollapsed = !state.navCollapsed; await persist(); await render(); break;
+    case 'nav-move': {
+      const ids = orderedNavItems().map(n=>n.id), i = ids.indexOf(id), j = i + Number(el.dataset.dir);
+      if(i<0 || j<0 || j>=ids.length) break;
+      await moveNavItem(id, ids[j], Number(el.dataset.dir)>0 ? 'after' : 'before');
+      document.querySelector(`[data-action="nav-move"][data-id="${id}"][data-dir="${el.dataset.dir}"]:not(:disabled)`)?.focus();
+      break;
+    }
     case 'reset-nav-order': if(state.navOrder) state.navOrder[el.dataset.space||currentSpace] = null; await persist(); await render(); break;
     case 'toggle-user-actions': {
       const row = el.closest('.user-row');
@@ -4724,6 +5168,7 @@ const PARAM_SECTIONS = [
   {id:'sync', label:'Synchronisation', icon:'cloud'},
   {id:'notifs', label:'Notifications', icon:'bell'},
   {id:'assistant', label:'Assistant', icon:'bot'},
+  {id:'apparence', label:'Apparence', icon:'eye'},
   {id:'navigation', label:'Navigation', icon:'menu'},
 ];
 let paramSection = 'comptes';
@@ -4760,13 +5205,26 @@ function renderParametres(){
       <h3>Assistant Claude</h3>
       <div class="sub">Un chat intégré pour t’aider à comprendre et faire évoluer ton budget. Utilise ta propre clé API Anthropic : elle reste uniquement sur cet appareil.</div>
       ${renderClaudeSection()}`,
-    navigation: ()=>`
-      <h3>Navigation</h3>
-      <div class="sub">Réordonne les onglets directement dans la barre de navigation : maintiens le clic sur un onglet et glisse-le à sa nouvelle place (Alt + ↑ / ↓ au clavier).</div>
-      <div class="row-actions" style="justify-content:flex-start;flex-wrap:wrap;">
-        <button class="btn btn-ghost btn-sm" data-action="toggle-sidebar-collapse">${icon(state.navCollapsed?'eye':'eyeOff')}${state.navCollapsed?'Afficher la barre de navigation':'Masquer la barre de navigation'}</button>
-        ${state.navOrder?.finance ? `<button class="btn btn-ghost btn-sm" data-action="reset-nav-order" data-space="finance">${icon('refresh')}Réinitialiser l’ordre des onglets</button>` : ''}
+    apparence: ()=>`
+      <h3>Apparence</h3>
+      <div class="sub">Trois styles de verre liquide. Le choix reste sur cet appareil ; il se change aussi depuis le menu en haut de l’écran.</div>
+      <div class="theme-cards" role="group" aria-label="Thème">
+        ${THEMES.map(t=>`<button class="theme-card" data-theme-pick="${t.id}" aria-pressed="${currentTheme()===t.id}">
+          <span class="prev" aria-hidden="true">${themePreviewHTML(t.id)}</span>
+          <span class="nm">${t.label}</span><span class="ds" style="display:block">${t.desc}</span></button>`).join('')}
       </div>`,
+    navigation: ()=>{
+      const items = orderedNavItems();
+      return `
+      <h3>Navigation</h3>
+      <div class="sub">L’ordre des onglets dans le menu en haut de l’écran.</div>
+      <ol class="nav-order">
+        ${items.map((n,i)=>`<li>${icon(n.icon)}<span class="l">${n.label}</span>
+          <button class="icon-btn" data-action="nav-move" data-id="${n.id}" data-dir="-1" aria-label="Monter ${attrEsc(n.label)}"${i===0?' disabled':''}>${icon('chevU')}</button>
+          <button class="icon-btn" data-action="nav-move" data-id="${n.id}" data-dir="1" aria-label="Descendre ${attrEsc(n.label)}"${i===items.length-1?' disabled':''}>${icon('chevD')}</button></li>`).join('')}
+      </ol>
+      ${state.navOrder?.finance ? `<div class="row-actions" style="justify-content:flex-start;margin-top:14px;"><button class="btn btn-ghost btn-sm" data-action="reset-nav-order" data-space="finance">${icon('refresh')}Réinitialiser l’ordre des onglets</button></div>` : ''}`;
+    },
   };
   return `
     ${pageHeadHTML({title:'Paramètres', finding:'Comptes, compte joint, synchronisation et assistant.'})}

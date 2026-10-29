@@ -8,7 +8,8 @@
      Vue annuelle, Compte joint) ;
    - pas de défilement horizontal de la page à 390 px ;
    - critères du système de design (police unique, pas de flou ni de dégradé
-     décoratif, un seul bouton plein par écran). */
+     décoratif hors verre liquide, un seul bouton plein par écran) ;
+   - l'île (menu) : ouverture, sélection animée, clavier, et les trois thèmes. */
 import { createRequire } from 'node:module';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -155,14 +156,50 @@ try{
   {
     const html = fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
     const style = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
-    ok(!/backdrop-filter/.test(html), 'index.html contient encore backdrop-filter');
-    ok(!/radial-gradient/.test(html), 'index.html contient encore un radial-gradient');
+    // Verre liquide : le flou est réservé aux surfaces de verre déclarées par les jetons
+    // (--blur), à l'île et aux couches flottantes ; les radial-gradient ne servent qu'au
+    // champ de couleur derrière le verre et au reflet de l'île.
+    const blurs = (style.match(/backdrop-filter:[^;}]*/g)||[]);
+    ok(blurs.length>0 && blurs.every(b=>/blur\(/.test(b)), 'backdrop-filter : flou attendu sur le verre');
+    ok((style.match(/radial-gradient/g)||[]).length<=4, 'radial-gradient : seulement le champ de couleur et le reflet de l’île');
+    ok(['nuit','givre','lagon'].every(t=>html.includes(`{id:'${t}'`)), 'trois thèmes déclarés (Nuit, Givre, Lagon)');
     // Seules exceptions : les hachures du dépassement (repeating-, un motif qui porte un sens) et les masques de défilement des tableaux.
     const gradients = (html.match(/(?<!repeating-)linear-gradient\([^;]*/g)||[]).filter(g=>!/black/.test(g));
     ok(gradients.length===0, `dégradés décoratifs restants : ${gradients.slice(0,3).join(' | ')}`);
     ok(/family=Instrument\+Sans/.test(html) && !/Space\+Grotesk|family=Inter/.test(html), 'une seule famille chargée (Instrument Sans)');
     ok(!/chart\.umd/.test(html), 'Chart.js ne doit plus être chargé');
-    ok(!/\.card\{[^}]*box-shadow/.test(style), 'les cartes au repos ne doivent pas avoir d’ombre');
+    // Le verre porte un reflet intérieur (inset), jamais d'ombre portée au repos.
+    const cardShadows = [...style.matchAll(/(?:^|[,}\n])\.card[,{][^}]*box-shadow:([^;}]*)/g)].map(m=>m[1]);
+    ok(cardShadows.every(sh=>sh.split(/,(?![^(]*\))/).every(x=>/inset/.test(x))), 'les cartes au repos : reflet intérieur seulement, pas d’ombre portée');
+  }
+
+  console.log('\n— Île (menu) et thèmes');
+  for(const [w,h] of [[1440,900],[390,844]]){
+    const {ctx, page, errors} = await openApp(browser, {width:w, height:h});
+    ok(await page.isVisible('#isl-toggle'), `île visible @${w}`);
+    ok(!(await page.isVisible('#sidebar')), `barre latérale masquée @${w}`);
+    await page.click('#isl-toggle'); await page.waitForTimeout(700);
+    ok(await page.getAttribute('#isl-toggle','aria-expanded')==='true', `île ouverte @${w}`);
+    ok(await page.evaluate(()=>document.activeElement?.dataset.islandNav==='dashboard'), `focus sur l'onglet actif à l'ouverture @${w}`);
+    const ih = await page.evaluate(()=>document.getElementById('island').getBoundingClientRect().height);
+    ok(ih>200, `l'île s'agrandit en panneau @${w} (${ih}px)`);
+    await page.click('[data-island-nav="charges"]'); await page.waitForTimeout(1200);
+    ok(await page.evaluate(()=>location.hash.startsWith('#charges')), `sélection dans l'île → vue Charges @${w}`);
+    ok(await page.getAttribute('#isl-toggle','aria-expanded')==='false', `l'île se referme après sélection @${w}`);
+    ok((await page.innerText('#isl-toggle')).includes('Charges'), `l'île affiche la nouvelle vue @${w}`);
+    // Clavier : Échap referme et rend le focus au bouton.
+    await page.click('#isl-toggle'); await page.waitForTimeout(500);
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Escape'); await page.waitForTimeout(400);
+    ok(await page.evaluate(()=>document.activeElement?.id==='isl-toggle'), `Échap referme l'île et rend le focus @${w}`);
+    // Thèmes : le choix change les jetons et survit au rechargement.
+    await page.click('#isl-toggle'); await page.waitForTimeout(500);
+    await page.click('[data-theme-pick="givre"]'); await page.waitForTimeout(900);
+    ok(await page.evaluate(()=>document.documentElement.dataset.theme==='givre' && getComputedStyle(document.body).backgroundColor==='rgb(232, 236, 242)'), `thème Givre appliqué @${w}`);
+    await page.reload(); await page.waitForTimeout(600);
+    ok(await page.evaluate(()=>document.documentElement.dataset.theme==='givre'), `thème conservé au rechargement @${w}`);
+    ok(errors.length===0, `île @${w} : erreurs JS — ${errors.join(' | ')}`);
+    await ctx.close();
   }
 
   console.log('\n— Mouvement');
@@ -200,8 +237,10 @@ try{
     await page.waitForSelector('.stepper');
     await page.click('[data-stepper][data-dir="1"]');
     await page.waitForTimeout(200);
-    await page.click('[data-nav="depenses"]');
-    await page.waitForTimeout(200);
+    await page.click('#isl-toggle');
+    await page.waitForTimeout(500);
+    await page.click('[data-island-nav="depenses"]');
+    await page.waitForTimeout(900);
     ok(/#depenses\/2026-10/.test(page.url()) && errors.length===0, `sans startViewTransition : navigation KO (${page.url()}) ${errors.join(' ')}`);
     await ctx.close();
   }
