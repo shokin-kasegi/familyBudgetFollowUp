@@ -125,6 +125,7 @@ a{color:inherit;}
 .nav-item svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;flex-shrink:0;}
 .nav-item:hover{background:rgba(255,255,255,0.04);color:var(--text);}
 .nav-item.nav-dragging{opacity:0.35;}
+#sidebar .nav-item[data-nav]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;}
 .nav-item.drop-before::before,.nav-item.drop-after::after{
   content:'';position:absolute;left:6px;right:6px;height:2px;border-radius:2px;
   background:var(--teal);box-shadow:0 0 6px rgba(191,233,210,0.6);
@@ -218,6 +219,7 @@ main{flex:1;min-width:0;padding:34px 40px 80px;}
   transition:transform .1s ease, background .15s ease;
 }
 .btn:active{transform:scale(0.97);}
+.btn:disabled{opacity:.6;cursor:progress;transform:none;}
 .btn-primary{background:#FFFFFF;color:#000000;}
 .btn-primary:hover{filter:brightness(1.08);}
 .btn-ghost{background:rgba(255,255,255,0.05);color:var(--text);border:1px solid var(--border);}
@@ -1259,15 +1261,57 @@ let dragNavId = null, dragOverId = null, dragOverPos = null, dragGhostEl = null;
 let dragPending = null;      // { id, el, startX, startY } — clic maintenu, pas encore un vrai glissement
 let dragJustHappened = false; // empêche le clic de navigation juste après un glissement réel
 const NAV_DRAG_THRESHOLD = 6; // px de mouvement avant de considérer que c'est un glissement, pas un clic
+// Au doigt, un glissement immédiat se confond avec le défilement de la barre latérale :
+// on attend un appui long (comme pour réorganiser les applis d'un téléphone).
+const NAV_LONG_PRESS_MS = 350;
+const NAV_LONG_PRESS_TOLERANCE = 10; // px de mouvement tolérés pendant l'appui long avant d'y voir un défilement
 function setupNavDragAndDrop(){
   const draggableIds = new Set(navForSpace(currentSpace).map(n=>n.id));
   const items = Array.from(document.querySelectorAll('#sidebar .nav-item[data-nav]')).filter(el=>draggableIds.has(el.dataset.nav));
   items.forEach(el=>{
-    el.addEventListener('mousedown', (e)=>{
-      if(e.button!==0) return; // clic gauche uniquement
-      dragPending = { id: el.dataset.nav, el, startX: e.clientX, startY: e.clientY };
+    el.addEventListener('pointerdown', (e)=>{
+      if(e.pointerType==='mouse'){
+        if(e.button!==0) return; // clic gauche uniquement
+        dragPending = { id: el.dataset.nav, el, startX: e.clientX, startY: e.clientY };
+        return;
+      }
+      cancelNavLongPress();
+      dragPending = { id: el.dataset.nav, el, startX: e.clientX, startY: e.clientY, touch: true };
+      dragPending.timer = setTimeout(()=>{
+        if(!dragPending || dragPending.el!==el) return;
+        startNavDrag(dragPending.startX, dragPending.startY);
+        if(navigator.vibrate) navigator.vibrate(15);
+      }, NAV_LONG_PRESS_MS);
+    });
+    // Alt + ↑ / ↓ : même réorganisation, au clavier.
+    el.addEventListener('keydown', async (e)=>{
+      if(!e.altKey || (e.key!=='ArrowUp' && e.key!=='ArrowDown')) return;
+      e.preventDefault();
+      const ids = orderedNavItems().map(n=>n.id);
+      const idx = ids.indexOf(el.dataset.nav);
+      const target = ids[idx + (e.key==='ArrowUp' ? -1 : 1)];
+      if(!target) return;
+      await moveNavItem(el.dataset.nav, target, e.key==='ArrowUp' ? 'before' : 'after');
+      document.querySelector(`#sidebar .nav-item[data-nav="${el.dataset.nav}"]`)?.focus();
     });
   });
+}
+function cancelNavLongPress(){ if(dragPending && dragPending.timer) clearTimeout(dragPending.timer); }
+function startNavDrag(x, y){
+  dragNavId = dragPending.id;
+  dragPending.el.classList.add('nav-dragging');
+  createNavDragGhost(dragPending.el, x, y);
+}
+async function moveNavItem(from, overId, pos){
+  const items = orderedNavItems().map(n=>n.id);
+  items.splice(items.indexOf(from),1);
+  let toIdx = items.indexOf(overId);
+  if(pos==='after') toIdx += 1;
+  items.splice(toIdx,0,from);
+  if(!state.navOrder) state.navOrder = {};
+  state.navOrder[currentSpace] = items;
+  await persist();
+  await render();
 }
 function createNavDragGhost(el, x, y){
   const rect = el.getBoundingClientRect();
@@ -1279,14 +1323,18 @@ function createNavDragGhost(el, x, y){
   dragGhostEl.style.top = y+'px';
   document.body.appendChild(dragGhostEl);
 }
-document.addEventListener('mousemove', (e)=>{
+document.addEventListener('pointermove', (e)=>{
   if(dragPending && !dragNavId){
     const dx = e.clientX-dragPending.startX, dy = e.clientY-dragPending.startY;
-    if(Math.sqrt(dx*dx+dy*dy) > NAV_DRAG_THRESHOLD){
+    const dist = Math.sqrt(dx*dx+dy*dy);
+    if(dragPending.touch){
+      // le doigt a bougé avant la fin de l'appui long : c'est un défilement, pas un glissement
+      if(dist > NAV_LONG_PRESS_TOLERANCE){ cancelNavLongPress(); dragPending = null; }
+      return;
+    }
+    if(dist > NAV_DRAG_THRESHOLD){
       // le mouvement dépasse le seuil : ce n'est plus un simple clic, on démarre le glissement
-      dragNavId = dragPending.id;
-      dragPending.el.classList.add('nav-dragging');
-      createNavDragGhost(dragPending.el, e.clientX, e.clientY);
+      startNavDrag(e.clientX, e.clientY);
     }
   }
   if(!dragNavId) return;
@@ -1313,26 +1361,24 @@ function updateNavDropIndicators(){
     }
   });
 }
-document.addEventListener('mouseup', async ()=>{
+// Pendant un glissement au doigt, le navigateur ne doit ni faire défiler ni zoomer.
+document.addEventListener('touchmove', (e)=>{ if(dragNavId) e.preventDefault(); }, {passive:false});
+// L'appui long ne doit pas ouvrir le menu contextuel (Android) pendant qu'on réorganise.
+document.addEventListener('contextmenu', (e)=>{ if(dragPending && dragPending.touch && e.target.closest('#sidebar .nav-item')) e.preventDefault(); });
+async function endNavDrag(cancelled){
+  cancelNavLongPress();
   dragPending = null;
   if(!dragNavId) return;
   const from = dragNavId, overId = dragOverId, pos = dragOverPos;
   dragNavId = null; dragOverId = null; dragOverPos = null;
-  dragJustHappened = true; // le 'click' qui va suivre ce mouseup ne doit pas déclencher de navigation
+  dragJustHappened = true; // le 'click' qui va suivre ce relâchement ne doit pas déclencher de navigation
+  setTimeout(()=>{ dragJustHappened = false; }, 400); // au doigt, aucun 'click' ne suit toujours
   if(dragGhostEl){ dragGhostEl.remove(); dragGhostEl = null; }
-  if(overId && overId!==from){
-    const items = orderedNavItems().map(n=>n.id);
-    const fromIdx = items.indexOf(from);
-    items.splice(fromIdx,1);
-    let toIdx = items.indexOf(overId);
-    if(pos==='after') toIdx += 1;
-    items.splice(toIdx,0,from);
-    if(!state.navOrder) state.navOrder = {};
-    state.navOrder[currentSpace] = items;
-    await persist();
-  }
+  if(!cancelled && overId && overId!==from){ await moveNavItem(from, overId, pos); return; }
   await render();
-});
+}
+document.addEventListener('pointerup', ()=>endNavDrag(false));
+document.addEventListener('pointercancel', ()=>endNavDrag(true));
 
 function renderSidebar(){
   const sb = document.getElementById('sidebar');
@@ -1434,7 +1480,17 @@ function openModal(title, fields, values, onSave, extraHtml){
     // échouée : dans ce cas, le modal reste ouvert (rien n'est perdu, l'utilisateur
     // corrige simplement sa saisie) plutôt que de se fermer sur une erreur. Il peut
     // aussi avoir mis en évidence les champs fautifs via markFieldError avant de renvoyer false.
-    const result = await onSave(data);
+    // Pendant l'enregistrement (synchro GitHub comprise), le bouton est désactivé :
+    // un double clic ou un Entrée répété ne crée pas de doublon.
+    const submitBtn = e.submitter || document.querySelector('#modal-form button[type=submit]');
+    if(submitBtn && submitBtn.disabled) return;
+    const submitHTML = submitBtn ? submitBtn.innerHTML : '';
+    if(submitBtn){ submitBtn.disabled = true; submitBtn.setAttribute('aria-busy','true'); submitBtn.textContent = 'Enregistrement…'; }
+    let result;
+    try{ result = await onSave(data); }
+    finally{
+      if(submitBtn && submitBtn.isConnected){ submitBtn.disabled = false; submitBtn.removeAttribute('aria-busy'); submitBtn.innerHTML = submitHTML; }
+    }
     if(result===false) return;
     closeModal();
   };
@@ -1588,7 +1644,47 @@ async function render(){
   };
   view.innerHTML = renderers[currentView] ? renderers[currentView]() : '';
   afterRender();
+  syncRouteToUrl();
 }
+
+/* ============================== URL ============================== */
+// La vue affichée (et son mois / son année) est reflétée dans l'adresse :
+// #depenses/2026-10, #annuelle/2026, #parametres… — un rechargement ramène au même
+// endroit, un lien peut être partagé et le bouton Retour revient à la vue précédente.
+const ROUTE_VIEWS = ['dashboard','revenus','depenses','echeances','objectifs','charges','compteJoint','annuelle','analyse','parametres','groupesListe'];
+const MONTH_VIEWS = new Set(['dashboard','revenus','depenses','echeances','objectifs','charges','compteJoint']);
+let lastRoutedView = null;
+function routeHash(){
+  if(MONTH_VIEWS.has(currentView)) return `#${currentView}/${state.selectedMonth}`;
+  if(currentView==='annuelle') return `#annuelle/${state.selectedYear}`;
+  return '#'+currentView;
+}
+function syncRouteToUrl(){
+  const h = routeHash();
+  if(location.hash!==h){
+    // Changer de vue crée une entrée d'historique ; changer de mois remplace l'entrée
+    // courante, pour que Retour ne repasse pas par chaque mois parcouru.
+    if(lastRoutedView && lastRoutedView!==currentView) history.pushState(null, '', h);
+    else history.replaceState(null, '', h);
+  }
+  lastRoutedView = currentView;
+}
+function applyRouteFromUrl(){
+  const m = /^#(\w+)(?:\/(\d{4}-\d{2}|\d{4}))?$/.exec(location.hash);
+  if(!m || !ROUTE_VIEWS.includes(m[1])) return false;
+  currentView = m[1];
+  if(currentView!=='parametres') currentSpace = spaceOfView(currentView);
+  if(m[2] && MONTH_VIEWS.has(currentView) && /^\d{4}-(0[1-9]|1[0-2])$/.test(m[2])) state.selectedMonth = m[2];
+  if(m[2] && currentView==='annuelle' && /^\d{4}$/.test(m[2])) state.selectedYear = Number(m[2]);
+  lastRoutedView = currentView;
+  return true;
+}
+window.addEventListener('popstate', async ()=>{
+  if(!currentUser()) return;
+  if(!applyRouteFromUrl()){ history.replaceState(null, '', routeHash()); return; } // adresse inconnue : on garde la vue courante
+  closeModal(); closeSidebarMobile();
+  await render();
+});
 
 /* ============================== DASHBOARD ============================== */
 var charts = {};
@@ -2940,13 +3036,19 @@ document.addEventListener('keydown', (e)=>{
     if(yes){ e.preventDefault(); yes.click(); return; }
     const form = document.getElementById('modal-form');
     const submit = form?.querySelector('button[type=submit]');
-    if(form && submit){ e.preventDefault(); form.requestSubmit(submit); }
+    if(form && submit){ e.preventDefault(); if(!submit.disabled) form.requestSubmit(submit); }
     return;
   }
   const panelOk = document.querySelector('[data-action="col-filter-ok"],[data-action="chart-filter-ok"]');
   if(panelOk && (colFilterOpen || chartFilterOpen)){ e.preventDefault(); panelOk.click(); }
 });
 
+// Le lien « Aller au contenu » déplace le focus sans toucher à l'adresse (qui porte la vue courante).
+document.addEventListener('click', (e)=>{
+  if(!e.target.closest('.skip-link')) return;
+  e.preventDefault();
+  document.getElementById('view').focus();
+});
 document.addEventListener('click', async (e)=>{
   if(dragJustHappened){ dragJustHappened = false; return; } // évite de naviguer juste après un glisser-déposer d'onglet
   if(notifOpen && !e.target.closest('#notif-panel') && !e.target.closest('[data-action="toggle-notif-panel"]')){ toggleNotifPanel(false); }
@@ -4627,6 +4729,8 @@ async function boot(){
   if(!ok) return;
   currentView = 'dashboard';
   currentSpace = 'finance';
+  lastRoutedView = null;
+  applyRouteFromUrl();
   await render();
   updateFab();
   if(ghConfigured()) startPolling();
