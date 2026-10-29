@@ -1510,9 +1510,9 @@ function fieldHTML(f, values){
     return `<div class="field"${hiddenAttr} style="display:flex;align-items:center;gap:9px;"><input id="f_${f.key}" type="checkbox" ${val?'checked':''} style="width:16px;height:16px;accent-color:#FFFFFF;"><label for="f_${f.key}" style="margin:0;font-size:13px;color:var(--text);">${f.label}</label></div>`;
   }
   if(f.type==='password'){
-    return `<div class="field"${hiddenAttr}><label for="f_${f.key}">${f.label}</label><div class="pw-wrap"><input id="f_${f.key}" type="password" value="${attrEsc(val||'')}" placeholder="${f.placeholder||''}" autocomplete="${f.autocomplete||'current-password'}"><button type="button" class="pw-toggle" data-toggle-pw="f_${f.key}" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>`;
+    return `<div class="field"${hiddenAttr}><label for="f_${f.key}">${f.label}</label><div class="pw-wrap"><input id="f_${f.key}" type="password"${f.maxlength?` maxlength="${f.maxlength}"`:''} value="${attrEsc(val||'')}" placeholder="${f.placeholder||''}" autocomplete="${f.autocomplete||'current-password'}"><button type="button" class="pw-toggle" data-toggle-pw="f_${f.key}" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>`;
   }
-  return `<div class="field"${hiddenAttr}><label for="f_${f.key}">${f.label}</label><input id="f_${f.key}" type="${f.type||'text'}" ${f.step?`step="${f.step}"`:''} value="${attrEsc(val===0?0:(val||''))}" placeholder="${f.placeholder||''}"></div>`;
+  return `<div class="field"${hiddenAttr}><label for="f_${f.key}">${f.label}</label><input id="f_${f.key}" type="${f.type||'text'}" ${f.step?`step="${f.step}"`:''}${f.maxlength?` maxlength="${f.maxlength}"`:''} value="${attrEsc(val===0?0:(val||''))}" placeholder="${f.placeholder||''}"></div>`;
 }
 function attrEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
 // Échappe une valeur saisie par l'utilisateur avant de l'insérer dans du HTML (texte ou attribut).
@@ -3412,13 +3412,13 @@ async function handleAction(action, id, el){
     case 'toggle-sidebar-collapse': state.navCollapsed = !state.navCollapsed; await persist(); await render(); break;
     case 'reset-nav-order': if(state.navOrder) state.navOrder[el.dataset.space||currentSpace] = null; await persist(); await render(); break;
     case 'add-user': {
-      const addUserFields = userFieldsAdmin(null).concat([{key:'password', label:'Mot de passe', type:'password'}]);
+      const addUserFields = userFieldsAdmin(null).concat(passwordFields('Mot de passe', true));
       openModal('Ajouter un compte', addUserFields, {role:'membre'}, async (data)=>{
-      if(reportFieldErrors(fieldRequiredErrors(addUserFields, data))) return false;
+      if(reportFieldErrors(fieldRequiredErrors(addUserFields, data).concat(userFieldErrors(data)))) return false;
       if(authState.users.some(u=>u.username===data.username.trim().toLowerCase())){ markFieldError('username','Cet identifiant existe déjà'); toast('Cet identifiant existe déjà'); return false; }
       const salt = randomSalt();
-      const passwordHash = await hashPassword(data.password||'changeme', salt);
-      const newUser = {id:uid(), username:data.username.trim().toLowerCase(), displayName:data.displayName, role:data.role, jointWith:null, salt, passwordHash};
+      const passwordHash = await hashPassword(data.password, salt);
+      const newUser = {id:uid(), username:data.username.trim().toLowerCase(), displayName:data.displayName.trim(), role:data.role, jointWith:null, salt, passwordHash};
       authState.users.push(newUser);
       seedDefaultCategoriesDep(newUser.id);
       seedDefaultCategoriesRev(newUser.id);
@@ -3427,11 +3427,20 @@ async function handleAction(action, id, el){
       await Promise.all([persistAuth(), persist()]); await render(); toast('Compte créé — pense à transmettre le jeton d\u2019accès à cette personne par email, il lui sera demandé à sa première connexion.'); }); break; }
     case 'edit-user': {
       const u = find(authState.users);
-      const fields = (isAdmin() ? userFieldsAdmin(u.id) : userFieldsSelf(u.id)).concat([{key:'password', label:'Nouveau mot de passe (optionnel)', type:'password'}]);
+      const fields = (isAdmin() ? userFieldsAdmin(u.id) : userFieldsSelf(u.id)).concat(passwordFields('Nouveau mot de passe (optionnel)', false));
       openModal('Modifier le compte', fields, u, async (data)=>{
-        if(reportFieldErrors(fieldRequiredErrors(fields, data))) return false;
-        u.displayName = data.displayName;
-        if(isAdmin()){ u.username = (data.username||u.username).trim().toLowerCase(); u.role = data.role||u.role; }
+        if(reportFieldErrors(fieldRequiredErrors(fields, data).concat(userFieldErrors(data)))) return false;
+        const newUsername = (data.username||u.username).trim().toLowerCase();
+        if(isAdmin()){
+          if(authState.users.some(x=>x.id!==u.id && x.username===newUsername)){
+            markFieldError('username','Cet identifiant existe déjà'); toast('Cet identifiant existe déjà'); return false;
+          }
+          if(u.role==='admin' && data.role!=='admin' && authState.users.filter(x=>x.role==='admin').length<=1){
+            markFieldError('role','Il doit rester au moins un administrateur'); toast('Impossible de rétrograder le dernier admin'); return false;
+          }
+        }
+        u.displayName = data.displayName.trim();
+        if(isAdmin()){ u.username = newUsername; u.role = data.role||u.role; }
         if(data.password){ u.salt = randomSalt(); u.passwordHash = await hashPassword(data.password, u.salt); }
         await persistAuth(); await render(); toast('Compte mis à jour'); }); break; }
     case 'del-user': { const u=find(authState.users); if(u.role==='admin' && authState.users.filter(x=>x.role==='admin').length<=1) return toast('Impossible de supprimer le dernier admin');
@@ -4079,15 +4088,35 @@ function jointWithOptions(excludeId){
 }
 function userFieldsAdmin(excludeId){
   return [
-    {key:'displayName', label:'Nom affiché', required:true},
-    {key:'username', label:'Identifiant', required:true},
+    {key:'displayName', label:'Nom affiché', required:true, maxlength:60},
+    {key:'username', label:'Identifiant', required:true, maxlength:32},
     {key:'role', label:'Rôle', type:'select', options:['membre','admin']},
   ];
 }
 function userFieldsSelf(excludeId){
   return [
-    {key:'displayName', label:'Nom affiché', required:true},
+    {key:'displayName', label:'Nom affiché', required:true, maxlength:60},
   ];
+}
+// Mot de passe + confirmation : obligatoire à la création, optionnel en modification.
+function passwordFields(label, required){
+  return [
+    {key:'password', label, type:'password', required},
+    {key:'password2', label:'Confirmer le mot de passe', type:'password'},
+  ];
+}
+// Contrôles communs aux formulaires de compte. Les limites sont revérifiées ici
+// (et pas seulement via maxlength) car les comptes peuvent arriver par import
+// ou par la synchro GitHub. Un champ vide est laissé à fieldRequiredErrors.
+function userFieldErrors(data){
+  const errors = [];
+  if(typeof data.displayName==='string' && data.displayName.trim().length>60) errors.push(['displayName','60 caractères maximum']);
+  if(typeof data.username==='string' && data.username.trim() && !/^[a-z0-9._-]{2,32}$/.test(data.username.trim().toLowerCase())) errors.push(['username','2 à 32 caractères : lettres, chiffres, . _ -']);
+  if(data.password){
+    if(data.password.length<8) errors.push(['password','8 caractères minimum']);
+    if(data.password!==data.password2) errors.push(['password2','Les mots de passe ne correspondent pas']);
+  }
+  return errors;
 }
 
 function renderMemberAccountRequests(me){
