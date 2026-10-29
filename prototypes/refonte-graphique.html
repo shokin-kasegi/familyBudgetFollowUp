@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+</head>
+<body>
+<title>Solde — refonte</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650;12..96,750&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout : barre latérale claire + colonne de lecture ; sur mobile, barre d'onglets en bas.
+   Couleur : neutres légèrement bleutés ; chaque poste prend la teinte d'un billet en euros
+   (20 € bleu, 50 € orange, 500 € violet, 100 € vert). Le reste à vivre = la part non dépensée, hachurée. */
+:root{
+  --bg:#F2F4F7;
+  --surface:#FFFFFF;
+  --surface-2:#F7F9FB;
+  --ink:#141C28;
+  --muted:#5A6677;
+  --faint:#8B95A4;
+  --line:#DEE3EA;
+  --line-strong:#C7CFDA;
+  --b20:#2D5DA6;   /* billet de 20 € */
+  --b50:#C4642A;   /* billet de 50 € */
+  --b500:#6C4E9A;  /* billet de 500 € */
+  --b100:#2D7A58;  /* billet de 100 € */
+  --ok:#1F7A4D;
+  --ok-bg:#E3F3EA;
+  --bad:#B3261E;
+  --bad-bg:#FBE7E5;
+  --focus:#2D5DA6;
+  --hatch:#C7CFDA;
+  --shadow:0 1px 2px rgba(20,28,40,.05), 0 8px 24px rgba(20,28,40,.06);
+  --f-display:'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+  --f-ui:'Instrument Sans', -apple-system, 'Segoe UI', system-ui, sans-serif;
+  --r-lg:20px; --r-md:12px; --r-sm:8px;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0E131A; --surface:#151C26; --surface-2:#1A2230; --ink:#E9EEF4; --muted:#9AA6B6; --faint:#6E7A8B;
+  --line:#243041; --line-strong:#33425A;
+  --b20:#7FA5E2; --b50:#EDA172; --b500:#B79DE0; --b100:#77C7A0;
+  --ok:#7FD3A6; --ok-bg:#163326; --bad:#F2958B; --bad-bg:#3A1C1A; --focus:#7FA5E2; --hatch:#33425A;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.25);
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0E131A; --surface:#151C26; --surface-2:#1A2230; --ink:#E9EEF4; --muted:#9AA6B6; --faint:#6E7A8B;
+  --line:#243041; --line-strong:#33425A;
+  --b20:#7FA5E2; --b50:#EDA172; --b500:#B79DE0; --b100:#77C7A0;
+  --ok:#7FD3A6; --ok-bg:#163326; --bad:#F2958B; --bad-bg:#3A1C1A; --focus:#7FA5E2; --hatch:#33425A;
+  --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.25);
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-ui);-webkit-font-smoothing:antialiased;}
+button,input{font:inherit;color:inherit;}
+button{cursor:pointer;background:none;border:0;}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:6px;}
+.num{font-variant-numeric:tabular-nums;white-space:nowrap;}
+
+.proto-bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;justify-content:space-between;
+  padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  background:var(--ink);color:var(--bg);font-size:12.5px;}
+.proto-bar b{font-weight:600;}
+.seg{display:inline-flex;background:color-mix(in srgb,var(--bg) 14%,transparent);border-radius:999px;padding:2px;}
+.seg button{padding:3px 10px;border-radius:999px;color:inherit;font-size:12px;}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--ink);}
+
+.app{display:grid;grid-template-columns:232px minmax(0,1fr);min-height:calc(100vh - 36px);}
+.side{border-right:1px solid var(--line);padding:24px 14px;display:flex;flex-direction:column;gap:4px;position:sticky;top:0;height:100vh;}
+.brand{display:flex;align-items:center;gap:10px;padding:0 10px 18px;}
+.brand-mark{width:32px;height:32px;border-radius:9px;background:var(--ink);color:var(--bg);display:grid;place-items:center;font:750 17px var(--f-display);}
+.brand-name{font:650 19px/1 var(--f-display);letter-spacing:-.01em;}
+.brand-sub{font-size:12px;color:var(--muted);}
+.nav-label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding:14px 10px 6px;}
+.nav a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--r-sm);color:var(--muted);text-decoration:none;font-weight:500;}
+.nav a:hover{background:var(--surface);color:var(--ink);}
+.nav a[aria-current="page"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow);}
+.nav a.off{opacity:.55;}
+.nav svg{width:18px;height:18px;flex-shrink:0;}
+.side-foot{margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px;border-top:1px solid var(--line);}
+.avatar{width:30px;height:30px;border-radius:50%;background:var(--b20);color:var(--surface);display:grid;place-items:center;font-weight:600;font-size:13px;}
+
+main{min-width:0;padding-block:28px 96px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:20px;}
+@media (min-width:900px){ main{padding-left:40px;padding-right:40px;} }
+
+.head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;}
+.eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+h1{font:650 clamp(26px,3.2vw,34px)/1.1 var(--f-display);letter-spacing:-.02em;margin:4px 0 0;text-wrap:balance;}
+.head-actions{display:flex;gap:10px;flex-wrap:wrap;}
+.stepper{display:inline-flex;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px;}
+.stepper button{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--muted);}
+.stepper button:hover{background:var(--surface-2);color:var(--ink);}
+.stepper span{min-width:118px;text-align:center;font-weight:600;text-transform:capitalize;}
+.btn{text-decoration:none;display:inline-flex;align-items:center;gap:8px;padding:0 16px;height:42px;border-radius:999px;background:var(--ink);color:var(--bg);font-weight:600;}
+.btn:hover{opacity:.9;}
+.btn svg{width:16px;height:16px;}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:24px;min-width:0;}
+.card h2{font:650 17px/1.3 var(--f-display);margin:0;letter-spacing:-.005em;}
+.card-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:18px;}
+.link{color:var(--b20);font-weight:600;font-size:13.5px;text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px;}
+
+/* ---- Reste à vivre ---- */
+.hero{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:0;padding:0;overflow:hidden;box-shadow:var(--shadow);}
+.hero-main{padding:28px;display:flex;flex-direction:column;gap:22px;min-width:0;}
+.hero-top{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px;}
+.big{font:750 clamp(46px,7vw,76px)/.95 var(--f-display);letter-spacing:-.035em;margin-top:6px;}
+.big small{font-size:.45em;font-weight:650;letter-spacing:-.01em;color:var(--muted);margin-left:4px;}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:600;}
+.chip.ok{background:var(--ok-bg);color:var(--ok);}
+.chip.bad{background:var(--bad-bg);color:var(--bad);}
+.chip i{width:7px;height:7px;border-radius:50%;background:currentColor;}
+.constat{color:var(--muted);max-width:60ch;}
+
+.env-head{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:8px;}
+.env-head b{color:var(--ink);font-weight:600;}
+.env{position:relative;display:flex;height:44px;border-radius:10px;overflow:hidden;background:var(--surface-2);gap:2px;}
+.env span{height:100%;min-width:3px;transition:flex-grow .4s ease;}
+.env .rest{background:repeating-linear-gradient(-45deg,var(--hatch) 0 2px,transparent 2px 8px);}
+.env .over{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--bad);}
+.env-scale{display:flex;justify-content:space-between;font-size:11.5px;color:var(--faint);margin-top:6px;}
+
+.postes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px;background:var(--line);border-radius:var(--r-md);overflow:hidden;}
+.poste{background:var(--surface);padding:14px 16px;display:flex;flex-direction:column;gap:4px;min-width:0;}
+.poste-label{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);}
+.note{width:16px;height:10px;border-radius:2px;flex-shrink:0;}
+.poste-val{font:650 20px/1.2 var(--f-display);letter-spacing:-.01em;}
+.poste-sub{font-size:12px;color:var(--faint);}
+
+.hero-side{background:var(--surface-2);border-left:1px solid var(--line);padding:28px;display:flex;flex-direction:column;gap:14px;min-width:0;}
+.due{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;}
+.due li{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line);}
+.due li:first-child{border-top:0;}
+.day{text-align:center;line-height:1.05;}
+.day b{display:block;font:650 19px var(--f-display);}
+.day span{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
+.due-l{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.due-s{font-size:12px;color:var(--muted);}
+.joint{margin-top:auto;padding-top:14px;border-top:1px solid var(--line);font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:8px;}
+.joint-bar{display:flex;height:8px;border-radius:99px;overflow:hidden;gap:2px;}
+.joint-leg{display:flex;justify-content:space-between;gap:8px;}
+.joint-leg b{color:var(--ink);}
+
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:20px;}
+.rep{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:14px;}
+.rep li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;align-items:baseline;}
+.rep-l{display:flex;align-items:center;gap:8px;min-width:0;}
+.rep-l span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.rep-track{grid-column:1/-1;height:6px;border-radius:99px;background:var(--surface-2);overflow:hidden;}
+.rep-track i{display:block;height:100%;border-radius:99px;}
+.rep-pct{color:var(--faint);font-size:12.5px;margin-left:6px;}
+
+.legend{display:flex;gap:16px;font-size:12.5px;color:var(--muted);}
+.legend span{display:inline-flex;align-items:center;gap:6px;}
+.legend i{width:10px;height:10px;border-radius:3px;}
+.chart{width:100%;height:auto;display:block;}
+.chart text{fill:var(--faint);font:11px var(--f-ui);}
+.chart .grid{stroke:var(--line);stroke-width:1;}
+
+/* ---- Dépenses ---- */
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:20px;}
+.summary .card{padding:18px 20px;}
+.s-l{font-size:13px;color:var(--muted);}
+.s-v{font:650 26px/1.2 var(--f-display);letter-spacing:-.015em;margin-top:2px;}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;}
+.filters{display:flex;flex-wrap:wrap;gap:6px;}
+.filters button{height:34px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:13.5px;font-weight:500;display:inline-flex;align-items:center;gap:7px;}
+.filters button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg);}
+.search{height:38px;border-radius:999px;border:1px solid var(--line);background:var(--surface);padding:0 16px;min-width:0;width:240px;max-width:100%;}
+.list{padding:6px 0;}
+.group-h{display:flex;justify-content:space-between;padding:14px 24px 6px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);}
+.row{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:14px;align-items:center;padding:10px 24px;}
+.row:hover{background:var(--surface-2);}
+.ico{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font:650 15px var(--f-display);}
+.row-l{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.row-s{font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 10px;}
+.tag{font-size:11.5px;padding:1px 8px;border-radius:99px;background:var(--surface-2);border:1px solid var(--line);color:var(--muted);}
+.row-v{text-align:right;font-weight:600;}
+.row-v small{display:block;font-weight:400;font-size:12px;color:var(--faint);}
+.empty{padding:40px 24px;text-align:center;color:var(--muted);}
+
+.notes{font-size:13.5px;color:var(--muted);}
+.notes summary{cursor:pointer;font-weight:600;color:var(--ink);}
+.notes ul{margin:10px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px;max-width:75ch;}
+
+.tabbar{display:none;}
+@media (max-width:1180px){ .postes{grid-template-columns:repeat(2,minmax(0,1fr));} }
+@media (max-width:860px){
+  .app{grid-template-columns:minmax(0,1fr);}
+  .side{display:none;}
+  .hero,.grid2{grid-template-columns:minmax(0,1fr);}
+  .hero-side{border-left:0;border-top:1px solid var(--line);}
+  .hero-main,.hero-side{padding:20px;}
+  .card{padding:20px;} .card.hero{padding:0;}
+  .head-actions{width:100%;}
+  .head-actions .btn{display:none;}
+  .stepper{flex:1;justify-content:space-between;}
+  .group-h{padding:14px 20px 6px;} .row{padding:10px 20px;}
+  .tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:20;
+    background:var(--surface);border-top:1px solid var(--line);
+    padding:6px max(8px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px));}
+  .tabbar a{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:var(--muted);text-decoration:none;padding:4px 0;}
+  .tabbar a[aria-current="page"]{color:var(--ink);font-weight:600;}
+  .tabbar svg{width:22px;height:22px;}
+  .tabbar .fab{align-self:center;justify-self:center;width:48px;height:48px;border-radius:50%;background:var(--ink);color:var(--bg);display:grid;place-items:center;margin-top:-18px;box-shadow:var(--shadow);}
+}
+@media (prefers-reduced-motion:reduce){ .env span{transition:none;} }
+svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+</style>
+
+<div class="proto-bar">
+  <span><b>Prototype de refonte</b> · données d'exemple, aucune donnée réelle</span>
+  <span class="seg" role="group" aria-label="Thème">
+    <button type="button" id="th-auto" data-theme-set="" aria-pressed="true">Système</button>
+    <button type="button" id="th-light" data-theme-set="light" aria-pressed="false">Clair</button>
+    <button type="button" id="th-dark" data-theme-set="dark" aria-pressed="false">Sombre</button>
+  </span>
+</div>
+
+<div class="app">
+  <nav class="side" aria-label="Navigation principale">
+    <div class="brand"><div class="brand-mark">S</div><div><div class="brand-name">Solde</div><div class="brand-sub">Budget de la famille</div></div></div>
+    <div class="nav" id="nav"></div>
+    <div class="side-foot"><div class="avatar">SH</div><div><div style="font-weight:600;font-size:14px;">Saïndou</div><div style="font-size:12px;color:var(--muted);">Admin · compte joint avec Julie</div></div></div>
+  </nav>
+  <main id="main"><div class="wrap" id="view"></div></main>
+</div>
+<nav class="tabbar" id="tabbar" aria-label="Navigation"></nav>
+
+<script>
+(function(){
+const ICON = {
+  dash:'<rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/>',
+  rev:'<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>',
+  dep:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/>',
+  cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
+  goal:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+  home:'<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+  users:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4-6"/>',
+  chart:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  more:'<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  chevL:'<polyline points="15 18 9 12 15 6"/>', chevR:'<polyline points="9 18 15 12 9 6"/>'
+};
+const ic = (n,cls) => `<svg class="i ${cls||''}" viewBox="0 0 24 24" aria-hidden="true">${ICON[n]}</svg>`;
+const eur = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0});
+const eur2 = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2});
+const pct = v => new Intl.NumberFormat('fr-FR',{style:'percent',maximumFractionDigits:0}).format(v);
+const MOIS = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* Postes et teintes de billets */
+const POSTES = {
+  abo:{label:'Abonnements & charges', color:'var(--b20)', short:'Abonnements'},
+  achat:{label:'Achats & mensualités', color:'var(--b50)', short:'Achats'},
+  joint:{label:'Compte joint', color:'var(--b500)', short:'Compte joint'},
+  epargne:{label:'Épargne', color:'var(--b100)', short:'Épargne'}
+};
+
+/* ------- Données d'exemple ------- */
+const BASE = [
+  {l:'Loyer (part)', c:'abo', cat:'Logement', v:620, d:5},
+  {l:'Électricité EDF', c:'abo', cat:'Énergie', v:84, d:8},
+  {l:'Box internet', c:'abo', cat:'Télécom', v:34.99, d:12},
+  {l:'Forfaits mobiles', c:'abo', cat:'Télécom', v:29.98, d:12},
+  {l:'Assurance auto', c:'abo', cat:'Assurance', v:52.4, d:15},
+  {l:'Netflix', c:'abo', cat:'Loisirs', v:13.49, d:18},
+  {l:'Mutuelle', c:'abo', cat:'Santé', v:71, d:3},
+  {l:'Virement compte joint', c:'joint', cat:'Courses & cantine', v:740, d:2},
+  {l:'Livret A — vacances été', c:'epargne', cat:'Objectif', v:250, d:6},
+  {l:'Fonds d\'urgence', c:'epargne', cat:'Objectif', v:150, d:6}
+];
+const MONTHLY = {
+  '2026-09':[
+    {l:'Fournitures scolaires', c:'achat', cat:'Enfants', v:186.4, d:1},
+    {l:'Lave-linge', c:'achat', cat:'Maison', v:64.9, d:10, ech:'1/10'},
+    {l:'Carburant', c:'achat', cat:'Transport', v:142, d:14},
+    {l:'Licence foot Noah', c:'achat', cat:'Enfants', v:165, d:20}
+  ],
+  '2026-10':[
+    {l:'Lave-linge', c:'achat', cat:'Maison', v:64.9, d:10, ech:'2/10'},
+    {l:'Carburant', c:'achat', cat:'Transport', v:128.3, d:11},
+    {l:'Pharmacie', c:'achat', cat:'Santé', v:23.6, d:16},
+    {l:'Anniversaire Inès', c:'achat', cat:'Cadeaux', v:89, d:24},
+    {l:'Chaussures hiver', c:'achat', cat:'Vêtements', v:112, d:27}
+  ],
+  '2026-11':[
+    {l:'Lave-linge', c:'achat', cat:'Maison', v:64.9, d:10, ech:'3/10'},
+    {l:'Carburant', c:'achat', cat:'Transport', v:151, d:9},
+    {l:'Pneus hiver', c:'achat', cat:'Transport', v:438, d:13, ech:'1/3'},
+    {l:'Ordinateur portable', c:'achat', cat:'Maison', v:299.75, d:21, ech:'1/4'},
+    {l:'Réparation chaudière', c:'achat', cat:'Maison', v:520, d:17},
+    {l:'Cadeaux de Noël', c:'achat', cat:'Cadeaux', v:260, d:28}
+  ]
+};
+const REVENUS = {'2026-09':3720,'2026-10':3720,'2026-11':3720};
+const ANNEE = [ // revenus / dépenses 2026, pour le graphique
+  [3650,2710],[3650,2580],[3650,2890],[3700,2640],[3700,3020],[3700,2930],
+  [4980,4410],[3700,3240],[0,0],[0,0],[0,0],[3720,0]
+];
+Object.keys(REVENUS).forEach(k=>{ const i=Number(k.slice(5))-1; ANNEE[i]=[REVENUS[k], 0]; });
+const MONTHS = Object.keys(MONTHLY);
+MONTHS.forEach(k=>{ ANNEE[Number(k.slice(5))-1][1] = monthData(k).depenses; });
+let mIdx = 1, filter = 'tous', query = '';
+
+function monthData(key){
+  const rows = [...BASE, ...MONTHLY[key]].map(r=>({...r}));
+  const tot = {abo:0,achat:0,joint:0,epargne:0};
+  rows.forEach(r=>tot[r.c]+=r.v);
+  const depenses = Object.values(tot).reduce((a,b)=>a+b,0);
+  return {key, rows, tot, revenu:REVENUS[key], depenses, reste:REVENUS[key]-depenses};
+}
+const mLabel = key => { const [y,m]=key.split('-').map(Number); return `${MOIS[m-1]} ${y}`; };
+const ABBR = ['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+
+/* ------- Navigation ------- */
+const NAV = [
+  {id:'tableau', l:'Tableau de bord', short:'Accueil', i:'dash'},
+  {id:'revenus', l:'Revenus', i:'rev', off:1},
+  {id:'depenses', l:'Dépenses', i:'dep'},
+  {id:'echeances', l:'Échéances', i:'cal', off:1},
+  {id:'objectifs', l:'Objectifs', i:'goal', off:1},
+  {id:'charges', l:'Charges', i:'home', off:1},
+  {id:'joint', l:'Compte joint', i:'users', off:1},
+  {id:'annuelle', l:'Vue annuelle', i:'chart', off:1}
+];
+function currentView(){ const h=location.hash.slice(1); return h==='depenses' ? 'depenses' : 'tableau'; }
+function renderNav(){
+  const v = currentView();
+  document.getElementById('nav').innerHTML = `<div class="nav-label">Ce mois-ci</div>` + NAV.map((n,i)=>
+    (i===3?`<div class="nav-label">Planifier</div>`:'') +
+    `<a href="#${n.off?v:n.id}" ${n.id===v?'aria-current="page"':''} class="${n.off?'off':''}" ${n.off?'title="Écran non prototypé"':''}>${ic(n.i)}${n.l}</a>`).join('');
+  const tabs = [NAV[0],NAV[2],null,NAV[3],{id:'plus',l:'Plus',i:'more',off:1}];
+  document.getElementById('tabbar').innerHTML = tabs.map(n=> n===null
+    ? `<a href="#depenses" aria-label="Ajouter une dépense"><span class="fab">${ic('plus')}</span></a>`
+    : `<a href="#${n.off?v:n.id}" ${n.id===v?'aria-current="page"':''}>${ic(n.i)}${n.short||n.l}</a>`).join('');
+}
+
+function stepper(){
+  return `<div class="stepper">
+    <button type="button" data-step="-1" aria-label="Mois précédent" ${mIdx===0?'disabled style="opacity:.3"':''}>${ic('chevL')}</button>
+    <span>${mLabel(MONTHS[mIdx])}</span>
+    <button type="button" data-step="1" aria-label="Mois suivant" ${mIdx===MONTHS.length-1?'disabled style="opacity:.3"':''}>${ic('chevR')}</button></div>`;
+}
+
+/* ------- Tableau de bord ------- */
+function renderDashboard(){
+  const d = monthData(MONTHS[mIdx]);
+  const ok = d.reste >= 0;
+  const scale = Math.max(d.revenu, d.depenses);
+  const segs = Object.entries(POSTES).map(([k,p])=>`<span style="flex-grow:${d.tot[k]/scale};background:${p.color}" title="${p.label} : ${eur.format(d.tot[k])}"></span>`).join('')
+    + (ok ? `<span class="rest" style="flex-grow:${d.reste/scale}" title="Reste à vivre : ${eur.format(d.reste)}"></span>` : `<span class="over" style="left:${(d.revenu/scale*100).toFixed(2)}%"></span>`);
+  const subs = {
+    abo:`${d.rows.filter(r=>r.c==='abo').length} prélèvements fixes`,
+    achat: (n=>n?`dont ${n} échéancier${n>1?'s':''} en cours`:'aucun échéancier')(d.rows.filter(r=>r.ech).length),
+    joint:'ta part : 58 %',
+    epargne:'2 objectifs en cours'
+  };
+  const [y,m] = d.key.split('-').map(Number);
+  const dues = d.rows.filter(r=>r.c!=='joint').sort((a,b)=>b.d-a.d).filter(r=>r.d>=10).slice(0,5).reverse();
+  const cats = {};
+  d.rows.filter(r=>r.c!=='epargne'&&r.c!=='joint').forEach(r=>{ (cats[r.cat] ||= {v:0,c:r.c}).v += r.v; });
+  const rep = Object.entries(cats).sort((a,b)=>b[1].v-a[1].v);
+  const totRep = rep.reduce((s,[,o])=>s+o.v,0);
+  const top = rep.slice(0,6); if(rep.length>6) top.push(['Autres',{v:rep.slice(6).reduce((s,[,o])=>s+o.v,0),c:null}]);
+  const max = rep[0][1].v;
+
+  return `
+  <div class="head">
+    <div><div class="eyebrow">Tableau de bord</div><h1>Bonjour Saïndou</h1></div>
+    <div class="head-actions">${stepper()}<a class="btn" href="#depenses">${ic('plus')}Ajouter une dépense</a></div>
+  </div>
+
+  <section class="card hero" aria-labelledby="h-reste">
+    <div class="hero-main">
+      <div class="hero-top">
+        <div>
+          <div class="eyebrow" id="h-reste">${ok?'Reste à vivre':'Dépassement'} en ${mLabel(d.key)}</div>
+          <div class="big num" style="color:${ok?'var(--ink)':'var(--bad)'}">${eur.format(d.reste).replace(/\s?€/,'')}<small>€</small></div>
+        </div>
+        <span class="chip ${ok?'ok':'bad'}"><i></i>${ok? (d.reste/d.revenu>=.15?'Mois serein':'Mois serré') : 'Budget dépassé'}</span>
+      </div>
+      <p class="constat" style="margin:0">${ok
+        ? `Tu as engagé ${pct(d.depenses/d.revenu)} de ton revenu. Il reste ${eur.format(d.reste)} pour ${new Date(y,m,0).getDate()} jours, soit ${eur.format(d.reste/new Date(y,m,0).getDate())} par jour.`
+        : (big=>`Les dépenses prévues dépassent ton revenu de ${eur.format(-d.reste)}. ${big.map((r,i)=>esc(i?r.l[0].toLowerCase()+r.l.slice(1):r.l)).join(' et ')} pèsent à eux seuls ${eur.format(big.reduce((s,r)=>s+r.v,0))}.`)(d.rows.filter(r=>r.c==='achat').sort((a,b)=>b.v-a.v).slice(0,2))}</p>
+      <div>
+        <div class="env-head"><span>Où va ton revenu</span><span>Revenu du mois <b class="num">${eur.format(d.revenu)}</b></span></div>
+        <div class="env" role="img" aria-label="${Object.entries(POSTES).map(([k,p])=>p.label+' '+eur.format(d.tot[k])).join(', ')}, ${ok?'reste':'dépassement'} ${eur.format(Math.abs(d.reste))}">${segs}</div>
+        <div class="env-scale"><span>0 €</span><span>${ok?'hachuré : ce qui reste':'au-delà du trait : dépassement'}</span><span class="num">${eur.format(scale)}</span></div>
+      </div>
+      <div class="postes">${Object.entries(POSTES).map(([k,p])=>`
+        <div class="poste">
+          <div class="poste-label"><span class="note" style="background:${p.color}"></span>${p.label}</div>
+          <div class="poste-val num">${eur.format(d.tot[k])}</div>
+          <div class="poste-sub">${subs[k]}</div>
+        </div>`).join('')}</div>
+    </div>
+    <aside class="hero-side">
+      <div class="card-head" style="margin:0"><h2>À venir ce mois-ci</h2><a class="link" href="#${currentView()}" title="Écran non prototypé">Échéances</a></div>
+      <ul class="due">${dues.map(r=>`
+        <li><div class="day"><b>${r.d}</b><span>${ABBR[m-1]}</span></div>
+          <div style="min-width:0"><div class="due-l">${esc(r.l)}</div><div class="due-s">${r.ech?`Mensualité ${r.ech}`:esc(r.cat)}</div></div>
+          <div class="num" style="font-weight:600">${eur2.format(r.v)}</div></li>`).join('')}</ul>
+      <div class="joint">
+        <div>Compte joint avec Julie · <b class="num" style="color:var(--ink)">${eur.format(1276)}</b> de dépenses communes</div>
+        <div class="joint-bar"><span style="flex-grow:58;background:var(--b500)"></span><span style="flex-grow:42;background:var(--line-strong)"></span></div>
+        <div class="joint-leg"><span>Toi <b class="num">58 % · ${eur.format(740)}</b></span><span>Julie <b class="num">42 % · ${eur.format(536)}</b></span></div>
+      </div>
+    </aside>
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <div class="card-head"><h2>Dépenses par catégorie</h2><a class="link" href="#depenses">Tout voir</a></div>
+      <ol class="rep">${top.map(([l,o])=>`
+        <li><div class="rep-l"><span class="note" style="background:${o.c?POSTES[o.c].color:'var(--line-strong)'};width:8px;height:8px;border-radius:50%"></span><span>${esc(l)}</span><span class="rep-pct">${pct(o.v/totRep)}</span></div>
+          <div class="num" style="font-weight:600">${eur.format(o.v)}</div>
+          <div class="rep-track"><i style="width:${(o.v/max*100).toFixed(1)}%;background:${o.c?POSTES[o.c].color:'var(--line-strong)'}"></i></div></li>`).join('')}</ol>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Revenus et dépenses en 2026</h2>
+        <div class="legend"><span><i style="background:var(--line-strong)"></i>Revenus</span><span><i style="background:var(--ink)"></i>Dépenses</span></div></div>
+      ${chartSVG(m-1)}
+    </section>
+  </div>
+  ${notes()}`;
+}
+
+function chartSVG(sel){
+  const W=560,H=240,L=44,R=8,T=10,B=26, max=5000, step=1000;
+  const iw=W-L-R, ih=H-T-B, bw=iw/12;
+  const yy=v=>T+ih-(v/max)*ih;
+  let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Revenus et dépenses mensuels 2026">`;
+  for(let v=0;v<=max;v+=step) s+=`<line class="grid" x1="${L}" x2="${W-R}" y1="${yy(v)}" y2="${yy(v)}"/><text x="${L-8}" y="${yy(v)+4}" text-anchor="end">${v?v/1000+' k€':'0'}</text>`;
+  ANNEE.forEach(([r,dp],i)=>{
+    const x=L+i*bw, w=(bw-10)/2, act=i===sel;
+    s+=`<rect x="${x+4}" y="${yy(r)}" width="${w}" height="${ih-(yy(r)-T)}" rx="3" fill="var(--line-strong)"><title>${ABBR[i]} — revenus ${eur.format(r)}</title></rect>`;
+    if(dp) s+=`<rect x="${x+6+w}" y="${yy(dp)}" width="${w}" height="${ih-(yy(dp)-T)}" rx="3" fill="${dp>r?'var(--bad)':'var(--ink)'}" opacity="${act?1:.55}"><title>${ABBR[i]} — dépenses ${eur.format(dp)}</title></rect>`;
+    s+=`<text x="${x+bw/2}" y="${H-8}" text-anchor="middle" style="${act?'fill:var(--ink);font-weight:600':''}">${ABBR[i].replace('.','')}</text>`;
+  });
+  return s+`</svg>`;
+}
+
+/* ------- Dépenses ------- */
+function renderDepenses(){
+  const d = monthData(MONTHS[mIdx]);
+  const [,m] = d.key.split('-').map(Number);
+  const q = query.trim().toLowerCase();
+  const rows = d.rows.filter(r=>(filter==='tous'||r.c===filter) && (!q || (r.l+' '+r.cat).toLowerCase().includes(q))).sort((a,b)=>a.d-b.d);
+  const groups = [['Début du mois',1,10],['Milieu du mois',11,20],['Fin du mois',21,31]];
+  const tot = rows.reduce((s,r)=>s+r.v,0);
+  const fb = (id,l,c) => `<button type="button" data-filter="${id}" aria-pressed="${filter===id}">${c?`<span class="note" style="background:${c};width:8px;height:8px;border-radius:50%"></span>`:''}${l}</button>`;
+  return `
+  <div class="head">
+    <div><div class="eyebrow">Dépenses</div><h1>${rows.length} dépenses en ${mLabel(d.key)}</h1></div>
+    <div class="head-actions">${stepper()}<button class="btn" type="button">${ic('plus')}Nouvelle dépense</button></div>
+  </div>
+  <div class="summary">
+    <div class="card"><div class="s-l">Total affiché</div><div class="s-v num">${eur2.format(tot)}</div></div>
+    <div class="card"><div class="s-l">Échéanciers en cours</div><div class="s-v num">${d.rows.filter(r=>r.ech).length}</div></div>
+    <div class="card"><div class="s-l">Reste à vivre</div><div class="s-v num" style="color:${d.reste>=0?'var(--ok)':'var(--bad)'}">${eur.format(d.reste)}</div></div>
+  </div>
+  <div class="toolbar">
+    <div class="filters" role="group" aria-label="Filtrer par poste">${fb('tous','Tout')}${Object.entries(POSTES).map(([k,p])=>fb(k,p.short,p.color)).join('')}</div>
+    <input class="search" id="search" type="search" placeholder="Rechercher une dépense" aria-label="Rechercher une dépense" value="${esc(query)}">
+  </div>
+  <section class="card list" style="padding:6px 0">
+    ${rows.length ? groups.map(([g,a,b])=>{
+      const rs = rows.filter(r=>r.d>=a&&r.d<=b); if(!rs.length) return '';
+      return `<div class="group-h"><span>${g}</span><span class="num">${eur2.format(rs.reduce((s,r)=>s+r.v,0))}</span></div>` + rs.map(r=>`
+      <div class="row">
+        <div class="ico" style="background:color-mix(in srgb, ${POSTES[r.c].color} 14%, transparent);color:${POSTES[r.c].color}">${esc(r.l[0])}</div>
+        <div style="min-width:0"><div class="row-l">${esc(r.l)}</div>
+          <div class="row-s"><span>${r.d} ${ABBR[m-1]}</span><span>${esc(r.cat)}</span>${r.ech?`<span class="tag">Échelonné ${r.ech}</span>`:''}${r.c==='abo'?'<span class="tag">Mensuel</span>':''}</div></div>
+        <div class="row-v num">${eur2.format(r.v)}<small>${POSTES[r.c].short}</small></div>
+      </div>`).join('');}).join('') : `<div class="empty">Aucune dépense ne correspond à « ${esc(query)} ».</div>`}
+  </section>
+  ${notes()}`;
+}
+
+function notes(){
+  return `<details class="card notes"><summary>Ce qui change dans cette refonte</summary><ul>
+    <li>Fond clair par défaut et vrai thème sombre, au lieu du noir unique actuel. Les neutres sont légèrement bleutés.</li>
+    <li>Chaque poste garde la même couleur partout (barre, listes, filtres, icônes). Les teintes reprennent les billets en euros : 20 € bleu, 50 € orange, 500 € violet, 100 € vert.</li>
+    <li>Le reste à vivre devient la partie hachurée de la barre : on voit ce qui n'est pas encore dépensé. Un dépassement passe au rouge avec un trait au niveau du revenu.</li>
+    <li>Une pastille résume le mois (serein, serré, dépassé) et une phrase donne le reste par jour.</li>
+    <li>Les échéances à venir et la part de chacun au compte joint remontent sur le tableau de bord.</li>
+    <li>Sur mobile, une barre d'onglets en bas remplace le menu burger, avec un bouton central pour ajouter une dépense.</li>
+    <li>Typographies : Bricolage Grotesque pour les titres et les montants, Instrument Sans pour l'interface.</li>
+  </ul></details>`;
+}
+
+/* ------- Rendu & événements ------- */
+function render(){
+  renderNav();
+  const v = currentView();
+  document.getElementById('view').innerHTML = v==='depenses' ? renderDepenses() : renderDashboard();
+}
+document.addEventListener('click', e=>{
+  const st = e.target.closest('[data-step]');
+  if(st && !st.disabled){ mIdx = Math.min(MONTHS.length-1, Math.max(0, mIdx + Number(st.dataset.step))); render(); return; }
+  const f = e.target.closest('[data-filter]');
+  if(f){ filter = f.dataset.filter; render(); return; }
+  const t = e.target.closest('[data-theme-set]');
+  if(t){
+    const val = t.dataset.themeSet;
+    if(val) document.documentElement.setAttribute('data-theme', val); else document.documentElement.removeAttribute('data-theme');
+    document.querySelectorAll('[data-theme-set]').forEach(b=>b.setAttribute('aria-pressed', String(b===t)));
+    try{ localStorage.setItem('proto-theme', val); }catch(_){}
+  }
+});
+document.addEventListener('input', e=>{
+  if(e.target.id!=='search') return;
+  query = e.target.value; const pos = e.target.selectionStart; render();
+  const s = document.getElementById('search'); s.focus(); s.setSelectionRange(pos,pos);
+});
+window.addEventListener('hashchange', ()=>{ render(); window.scrollTo(0,0); });
+try{ const t = localStorage.getItem('proto-theme'); if(t){ const b=document.querySelector(`[data-theme-set="${t}"]`); if(b) b.click(); } }catch(_){}
+render();
+})();
+</script>
+
+</body>
+</html>
