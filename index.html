@@ -8,6 +8,7 @@
 <meta name="googlebot" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <meta name="description" content="">
+<meta name="theme-color" content="#000000">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -124,6 +125,7 @@ a{color:inherit;}
 .nav-item svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;flex-shrink:0;}
 .nav-item:hover{background:rgba(255,255,255,0.04);color:var(--text);}
 .nav-item.nav-dragging{opacity:0.35;}
+#sidebar .nav-item[data-nav]{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;}
 .nav-item.drop-before::before,.nav-item.drop-after::after{
   content:'';position:absolute;left:6px;right:6px;height:2px;border-radius:2px;
   background:var(--teal);box-shadow:0 0 6px rgba(191,233,210,0.6);
@@ -146,7 +148,7 @@ a{color:inherit;}
 main{flex:1;min-width:0;padding:34px 40px 80px;}
 @media(min-width:881px){ #shell.nav-collapsed main{padding-top:76px;} }
 .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:28px;flex-wrap:wrap;}
-.page-title{font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:600;letter-spacing:-0.01em;}
+.page-title{font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:600;letter-spacing:-0.01em;text-wrap:balance;}
 .page-sub{color:var(--text-dim);font-size:13.5px;margin-top:4px;}
 
 /* month stepper */
@@ -217,6 +219,7 @@ main{flex:1;min-width:0;padding:34px 40px 80px;}
   transition:transform .1s ease, background .15s ease;
 }
 .btn:active{transform:scale(0.97);}
+.btn:disabled{opacity:.6;cursor:progress;transform:none;}
 .btn-primary{background:#FFFFFF;color:#000000;}
 .btn-primary:hover{filter:brightness(1.08);}
 .btn-ghost{background:rgba(255,255,255,0.05);color:var(--text);border:1px solid var(--border);}
@@ -431,12 +434,12 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
 .cat-option{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 9px;border-radius:8px;font-size:13px;color:var(--text);cursor:default;}
 .cat-option:hover{background:rgba(255,255,255,0.05);}
 .cat-option.is-selected{color:var(--teal);}
-.cat-option-label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;}
+.cat-option-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;text-align:left;font-size:inherit;padding:2px 0;border-radius:6px;}
 .cat-option-ghost .cat-option-label{color:var(--text-faint);font-style:italic;}
 .cat-option-del{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--text-faint);flex-shrink:0;}
 .cat-option-del:hover{background:rgba(239,182,172,0.16);color:var(--coral);}
 .cat-option-del svg{width:11px;height:11px;stroke:currentColor;fill:none;stroke-width:2.3;}
-.cat-add-row{display:flex;align-items:center;gap:7px;padding:9px;border-radius:8px;font-size:13px;color:var(--text-dim);cursor:pointer;border-top:1px solid var(--border);margin-top:4px;}
+.cat-add-row{width:100%;text-align:left;display:flex;align-items:center;gap:7px;padding:9px;border-radius:8px;font-size:13px;color:var(--text-dim);cursor:pointer;border-top:1px solid var(--border);margin-top:4px;}
 .cat-add-row:hover{color:var(--text);background:rgba(255,255,255,0.04);}
 .cat-add-row svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.2;flex-shrink:0;}
 .cat-add-input-row{display:flex;gap:6px;padding-top:8px;margin-top:4px;border-top:1px solid var(--border);}
@@ -510,33 +513,60 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
 
 /* ---------- Messagerie ---------- */
 .messages-list{display:flex;flex-direction:column;gap:10px;max-height:280px;overflow-y:auto;padding:4px 2px;}
+
+/* ---------- Focus clavier ---------- */
+:where(button,a,summary,[tabindex]:not([tabindex="-1"])):focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
+.field input:focus-visible,.field select:focus-visible,.cat-add-input-row input:focus-visible,.cp-foot textarea:focus-visible,.cp-foot input[type="text"]:focus-visible{box-shadow:0 0 0 3px rgba(191,233,210,0.22);}
+tr[tabindex]:focus-visible{outline-offset:-2px;}
+#view:focus{outline:none;}
+.skip-link{position:fixed;top:12px;left:12px;z-index:1000;padding:10px 14px;border-radius:10px;background:#FFFFFF;color:#000000;font-weight:600;font-size:13.5px;text-decoration:none;transform:translateY(-200%);}
+.skip-link:focus{transform:none;}
+button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight-color:transparent;}
+.modal,.cp-body,.notif-body,.cat-dropdown,.cf-list{overscroll-behavior:contain;}
+
+/* ---------- Encoches et barre d'accueil (viewport-fit=cover) ---------- */
+#claude-fab{bottom:calc(24px + env(safe-area-inset-bottom));right:calc(24px + env(safe-area-inset-right));}
+#claude-panel{bottom:calc(96px + env(safe-area-inset-bottom));right:calc(24px + env(safe-area-inset-right));}
+#toast{bottom:calc(24px + env(safe-area-inset-bottom));}
+@media(max-width:880px){
+  .mobile-topbar{padding-top:calc(16px + env(safe-area-inset-top));padding-left:calc(18px + env(safe-area-inset-left));padding-right:calc(18px + env(safe-area-inset-right));}
+  .sidebar{padding-top:calc(28px + env(safe-area-inset-top));padding-bottom:calc(28px + env(safe-area-inset-bottom));padding-left:calc(16px + env(safe-area-inset-left));}
+  main{padding-bottom:calc(60px + env(safe-area-inset-bottom));}
+  #notif-panel{bottom:calc(16px + env(safe-area-inset-bottom));}
+}
+
+/* ---------- Mouvement réduit ---------- */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important;scroll-behavior:auto !important;}
+}
 </style>
 </head>
 <body>
+<a class="skip-link" href="#view">Aller au contenu</a>
 
 <div id="auth-root"></div>
 <div id="shell">
   <nav class="sidebar" id="sidebar"></nav>
-  <button class="sidebar-expand-btn" data-action="toggle-sidebar-collapse" title="Afficher la navigation"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+  <button class="sidebar-expand-btn" data-action="toggle-sidebar-collapse" title="Afficher la navigation" aria-label="Afficher la navigation"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
   <div id="overlay-scrim"></div>
   <main>
     <div class="mobile-topbar">
-      <button id="burger"><svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+      <button id="burger" aria-label="Ouvrir la navigation"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
       <span class="display" style="font-weight:600;font-size:15px;" id="mobile-title">Solde</span>
       <span style="width:22px;"></span>
     </div>
-    <div id="view"></div>
+    <div id="view" tabindex="-1"></div>
   </main>
 </div>
 
-<button id="claude-fab" style="display:none;">
-  <svg viewBox="0 0 24 24"><path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.97-4.03 9-9 9-1.5 0-2.9-.36-4.14-1L3 21l1.14-3.6A8.96 8.96 0 0 1 3 12c0-4.97 4.03-9 9-9s9 4.03 9 9Z"/></svg>
+<button id="claude-fab" style="display:none;" aria-label="Ouvrir l'assistant">
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.97-4.03 9-9 9-1.5 0-2.9-.36-4.14-1L3 21l1.14-3.6A8.96 8.96 0 0 1 3 12c0-4.97 4.03-9 9-9s9 4.03 9 9Z"/></svg>
 </button>
 <div id="claude-panel"></div>
 <div id="notif-panel"></div>
 
 <div id="modal-root"></div>
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 
 <script>
@@ -583,7 +613,7 @@ const ICONS = {
   eyeOff:'<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.9 19.9 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a19.9 19.9 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
   message:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>'
 };
-function icon(name){ return `<svg viewBox="0 0 24 24">${ICONS[name]||''}</svg>`; }
+function icon(name){ return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${ICONS[name]||''}</svg>`; }
 
 /* ============================== STATE ============================== */
 // Email de contact recevant les demandes de création de compte — à renseigner.
@@ -924,7 +954,8 @@ function monthlyCost(ab){
 }
 function toast(msg){
   const t = document.getElementById('toast');
-  t.innerHTML = icon('check') + `<span>${msg}</span>`;
+  t.innerHTML = icon('check') + '<span></span>';
+  t.lastChild.textContent = msg;
   t.classList.add('show');
   clearTimeout(t._timer);
   t._timer = setTimeout(()=>t.classList.remove('show'), 2400);
@@ -1230,15 +1261,57 @@ let dragNavId = null, dragOverId = null, dragOverPos = null, dragGhostEl = null;
 let dragPending = null;      // { id, el, startX, startY } — clic maintenu, pas encore un vrai glissement
 let dragJustHappened = false; // empêche le clic de navigation juste après un glissement réel
 const NAV_DRAG_THRESHOLD = 6; // px de mouvement avant de considérer que c'est un glissement, pas un clic
+// Au doigt, un glissement immédiat se confond avec le défilement de la barre latérale :
+// on attend un appui long (comme pour réorganiser les applis d'un téléphone).
+const NAV_LONG_PRESS_MS = 350;
+const NAV_LONG_PRESS_TOLERANCE = 10; // px de mouvement tolérés pendant l'appui long avant d'y voir un défilement
 function setupNavDragAndDrop(){
   const draggableIds = new Set(navForSpace(currentSpace).map(n=>n.id));
   const items = Array.from(document.querySelectorAll('#sidebar .nav-item[data-nav]')).filter(el=>draggableIds.has(el.dataset.nav));
   items.forEach(el=>{
-    el.addEventListener('mousedown', (e)=>{
-      if(e.button!==0) return; // clic gauche uniquement
-      dragPending = { id: el.dataset.nav, el, startX: e.clientX, startY: e.clientY };
+    el.addEventListener('pointerdown', (e)=>{
+      if(e.pointerType==='mouse'){
+        if(e.button!==0) return; // clic gauche uniquement
+        dragPending = { id: el.dataset.nav, el, startX: e.clientX, startY: e.clientY };
+        return;
+      }
+      cancelNavLongPress();
+      dragPending = { id: el.dataset.nav, el, startX: e.clientX, startY: e.clientY, touch: true };
+      dragPending.timer = setTimeout(()=>{
+        if(!dragPending || dragPending.el!==el) return;
+        startNavDrag(dragPending.startX, dragPending.startY);
+        if(navigator.vibrate) navigator.vibrate(15);
+      }, NAV_LONG_PRESS_MS);
+    });
+    // Alt + ↑ / ↓ : même réorganisation, au clavier.
+    el.addEventListener('keydown', async (e)=>{
+      if(!e.altKey || (e.key!=='ArrowUp' && e.key!=='ArrowDown')) return;
+      e.preventDefault();
+      const ids = orderedNavItems().map(n=>n.id);
+      const idx = ids.indexOf(el.dataset.nav);
+      const target = ids[idx + (e.key==='ArrowUp' ? -1 : 1)];
+      if(!target) return;
+      await moveNavItem(el.dataset.nav, target, e.key==='ArrowUp' ? 'before' : 'after');
+      document.querySelector(`#sidebar .nav-item[data-nav="${el.dataset.nav}"]`)?.focus();
     });
   });
+}
+function cancelNavLongPress(){ if(dragPending && dragPending.timer) clearTimeout(dragPending.timer); }
+function startNavDrag(x, y){
+  dragNavId = dragPending.id;
+  dragPending.el.classList.add('nav-dragging');
+  createNavDragGhost(dragPending.el, x, y);
+}
+async function moveNavItem(from, overId, pos){
+  const items = orderedNavItems().map(n=>n.id);
+  items.splice(items.indexOf(from),1);
+  let toIdx = items.indexOf(overId);
+  if(pos==='after') toIdx += 1;
+  items.splice(toIdx,0,from);
+  if(!state.navOrder) state.navOrder = {};
+  state.navOrder[currentSpace] = items;
+  await persist();
+  await render();
 }
 function createNavDragGhost(el, x, y){
   const rect = el.getBoundingClientRect();
@@ -1250,14 +1323,18 @@ function createNavDragGhost(el, x, y){
   dragGhostEl.style.top = y+'px';
   document.body.appendChild(dragGhostEl);
 }
-document.addEventListener('mousemove', (e)=>{
+document.addEventListener('pointermove', (e)=>{
   if(dragPending && !dragNavId){
     const dx = e.clientX-dragPending.startX, dy = e.clientY-dragPending.startY;
-    if(Math.sqrt(dx*dx+dy*dy) > NAV_DRAG_THRESHOLD){
+    const dist = Math.sqrt(dx*dx+dy*dy);
+    if(dragPending.touch){
+      // le doigt a bougé avant la fin de l'appui long : c'est un défilement, pas un glissement
+      if(dist > NAV_LONG_PRESS_TOLERANCE){ cancelNavLongPress(); dragPending = null; }
+      return;
+    }
+    if(dist > NAV_DRAG_THRESHOLD){
       // le mouvement dépasse le seuil : ce n'est plus un simple clic, on démarre le glissement
-      dragNavId = dragPending.id;
-      dragPending.el.classList.add('nav-dragging');
-      createNavDragGhost(dragPending.el, e.clientX, e.clientY);
+      startNavDrag(e.clientX, e.clientY);
     }
   }
   if(!dragNavId) return;
@@ -1284,26 +1361,24 @@ function updateNavDropIndicators(){
     }
   });
 }
-document.addEventListener('mouseup', async ()=>{
+// Pendant un glissement au doigt, le navigateur ne doit ni faire défiler ni zoomer.
+document.addEventListener('touchmove', (e)=>{ if(dragNavId) e.preventDefault(); }, {passive:false});
+// L'appui long ne doit pas ouvrir le menu contextuel (Android) pendant qu'on réorganise.
+document.addEventListener('contextmenu', (e)=>{ if(dragPending && dragPending.touch && e.target.closest('#sidebar .nav-item')) e.preventDefault(); });
+async function endNavDrag(cancelled){
+  cancelNavLongPress();
   dragPending = null;
   if(!dragNavId) return;
   const from = dragNavId, overId = dragOverId, pos = dragOverPos;
   dragNavId = null; dragOverId = null; dragOverPos = null;
-  dragJustHappened = true; // le 'click' qui va suivre ce mouseup ne doit pas déclencher de navigation
+  dragJustHappened = true; // le 'click' qui va suivre ce relâchement ne doit pas déclencher de navigation
+  setTimeout(()=>{ dragJustHappened = false; }, 400); // au doigt, aucun 'click' ne suit toujours
   if(dragGhostEl){ dragGhostEl.remove(); dragGhostEl = null; }
-  if(overId && overId!==from){
-    const items = orderedNavItems().map(n=>n.id);
-    const fromIdx = items.indexOf(from);
-    items.splice(fromIdx,1);
-    let toIdx = items.indexOf(overId);
-    if(pos==='after') toIdx += 1;
-    items.splice(toIdx,0,from);
-    if(!state.navOrder) state.navOrder = {};
-    state.navOrder[currentSpace] = items;
-    await persist();
-  }
+  if(!cancelled && overId && overId!==from){ await moveNavItem(from, overId, pos); return; }
   await render();
-});
+}
+document.addEventListener('pointerup', ()=>endNavDrag(false));
+document.addEventListener('pointercancel', ()=>endNavDrag(true));
 
 function renderSidebar(){
   const sb = document.getElementById('sidebar');
@@ -1314,7 +1389,7 @@ function renderSidebar(){
     <div class="brand">
       <div class="brand-mark">${icon('logo')}</div>
       <div><div class="brand-name">Solde</div><div class="brand-sub">Budget personnel</div></div>
-      <button class="icon-btn" data-action="toggle-sidebar-collapse" title="Masquer la navigation" style="margin-left:auto;">${icon('chevL')}</button>
+      <button class="icon-btn" data-action="toggle-sidebar-collapse" title="Masquer la navigation" style="margin-left:auto;" aria-label="Masquer la navigation">${icon('chevL')}</button>
     </div>
     <div class="space-switch">
       ${SPACES.map(s=>`<button class="space-switch-btn ${currentSpace===s.id?'active':''}" data-action="switch-space" data-space="${s.id}">${icon(s.icon)}${s.label}</button>`).join('')}
@@ -1325,8 +1400,8 @@ function renderSidebar(){
     <button class="nav-item" data-action="toggle-notif-panel" style="position:relative;">${icon('bell')}<span>Notifications</span>${badge>0?`<span class="notif-badge">${badge}</span>`:''}</button>
     <div class="sidebar-user">
       <div class="avatar" style="background:${avatarColor(me)}">${initials(me)}</div>
-      <div class="info"><div class="name">${me?me.displayName:''}</div><div class="role">${me?me.role:''}</div></div>
-      <button class="icon-btn" data-action="logout" title="Se déconnecter">${icon('logout')}</button>
+      <div class="info"><div class="name">${esc(me?me.displayName:'')}</div><div class="role">${me?me.role:''}</div></div>
+      <button class="icon-btn" data-action="logout" title="Se déconnecter" aria-label="Se déconnecter">${icon('logout')}</button>
     </div>
     <div class="sidebar-foot">Données stockées sur cet appareil, synchronisées via GitHub si connecté.</div>
   `;
@@ -1351,10 +1426,11 @@ function avatarColor(u){
 function openModal(title, fields, values, onSave, extraHtml){
   const root = document.getElementById('modal-root');
   const isEdit = !!(values && values.id);
+  if(!document.querySelector('#modal-root .modal')) modalReturnFocus = document.activeElement;
   root.innerHTML = `
     <div class="modal-overlay" id="ov">
-      <div class="modal">
-        <h3>${title}</h3>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <h3 id="modal-title">${title}</h3>
         <form id="modal-form">
           ${fields.map(f=>fieldHTML(f, values)).join('')}
           ${extraHtml||''}
@@ -1404,31 +1480,44 @@ function openModal(title, fields, values, onSave, extraHtml){
     // échouée : dans ce cas, le modal reste ouvert (rien n'est perdu, l'utilisateur
     // corrige simplement sa saisie) plutôt que de se fermer sur une erreur. Il peut
     // aussi avoir mis en évidence les champs fautifs via markFieldError avant de renvoyer false.
-    const result = await onSave(data);
+    // Pendant l'enregistrement (synchro GitHub comprise), le bouton est désactivé :
+    // un double clic ou un Entrée répété ne crée pas de doublon.
+    const submitBtn = e.submitter || document.querySelector('#modal-form button[type=submit]');
+    if(submitBtn && submitBtn.disabled) return;
+    const submitHTML = submitBtn ? submitBtn.innerHTML : '';
+    if(submitBtn){ submitBtn.disabled = true; submitBtn.setAttribute('aria-busy','true'); submitBtn.textContent = 'Enregistrement…'; }
+    let result;
+    try{ result = await onSave(data); }
+    finally{
+      if(submitBtn && submitBtn.isConnected){ submitBtn.disabled = false; submitBtn.removeAttribute('aria-busy'); submitBtn.innerHTML = submitHTML; }
+    }
     if(result===false) return;
     closeModal();
   };
-  setTimeout(()=>{ const first = document.querySelector('#modal-form input:not([type=hidden]),#modal-form select'); if(first) first.focus(); }, 50);
+  setTimeout(()=>{ const first = document.querySelector('#modal-form input:not([type=hidden]),#modal-form select') || document.getElementById('del-yes') || modalFocusables()[0]; if(first) first.focus(); }, 50);
 }
 function fieldHTML(f, values){
   const val = values && values[f.key]!==undefined && values[f.key]!==null ? values[f.key] : (f.default!==undefined?f.default:'');
   const hiddenAttr = f.showIf && !f.showIf(values||{}) ? ' hidden' : '';
   if(f.type==='select'){
     const opts = f.options.map(o=> typeof o==='object' ? o : {value:o, label:o});
-    return `<div class="field"${hiddenAttr}><label>${f.label}</label><select id="f_${f.key}">${opts.map(o=>`<option value="${o.value}" ${String(o.value)===String(val)?'selected':''}>${o.label}</option>`).join('')}</select></div>`;
+    return `<div class="field"${hiddenAttr}><label for="f_${f.key}">${f.label}</label><select id="f_${f.key}">${opts.map(o=>`<option value="${attrEsc(o.value)}" ${String(o.value)===String(val)?'selected':''}>${esc(o.label)}</option>`).join('')}</select></div>`;
   }
   if(f.type==='category'){
     return categoryFieldHTML(f, val, hiddenAttr);
   }
   if(f.type==='checkbox'){
-    return `<div class="field"${hiddenAttr} style="display:flex;align-items:center;gap:9px;"><input id="f_${f.key}" type="checkbox" ${val?'checked':''} style="width:16px;height:16px;accent-color:#FFFFFF;"><label style="margin:0;font-size:13px;color:var(--text);">${f.label}</label></div>`;
+    return `<div class="field"${hiddenAttr} style="display:flex;align-items:center;gap:9px;"><input id="f_${f.key}" type="checkbox" ${val?'checked':''} style="width:16px;height:16px;accent-color:#FFFFFF;"><label for="f_${f.key}" style="margin:0;font-size:13px;color:var(--text);">${f.label}</label></div>`;
   }
   if(f.type==='password'){
-    return `<div class="field"${hiddenAttr}><label>${f.label}</label><div class="pw-wrap"><input id="f_${f.key}" type="password" value="${val||''}" placeholder="${f.placeholder||''}" autocomplete="${f.autocomplete||'current-password'}"><button type="button" class="pw-toggle" data-toggle-pw="f_${f.key}">${icon('eye')}</button></div></div>`;
+    return `<div class="field"${hiddenAttr}><label for="f_${f.key}">${f.label}</label><div class="pw-wrap"><input id="f_${f.key}" type="password" value="${attrEsc(val||'')}" placeholder="${f.placeholder||''}" autocomplete="${f.autocomplete||'current-password'}"><button type="button" class="pw-toggle" data-toggle-pw="f_${f.key}" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>`;
   }
-  return `<div class="field"${hiddenAttr}><label>${f.label}</label><input id="f_${f.key}" type="${f.type||'text'}" ${f.step?`step="${f.step}"`:''} value="${val===0?0:(val||'')}" placeholder="${f.placeholder||''}"></div>`;
+  return `<div class="field"${hiddenAttr}><label for="f_${f.key}">${f.label}</label><input id="f_${f.key}" type="${f.type||'text'}" ${f.step?`step="${f.step}"`:''} value="${attrEsc(val===0?0:(val||''))}" placeholder="${f.placeholder||''}"></div>`;
 }
 function attrEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
+// Échappe une valeur saisie par l'utilisateur avant de l'insérer dans du HTML (texte ou attribut).
+const ESC_MAP = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>ESC_MAP[c]); }
 // Champ « Catégorie » personnalisable : au lieu d'un <select> figé, un menu
 // déroulant où chaque catégorie porte sa propre croix de suppression, et où
 // une dernière ligne « + Autre… » ouvre un champ texte pour en créer une
@@ -1436,11 +1525,11 @@ function attrEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/
 function categoryFieldHTML(f, val, hiddenAttr){
   const hasVal = val!==undefined && val!==null && val!=='';
   return `<div class="field cat-field"${hiddenAttr||''} data-cat-type="${f.categoryType}" data-cat-key="${f.key}">
-    <label>${f.label}</label>
+    <label id="lbl_${f.key}">${f.label}</label>
     <input type="hidden" id="f_${f.key}" value="${attrEsc(val)}">
     <div class="cat-select">
-      <button type="button" class="cat-select-btn" data-cat-toggle>
-        <span class="cat-select-label ${hasVal?'':'is-placeholder'}">${hasVal?val:'Choisir une catégorie'}</span>
+      <button type="button" class="cat-select-btn" data-cat-toggle aria-expanded="false" aria-labelledby="lbl_${f.key}">
+        <span class="cat-select-label ${hasVal?'':'is-placeholder'}">${hasVal?esc(val):'Choisir une catégorie'}</span>
         ${icon('chevD')}
       </button>
       <div class="cat-dropdown">${categoryDropdownListHTML(f.categoryType, val)}</div>
@@ -1451,20 +1540,20 @@ function categoryDropdownListHTML(type, currentValue){
   const cats = myCategories(type);
   const names = cats.map(c=>c.nom);
   const ghost = (currentValue && !names.includes(currentValue))
-    ? `<div class="cat-option cat-option-ghost"><span class="cat-option-label" data-cat-select="${attrEsc(currentValue)}">${currentValue} <em>(supprimée)</em></span></div>`
+    ? `<div class="cat-option cat-option-ghost"><button type="button" class="cat-option-label" data-cat-select="${attrEsc(currentValue)}">${esc(currentValue)} <em>(supprimée)</em></button></div>`
     : '';
   const rows = cats.map(c=>`
     <div class="cat-option ${c.nom===currentValue?'is-selected':''}">
-      <span class="cat-option-label" data-cat-select="${attrEsc(c.nom)}">${c.nom}</span>
-      <button type="button" class="cat-option-del" data-cat-delete="${c.id}" title="Supprimer cette catégorie">${icon('x')}</button>
+      <button type="button" class="cat-option-label" data-cat-select="${attrEsc(c.nom)}">${esc(c.nom)}</button>
+      <button type="button" class="cat-option-del" data-cat-delete="${c.id}" title="Supprimer cette catégorie" aria-label="Supprimer cette catégorie">${icon('x')}</button>
     </div>`).join('');
   const empty = cats.length===0 ? `<div class="field-note" style="padding:8px 9px;">Aucune catégorie pour l'instant.</div>` : '';
   return `${ghost}${rows}${empty}
-    <div class="cat-add-row" data-cat-add-toggle>${icon('plus')}<span>Autre…</span></div>
+    <button type="button" class="cat-add-row" data-cat-add-toggle>${icon('plus')}<span>Autre…</span></button>
     <div class="cat-add-input-row" hidden>
       <input type="text" class="cat-add-input" placeholder="Nouvelle catégorie" maxlength="40">
-      <button type="button" class="cat-add-confirm" data-cat-add-confirm title="Ajouter">${icon('check')}</button>
-      <button type="button" class="cat-add-cancel" data-cat-add-cancel title="Annuler">${icon('x')}</button>
+      <button type="button" class="cat-add-confirm" data-cat-add-confirm title="Ajouter" aria-label="Ajouter">${icon('check')}</button>
+      <button type="button" class="cat-add-cancel" data-cat-add-cancel title="Annuler" aria-label="Annuler">${icon('x')}</button>
     </div>`;
 }
 function resetCatDropdown(wrap){
@@ -1472,8 +1561,19 @@ function resetCatDropdown(wrap){
   const inputRow = wrap.querySelector('.cat-add-input-row');
   if(addRow) addRow.hidden = false;
   if(inputRow) inputRow.hidden = true;
+  wrap.querySelector('[data-cat-toggle]')?.setAttribute('aria-expanded', String(wrap.classList.contains('open')));
 }
-function closeModal(){ document.getElementById('modal-root').innerHTML=''; }
+// Élément qui avait le focus avant l'ouverture de la modale : on le lui rend à la fermeture.
+let modalReturnFocus = null;
+function closeModal(){
+  document.getElementById('modal-root').innerHTML='';
+  if(modalReturnFocus && modalReturnFocus.isConnected) modalReturnFocus.focus();
+  modalReturnFocus = null;
+}
+function modalFocusables(){
+  return Array.from(document.querySelectorAll('#modal-root .modal :is(button, input, select, textarea, [tabindex]:not([tabindex="-1"]))'))
+    .filter(el=>!el.disabled && el.type!=='hidden' && el.offsetParent!==null);
+}
 function markFieldError(key, msg){
   const input = document.getElementById('f_'+key);
   const field = input?.closest('.field');
@@ -1523,7 +1623,7 @@ function reportFieldErrors(errors){
 }
 
 function confirmDelete(label, onYes){
-  openModal(`Supprimer « ${label} » ?`, [], {}, ()=>{}, `
+  openModal(`Supprimer « ${esc(label)} » ?`, [], {}, ()=>{}, `
     <p style="color:var(--text-dim);font-size:13.5px;margin-bottom:6px;">Cette action est définitive.</p>
     <div class="modal-actions"><button type="button" class="btn btn-ghost" id="del-cancel">Annuler</button>
     <button type="button" class="btn btn-primary" style="background:linear-gradient(135deg,var(--coral),var(--coral-dim));color:#fff;" id="del-yes">${icon('trash')}Supprimer</button></div>
@@ -1544,7 +1644,47 @@ async function render(){
   };
   view.innerHTML = renderers[currentView] ? renderers[currentView]() : '';
   afterRender();
+  syncRouteToUrl();
 }
+
+/* ============================== URL ============================== */
+// La vue affichée (et son mois / son année) est reflétée dans l'adresse :
+// #depenses/2026-10, #annuelle/2026, #parametres… — un rechargement ramène au même
+// endroit, un lien peut être partagé et le bouton Retour revient à la vue précédente.
+const ROUTE_VIEWS = ['dashboard','revenus','depenses','echeances','objectifs','charges','compteJoint','annuelle','analyse','parametres','groupesListe'];
+const MONTH_VIEWS = new Set(['dashboard','revenus','depenses','echeances','objectifs','charges','compteJoint']);
+let lastRoutedView = null;
+function routeHash(){
+  if(MONTH_VIEWS.has(currentView)) return `#${currentView}/${state.selectedMonth}`;
+  if(currentView==='annuelle') return `#annuelle/${state.selectedYear}`;
+  return '#'+currentView;
+}
+function syncRouteToUrl(){
+  const h = routeHash();
+  if(location.hash!==h){
+    // Changer de vue crée une entrée d'historique ; changer de mois remplace l'entrée
+    // courante, pour que Retour ne repasse pas par chaque mois parcouru.
+    if(lastRoutedView && lastRoutedView!==currentView) history.pushState(null, '', h);
+    else history.replaceState(null, '', h);
+  }
+  lastRoutedView = currentView;
+}
+function applyRouteFromUrl(){
+  const m = /^#(\w+)(?:\/(\d{4}-\d{2}|\d{4}))?$/.exec(location.hash);
+  if(!m || !ROUTE_VIEWS.includes(m[1])) return false;
+  currentView = m[1];
+  if(currentView!=='parametres') currentSpace = spaceOfView(currentView);
+  if(m[2] && MONTH_VIEWS.has(currentView) && /^\d{4}-(0[1-9]|1[0-2])$/.test(m[2])) state.selectedMonth = m[2];
+  if(m[2] && currentView==='annuelle' && /^\d{4}$/.test(m[2])) state.selectedYear = Number(m[2]);
+  lastRoutedView = currentView;
+  return true;
+}
+window.addEventListener('popstate', async ()=>{
+  if(!currentUser()) return;
+  if(!applyRouteFromUrl()){ history.replaceState(null, '', routeHash()); return; } // adresse inconnue : on garde la vue courante
+  closeModal(); closeSidebarMobile();
+  await render();
+});
 
 /* ============================== DASHBOARD ============================== */
 var charts = {};
@@ -1611,7 +1751,7 @@ function renderDashboard(){
   return `
     <div class="page-head">
       <div>
-        <div class="page-title">Tableau de bord</div>
+        <h1 class="page-title">Tableau de bord</h1>
         <div class="page-sub">Vue d'ensemble de vos finances</div>
       </div>
       ${monthStepperHTML(key,'dashboard')}
@@ -1662,17 +1802,17 @@ function renderDashboard(){
 }
 function monthStepperHTML(key, target){
   return `<div class="stepper">
-    <button data-stepper="${target}" data-dir="-1">${icon('chevL')}</button>
+    <button data-stepper="${target}" data-dir="-1" aria-label="Mois précédent">${icon('chevL')}</button>
     <span class="label display">${monthLabel(key)}</span>
-    <button data-stepper="${target}" data-dir="1">${icon('chevR')}</button>
+    <button data-stepper="${target}" data-dir="1" aria-label="Mois suivant">${icon('chevR')}</button>
   </div>`;
 }
 function yearStepperHTML(year, target){
   target = target || 'annuelle';
   return `<div class="stepper">
-    <button data-year-step="-1" data-year-target="${target}">${icon('chevL')}</button>
+    <button data-year-step="-1" data-year-target="${target}" aria-label="Année précédente">${icon('chevL')}</button>
     <span class="label display">${year}</span>
-    <button data-year-step="1" data-year-target="${target}">${icon('chevR')}</button>
+    <button data-year-step="1" data-year-target="${target}" aria-label="Année suivante">${icon('chevR')}</button>
   </div>`;
 }
 
@@ -1759,7 +1899,7 @@ function chartFilterButtonHTML(chartKey, secondDimLabel){
   const active = chartFilterActive(chartKey);
   const isOpen = chartFilterOpen === chartKey;
   return `<span class="th-filter-wrap chart-filter-wrap">
-    <button class="th-filter-btn ${active?'active':''}" data-action="toggle-chart-filter" data-chart="${chartKey}" title="Filtrer le graphique">${icon('filterDown')}</button>
+    <button class="th-filter-btn ${active?'active':''}" data-action="toggle-chart-filter" data-chart="${chartKey}" title="Filtrer le graphique" aria-label="Filtrer le graphique">${icon('filterDown')}</button>
     ${isOpen ? chartFilterPanelHTML(chartKey, secondDimLabel) : ''}
   </span>`;
 }
@@ -1777,7 +1917,7 @@ function chartFilterPanelHTML(chartKey, secondDimLabel){
       <input type="text" class="cf-search" data-action="col-filter-search" placeholder="Rechercher…" value="${colFilterSearch.replace(/"/g,'&quot;')}">
       <div class="cf-list">
         <label class="cf-item"><input type="checkbox" data-action="chart-filter-toggle-all" data-chart="${chartKey}" ${allChecked?'checked':''}> <strong>(Tout sélectionner)</strong></label>
-        ${shown.map(v=>`<label class="cf-item" data-value-row="${v.replace(/"/g,'&quot;')}"><input type="checkbox" data-action="chart-filter-toggle-value" data-chart="${chartKey}" data-value="${v.replace(/"/g,'&quot;')}" ${chartFilterPendingChecked.has(v)?'checked':''}> ${v}</label>`).join('')}
+        ${shown.map(v=>`<label class="cf-item" data-value-row="${attrEsc(v)}"><input type="checkbox" data-action="chart-filter-toggle-value" data-chart="${chartKey}" data-value="${attrEsc(v)}" ${chartFilterPendingChecked.has(v)?'checked':''}> ${esc(v)}</label>`).join('')}
       </div>
       <div class="cf-actions">
         <button class="btn btn-primary btn-sm" data-action="chart-filter-ok" data-chart="${chartKey}">${icon('check')}OK</button>
@@ -1826,7 +1966,7 @@ function renderAnnuelle(){
   const {months, totals} = anneeData(year);
   return `
     <div class="page-head">
-      <div><div class="page-title">Vue annuelle</div><div class="page-sub">Synthèse des 12 mois de ${year}</div></div>
+      <div><h1 class="page-title">Vue annuelle</h1><div class="page-sub">Synthèse des 12 mois de ${year}</div></div>
       ${yearStepperHTML(year)}
     </div>
     <div class="grid g3" style="margin-bottom:16px;">
@@ -1895,7 +2035,7 @@ function renderRevenus(){
   const reFiltered = applyTableFilterAndSort('revexc', REVEXC_COLUMNS, reAll);
   const re = tableFilterState('revexc').sortCol ? reFiltered : [...reFiltered].sort((a,b)=>new Date(b.date)-new Date(a.date));
   return `
-    <div class="page-head"><div><div class="page-title">Revenus</div><div class="page-sub">Sources fixes et rentrées ponctuelles — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}</div>
+    <div class="page-head"><div><h1 class="page-title">Revenus</h1><div class="page-sub">Sources fixes et rentrées ponctuelles — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}</div>
 
     <div class="section-head"><h3 style="font-size:15px;font-weight:600;">Revenus récurrents</h3>
       <button class="btn btn-primary btn-sm" data-action="add-revrec">${icon('plus')}Ajouter un revenu</button></div>
@@ -1911,10 +2051,10 @@ function renderRevenus(){
           <th>Début</th><th>Fin</th><th></th>
         </tr></thead>
         <tbody>${rr.map(r=>`<tr>
-          <td>${r.libelle}</td><td><span class="pill pill-dim">${r.categorie}</span></td>
+          <td>${esc(r.libelle)}</td><td><span class="pill pill-dim">${esc(r.categorie)}</span></td>
           <td class="num" style="color:var(--teal)">${fmtEUR(r.montant)}</td>
           <td>${fmtDate(r.dateDebut)}</td><td>${r.dateFin?fmtDate(r.dateFin):'Illimité'}</td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-revrec" data-id="${r.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-revrec" data-id="${r.id}">${icon('trash')}</button></td>
+          <td class="row-actions"><button class="icon-btn" data-action="edit-revrec" data-id="${r.id}" aria-label="Modifier">${icon('edit')}</button><button class="icon-btn del" data-action="del-revrec" data-id="${r.id}" aria-label="Supprimer">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
         <tfoot><tr><td colspan="2">Total mensuel</td><td class="num" style="color:var(--teal)">${fmtEUR(rr.reduce((s,r)=>s+Number(r.montant),0))}</td><td colspan="3"></td></tr></tfoot>
       </table></div>`)}
@@ -1935,9 +2075,9 @@ function renderRevenus(){
           <th></th>
         </tr></thead>
         <tbody>${re.map(r=>`<tr>
-          <td>${fmtDate(r.date)}</td><td>${r.libelle}</td><td><span class="pill pill-dim">${r.categorie}</span></td>
+          <td>${fmtDate(r.date)}</td><td>${esc(r.libelle)}</td><td><span class="pill pill-dim">${esc(r.categorie)}</span></td>
           <td class="num" style="color:${r.montant>=0?'var(--teal)':'var(--coral)'}">${fmtEUR(r.montant)}</td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-revexc" data-id="${r.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-revexc" data-id="${r.id}">${icon('trash')}</button></td>
+          <td class="row-actions"><button class="icon-btn" data-action="edit-revexc" data-id="${r.id}" aria-label="Modifier">${icon('edit')}</button><button class="icon-btn del" data-action="del-revexc" data-id="${r.id}" aria-label="Supprimer">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
       </table></div>`)}
     </div>
@@ -2026,7 +2166,7 @@ function colFilterHeaderHTML(table, columns, col, arr){
   const f = tableFilterState(table);
   const active = !!f.selected[col] || f.sortCol===col;
   const isOpen = colFilterOpen && colFilterOpen.table===table && colFilterOpen.col===col;
-  return `<th><span class="th-filter-wrap">${c.label}<button class="th-filter-btn ${active?'active':''}" data-action="toggle-col-filter" data-table="${table}" data-col="${col}">${icon('filterDown')}</button>${isOpen ? colFilterPanelHTML(table, columns, col, arr) : ''}</span></th>`;
+  return `<th><span class="th-filter-wrap">${c.label}<button class="th-filter-btn ${active?'active':''}" data-action="toggle-col-filter" data-table="${table}" data-col="${col}" aria-label="Filtrer ou trier la colonne">${icon('filterDown')}</button>${isOpen ? colFilterPanelHTML(table, columns, col, arr) : ''}</span></th>`;
 }
 function colFilterPanelHTML(table, columns, col, arr){
   const c = columns[col];
@@ -2043,7 +2183,7 @@ function colFilterPanelHTML(table, columns, col, arr){
       <input type="text" class="cf-search" data-action="col-filter-search" placeholder="Rechercher…" value="${colFilterSearch.replace(/"/g,'&quot;')}">
       <div class="cf-list">
         <label class="cf-item"><input type="checkbox" data-action="col-filter-toggle-all" ${allChecked?'checked':''}> <strong>(Tout sélectionner)</strong></label>
-        ${shown.map(v=>`<label class="cf-item" data-value-row="${v.replace(/"/g,'&quot;')}"><input type="checkbox" data-action="col-filter-toggle-value" data-value="${v.replace(/"/g,'&quot;')}" ${colFilterPending.has(v)?'checked':''}> ${isNumeric?fmtEUR(Number(v)):v}</label>`).join('')}
+        ${shown.map(v=>`<label class="cf-item" data-value-row="${attrEsc(v)}"><input type="checkbox" data-action="col-filter-toggle-value" data-value="${attrEsc(v)}" ${colFilterPending.has(v)?'checked':''}> ${isNumeric?fmtEUR(Number(v)):esc(v)}</label>`).join('')}
       </div>
       <div class="cf-actions">
         <button class="btn btn-primary btn-sm" data-action="col-filter-ok">${icon('check')}OK</button>
@@ -2083,7 +2223,7 @@ function renderDepenses(){
   const previsionnelles = all.filter(d=>d.modePaiement==='Previsionnelle')
     .sort((a,b)=> PRIORITE_ORDER[a.priorite||'Basse'] - PRIORITE_ORDER[b.priorite||'Basse']);
   return `
-    <div class="page-head"><div><div class="page-title">Dépenses</div><div class="page-sub">Achats, abonnements et frais — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}
+    <div class="page-head"><div><h1 class="page-title">Dépenses</h1><div class="page-sub">Achats, abonnements et frais — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}
       <button class="btn btn-primary" data-action="add-depense">${icon('plus')}Ajouter une dépense</button></div>
 
     ${recurrentesAll.length>0 ? `
@@ -2103,12 +2243,12 @@ function renderDepenses(){
           <th></th>
         </tr></thead>
         <tbody>${recurrentes.map(d=>`<tr>
-          <td>${d.libelle}</td><td><span class="pill pill-dim">${d.categorie}</span></td>
+          <td>${esc(d.libelle)}</td><td><span class="pill pill-dim">${esc(d.categorie)}</span></td>
           <td class="num">${fmtEURPrecise(d.montant)}</td><td>${d.frequence}</td>
           <td class="num">${fmtEURPrecise(monthlyCost(d))}</td>
-          <td>${d.compte}</td>
+          <td>${esc(d.compte)}</td>
           <td><button class="pill ${d.statut==='Actif'?'pill-teal':'pill-dim'}" data-action="toggle-depense-statut" data-id="${d.id}" style="cursor:pointer;">${d.statut}</button></td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-depense" data-id="${d.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}">${icon('trash')}</button></td>
+          <td class="row-actions"><button class="icon-btn" data-action="edit-depense" data-id="${d.id}" aria-label="Modifier">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}" aria-label="Supprimer">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
         <tfoot><tr><td colspan="2">Total mensuel (actives)</td><td class="num" style="color:var(--violet)">${fmtEUR(abonnementsTotalMensuel())}</td><td colspan="4"></td></tr></tfoot>
       </table></div>`}
@@ -2121,10 +2261,10 @@ function renderDepenses(){
       <div class="table-wrap"><table>
         <thead><tr><th>Libellé</th><th>Catégorie</th><th>Priorité</th><th>Montant estimé</th><th></th></tr></thead>
         <tbody>${previsionnelles.map(d=>`<tr>
-          <td>${d.libelle}</td><td><span class="pill pill-dim">${d.categorie}</span></td>
+          <td>${esc(d.libelle)}</td><td><span class="pill pill-dim">${esc(d.categorie)}</span></td>
           <td><span class="pill ${prioritePillClass(d.priorite)}">${d.priorite||'Basse'}</span></td>
           <td class="num">${fmtEUR(d.montant)}</td>
-          <td class="row-actions"><button class="btn btn-ghost btn-sm" data-action="plan-depense" data-id="${d.id}">${icon('calendar')}Planifier une date</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}">${icon('trash')}</button></td>
+          <td class="row-actions"><button class="btn btn-ghost btn-sm" data-action="plan-depense" data-id="${d.id}">${icon('calendar')}Planifier une date</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}" aria-label="Supprimer">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
       </table></div>
     </div>` : ''}
@@ -2146,11 +2286,11 @@ function renderDepenses(){
         <tbody>${list.map(d=>{
           const echelonne = d.modePaiement==='Echelonne';
           return `<tr>
-          <td>${d.libelle}</td><td><span class="pill pill-dim">${d.categorie}</span></td><td>${d.compte||'Compte Perso'}</td>
+          <td>${esc(d.libelle)}</td><td><span class="pill pill-dim">${esc(d.categorie)}</span></td><td>${esc(d.compte||'Compte Perso')}</td>
           <td>${echelonne ? `Échelonné (${depenseNbMensualites(d)}x)` : 'En une fois'}</td>
           <td class="num">${fmtEUR(d.montant)}</td>
           <td class="num">${fmtEURPrecise(depenseMensualiteDuMois(d,key))}</td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-depense" data-id="${d.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}">${icon('trash')}</button></td>
+          <td class="row-actions"><button class="icon-btn" data-action="edit-depense" data-id="${d.id}" aria-label="Modifier">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${d.id}" aria-label="Supprimer">${icon('trash')}</button></td>
         </tr>`;}).join('')}</tbody>
         <tfoot><tr><td colspan="5">${tableFilterActive('depenses')?'Total (filtré)':'Total'} ${monthLabel(key)}</td><td class="num">${fmtEUR(list.reduce((s,d)=>s+depenseMensualiteDuMois(d,key),0))}</td><td></td></tr></tfoot>
       </table></div>`)}
@@ -2234,7 +2374,7 @@ function deleteCategory(type, id){
 }
 function depense_fields(){
   return [
-    {key:'libelle', label:'Libellé', placeholder:'Canapé, restaurant, réparation, Netflix...'},
+    {key:'libelle', label:'Libellé', placeholder:'Canapé, restaurant, réparation, Netflix…'},
     {key:'categorie', label:'Catégorie', type:'category', categoryType:'depenses'},
     {key:'compte', label:'Compte', type:'select', options:compteOptions()},
     {key:'montant', label:'Montant (€)', type:'number', step:'0.01'},
@@ -2318,7 +2458,7 @@ function renderEcheances(){
   const all = mine(state.depenses).filter(d=>d.modePaiement==='Echelonne' && d.dateDebut && inRangeMonth(key, d.dateDebut, depenseDateFin(d)));
   if(all.length===0){
     return `
-      <div class="page-head"><div><div class="page-title">Échéances</div><div class="page-sub">Calculées automatiquement à partir des dépenses échelonnées — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}</div>
+      <div class="page-head"><div><h1 class="page-title">Échéances</h1><div class="page-sub">Calculées automatiquement à partir des dépenses échelonnées — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}</div>
       <div class="card">${emptyState('calendar','Aucune échéance ce mois-ci','Marque une dépense comme "Échelonnée" dans l\u2019onglet Dépenses pour la voir apparaître ici, ou change de mois si tu en cherches une ailleurs.','goto-depenses','Aller à Dépenses')}</div>
     `;
   }
@@ -2328,7 +2468,7 @@ function renderEcheances(){
   const selected = (list.find(d=>d.id===echSelectedId)) || all.find(d=>d.id===echSelectedId);
 
   return `
-    <div class="page-head"><div><div class="page-title">Échéances</div><div class="page-sub">Calculées automatiquement à partir des dépenses échelonnées — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}</div>
+    <div class="page-head"><div><h1 class="page-title">Échéances</h1><div class="page-sub">Calculées automatiquement à partir des dépenses échelonnées — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}</div>
     <div class="list-detail">
       <div class="ld-list-pane">
         <div class="card">
@@ -2345,9 +2485,9 @@ function renderEcheances(){
               <tbody>${list.map(d=>{
                 const done = depenseResteAPayerReel(d)<=0.01;
                 const retireCeMois = (d.moisRetires||[]).includes(key);
-                return `<tr class="ld-row ${d.id===echSelectedId?'active':''}" data-action="select-ech" data-id="${d.id}">
-                  <td>${d.libelle}</td>
-                  <td><span class="pill pill-dim">${d.compte||'Compte Perso'}</span></td>
+                return `<tr class="ld-row ${d.id===echSelectedId?'active':''}" data-action="select-ech" data-id="${d.id}" tabindex="0">
+                  <td>${esc(d.libelle)}</td>
+                  <td><span class="pill pill-dim">${esc(d.compte||'Compte Perso')}</span></td>
                   <td class="num">${fmtEUR(d.montant)}</td>
                   <td><span class="pill ${done?'pill-teal':(retireCeMois?'pill-coral':'pill-amber')}">${done?'Soldé':(retireCeMois?'Ce mois retiré':'En cours')}</span></td>
                 </tr>`;
@@ -2379,7 +2519,7 @@ function renderEchSummary(d, key){
   return `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
-        <div><div style="font-weight:600;font-size:18px;">${d.libelle}</div><div style="font-size:12.5px;color:var(--text-dim);margin-top:2px;">${d.compte||'Compte Perso'}</div></div>
+        <div><div style="font-weight:600;font-size:18px;">${esc(d.libelle)}</div><div style="font-size:12.5px;color:var(--text-dim);margin-top:2px;">${esc(d.compte||'Compte Perso')}</div></div>
         <span class="pill ${done?'pill-teal':(retireCeMois?'pill-coral':'pill-amber')}">${statut}</span>
       </div>
       <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:8px;">
@@ -2397,7 +2537,7 @@ function renderEchSummary(d, key){
           ? `<button class="btn btn-ghost btn-sm" data-action="ech-reintegrer-mois" data-id="${d.id}">${icon('refresh')}Réintégrer ce mois</button>`
           : `<button class="btn btn-ghost btn-sm" data-action="ech-retirer-mois" data-id="${d.id}">${icon('x')}Retirer ce mois</button>`) : ''}
         ${!done ? `<button class="btn btn-ghost btn-sm" data-action="ech-add-versement" data-id="${d.id}">${icon('wallet')}Verser</button>` : ''}
-        <button class="icon-btn" data-action="edit-depense" data-id="${d.id}">${icon('edit')}</button>
+        <button class="icon-btn" data-action="edit-depense" data-id="${d.id}" aria-label="Modifier">${icon('edit')}</button>
       </div>
     </div>
   `;
@@ -2417,7 +2557,7 @@ function renderEchHistorique(d, key){
   mois.reverse();
   return `
     <div class="section-head" style="margin-top:24px;">
-      <div><h3 style="font-size:15px;font-weight:600;">Historique des mensualités</h3><div class="field-note" style="margin-top:2px;">Planning mois par mois pour « ${d.libelle} », jusqu\u2019à ${monthLabel(key)}.</div></div>
+      <div><h3 style="font-size:15px;font-weight:600;">Historique des mensualités</h3><div class="field-note" style="margin-top:2px;">Planning mois par mois pour « ${esc(d.libelle)} », jusqu\u2019à ${monthLabel(key)}.</div></div>
     </div>
     <div class="card">
       ${mois.length===0 ? emptyState('calendar','Rien pour l\u2019instant','','','') : `
@@ -2446,7 +2586,7 @@ function renderEchVersements(d, key){
   const versList = tableFilterState('echVersements').sortCol ? versFiltered : [...versFiltered].sort((a,b)=>new Date(b.date)-new Date(a.date));
   return `
     <div class="section-head" style="margin-top:24px;">
-      <div><h3 style="font-size:15px;font-weight:600;">Historique des versements</h3><div class="field-note" style="margin-top:2px;">Sommes versées pour « ${d.libelle} », mois par mois — chaque versement modifie le reste à payer et donc les mensualités à venir.</div></div>
+      <div><h3 style="font-size:15px;font-weight:600;">Historique des versements</h3><div class="field-note" style="margin-top:2px;">Sommes versées pour « ${esc(d.libelle)} », mois par mois — chaque versement modifie le reste à payer et donc les mensualités à venir.</div></div>
     </div>
     <div class="card">
       ${tableFilterActive('echVersements') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="echVersements">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
@@ -2460,8 +2600,8 @@ function renderEchVersements(d, key){
         </tr></thead>
         <tbody>${versList.map(v=>`<tr>
           <td>${fmtDate(v.date)}</td>
-          <td class="num" style="color:var(--teal)">${fmtEUR(v.montant)}</td><td class="wrap">${v.note||'—'}</td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-ech-versement" data-id="${v.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-ech-versement" data-id="${v.id}">${icon('trash')}</button></td>
+          <td class="num" style="color:var(--teal)">${fmtEUR(v.montant)}</td><td class="wrap">${esc(v.note||'—')}</td>
+          <td class="row-actions"><button class="icon-btn" data-action="edit-ech-versement" data-id="${v.id}" aria-label="Modifier">${icon('edit')}</button><button class="icon-btn del" data-action="del-ech-versement" data-id="${v.id}" aria-label="Supprimer">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
         <tfoot><tr><td>Total versé ce mois</td><td class="num" style="color:var(--teal)">${fmtEUR(versAll.reduce((s,v)=>s+Number(v.montant),0))}</td><td colspan="2"></td></tr></tfoot>
       </table></div>`)}
@@ -2487,7 +2627,7 @@ function renderObjectifs(){
   const all = mine(state.objectifs);
   if(all.length===0){
     return `
-      <div class="page-head"><div><div class="page-title">Objectifs</div><div class="page-sub">Épargne progressive vers vos projets</div></div>
+      <div class="page-head"><div><h1 class="page-title">Objectifs</h1><div class="page-sub">Épargne progressive vers vos projets</div></div>
         <button class="btn btn-primary" data-action="add-obj">${icon('plus')}Ajouter un objectif</button></div>
       <div class="card">${emptyState('target','Aucun objectif','Un objectif, c’est un projet à financer (voyage, apport, achat…). Créez-en un, puis enregistrez au fil des mois les sommes mises de côté pour l’atteindre.','','')}</div>
     `;
@@ -2498,7 +2638,7 @@ function renderObjectifs(){
   const selected = (list.find(o=>o.id===objSelectedId)) || all.find(o=>o.id===objSelectedId);
 
   return `
-    <div class="page-head"><div><div class="page-title">Objectifs</div><div class="page-sub">Épargne progressive vers vos projets</div></div>
+    <div class="page-head"><div><h1 class="page-title">Objectifs</h1><div class="page-sub">Épargne progressive vers vos projets</div></div>
       <button class="btn btn-primary" data-action="add-obj">${icon('plus')}Ajouter un objectif</button></div>
     <div class="list-detail">
       <div class="ld-list-pane">
@@ -2515,9 +2655,9 @@ function renderObjectifs(){
               </tr></thead>
               <tbody>${list.map(o=>{
                 const c = objectifCalc(o);
-                return `<tr class="ld-row ${o.id===objSelectedId?'active':''}" data-action="select-obj" data-id="${o.id}">
-                  <td>${o.nom}</td>
-                  <td><span class="pill pill-dim">${o.categorie}</span></td>
+                return `<tr class="ld-row ${o.id===objSelectedId?'active':''}" data-action="select-obj" data-id="${o.id}" tabindex="0">
+                  <td>${esc(o.nom)}</td>
+                  <td><span class="pill pill-dim">${esc(o.categorie)}</span></td>
                   <td>${o.priorite}</td>
                   <td><span class="pill ${c.statut==='Atteint'?'pill-teal':c.statut==='En cours'?'pill-amber':'pill-dim'}">${c.statut}</span></td>
                 </tr>`;
@@ -2538,7 +2678,7 @@ function renderObjSummary(o){
   return `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
-        <div><div style="font-weight:600;font-size:18px;">${o.nom}</div><div style="font-size:12.5px;color:var(--text-dim);margin-top:2px;">${o.categorie} · priorité ${o.priorite}</div></div>
+        <div><div style="font-weight:600;font-size:18px;">${esc(o.nom)}</div><div style="font-size:12.5px;color:var(--text-dim);margin-top:2px;">${esc(o.categorie)} · priorité ${o.priorite}</div></div>
         <span class="pill ${c.statut==='Atteint'?'pill-teal':c.statut==='En cours'?'pill-amber':'pill-dim'}">${c.statut}</span>
       </div>
       <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:8px;">
@@ -2552,9 +2692,9 @@ function renderObjSummary(o){
         <div><div style="font-size:11px;color:var(--text-faint);">Épargne / mois</div><div style="font-size:13.5px;font-weight:600;color:var(--teal);">${fmtEURPrecise(c.mensualite)}</div></div>
       </div>
       <div class="row-actions" style="margin-top:16px;justify-content:flex-start;">
-        <button class="btn btn-ghost btn-sm" data-action="add-versement" data-obj="${o.nom}">${icon('plus')}Verser</button>
-        <button class="icon-btn" data-action="edit-obj" data-id="${o.id}">${icon('edit')}</button>
-        <button class="icon-btn del" data-action="del-obj" data-id="${o.id}">${icon('trash')}</button>
+        <button class="btn btn-ghost btn-sm" data-action="add-versement" data-obj="${esc(o.nom)}">${icon('plus')}Verser</button>
+        <button class="icon-btn" data-action="edit-obj" data-id="${o.id}" aria-label="Modifier">${icon('edit')}</button>
+        <button class="icon-btn del" data-action="del-obj" data-id="${o.id}" aria-label="Supprimer">${icon('trash')}</button>
       </div>
     </div>
   `;
@@ -2565,7 +2705,7 @@ function renderObjVersements(o, key){
   const versList = tableFilterState('versements').sortCol ? versFiltered : [...versFiltered].sort((a,b)=>new Date(b.date)-new Date(a.date));
   return `
     <div class="section-head" style="margin-top:24px;">
-      <div><h3 style="font-size:15px;font-weight:600;">Historique des versements</h3><div class="field-note" style="margin-top:2px;">Sommes mises de côté vers « ${o.nom} », mois par mois.</div></div>
+      <div><h3 style="font-size:15px;font-weight:600;">Historique des versements</h3><div class="field-note" style="margin-top:2px;">Sommes mises de côté vers « ${esc(o.nom)} », mois par mois.</div></div>
       ${monthStepperHTML(key,'dashboard')}
     </div>
     <div class="card">
@@ -2580,8 +2720,8 @@ function renderObjVersements(o, key){
         </tr></thead>
         <tbody>${versList.map(v=>`<tr>
           <td>${fmtDate(v.date)}</td>
-          <td class="num" style="color:var(--teal)">${fmtEUR(v.montant)}</td><td class="wrap">${v.note||'—'}</td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-versement" data-id="${v.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-versement" data-id="${v.id}">${icon('trash')}</button></td>
+          <td class="num" style="color:var(--teal)">${fmtEUR(v.montant)}</td><td class="wrap">${esc(v.note||'—')}</td>
+          <td class="row-actions"><button class="icon-btn" data-action="edit-versement" data-id="${v.id}" aria-label="Modifier">${icon('edit')}</button><button class="icon-btn del" data-action="del-versement" data-id="${v.id}" aria-label="Supprimer">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
         <tfoot><tr><td>Total versé ce mois</td><td class="num" style="color:var(--teal)">${fmtEUR(versAll.reduce((s,v)=>s+Number(v.montant),0))}</td><td colspan="2"></td></tr></tfoot>
       </table></div>`)}
@@ -2614,7 +2754,7 @@ function renderCharges(){
   const all = mine(state.charges).filter(c=>inRangeMonth(key, c.dateDebut, c.dateFin));
   const list = applyTableFilterAndSort('charges', CHARGE_COLUMNS, all);
   return `
-    <div class="page-head"><div><div class="page-title">Budget Charges</div><div class="page-sub">Dépenses fixes ou temporaires — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}
+    <div class="page-head"><div><h1 class="page-title">Budget Charges</h1><div class="page-sub">Dépenses fixes ou temporaires — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}
       <button class="btn btn-primary" data-action="add-charge">${icon('plus')}Ajouter une charge</button></div>
     <div class="card">
       ${tableFilterActive('charges') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="charges">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
@@ -2631,10 +2771,10 @@ function renderCharges(){
         </tr></thead>
         <tbody>${list.map(c=>{
           return `<tr>
-          <td>${c.categorie}</td><td><span class="pill pill-dim">${c.type}</span></td><td class="wrap">${c.description||'—'}</td>
-          <td class="num">${fmtEUR(c.budget)}</td><td>${c.compte}</td>
+          <td>${esc(c.categorie)}</td><td><span class="pill pill-dim">${c.type}</span></td><td class="wrap">${esc(c.description||'—')}</td>
+          <td class="num">${fmtEUR(c.budget)}</td><td>${esc(c.compte)}</td>
           <td style="font-size:12px;color:var(--text-dim);">${c.dateDebut?fmtDate(c.dateDebut):'—'} → ${c.dateFin?fmtDate(c.dateFin):'Illimité'}</td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-charge" data-id="${c.id}">${icon('edit')}</button><button class="icon-btn del" data-action="del-charge" data-id="${c.id}">${icon('trash')}</button></td>
+          <td class="row-actions"><button class="icon-btn" data-action="edit-charge" data-id="${c.id}" aria-label="Modifier">${icon('edit')}</button><button class="icon-btn del" data-action="del-charge" data-id="${c.id}" aria-label="Supprimer">${icon('trash')}</button></td>
         </tr>`;}).join('')}</tbody>
         <tfoot><tr><td colspan="3">Total actif ${monthLabel(key)}</td><td class="num">${fmtEUR(chargesTotalMois(key))}</td><td colspan="3"></td></tr></tfoot>
       </table></div>`)}
@@ -2666,7 +2806,7 @@ function renderCompteJoint(){
 
   if(!partner){
     return `
-      <div class="page-head"><div><div class="page-title">Compte joint</div><div class="page-sub">Comparatif des dépenses partagées</div></div></div>
+      <div class="page-head"><div><h1 class="page-title">Compte joint</h1><div class="page-sub">Comparatif des dépenses partagées</div></div></div>
       <div class="card">${emptyState('users','Aucun compte joint configuré','Choisis avec qui tu partages un compte joint pour comparer vos dépenses communes.','goto-parametres-comptes','Configurer dans Paramètres')}</div>
     `;
   }
@@ -2679,12 +2819,12 @@ function renderCompteJoint(){
   const partnerDetail = jointDetailFor(partner.id, key);
 
   return `
-    <div class="page-head"><div><div class="page-title">Compte joint</div><div class="page-sub">Comparatif avec ${partner.displayName} — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}
+    <div class="page-head"><div><h1 class="page-title">Compte joint</h1><div class="page-sub">Comparatif avec ${esc(partner.displayName)} — ${monthLabel(key)}</div></div>${monthStepperHTML(key,'dashboard')}
       <button class="btn btn-ghost" data-action="refresh-joint">${icon('refresh')}Actualiser</button></div>
 
     <div class="grid g3" style="margin-bottom:16px;">
       <div class="card stat-card"><div class="k"><span class="avatar" style="width:18px;height:18px;font-size:9px;display:inline-flex;background:${avatarColor(me)};margin-right:4px;">${initials(me)}</span> Mes dépenses compte joint</div><div class="v">${fmtEUR(myTotal)}</div></div>
-      <div class="card stat-card"><div class="k"><span class="avatar" style="width:18px;height:18px;font-size:9px;display:inline-flex;background:${avatarColor(partner)};margin-right:4px;">${initials(partner)}</span> Dépenses de ${partner.displayName}</div><div class="v">${fmtEUR(partnerTotal)}</div></div>
+      <div class="card stat-card"><div class="k"><span class="avatar" style="width:18px;height:18px;font-size:9px;display:inline-flex;background:${avatarColor(partner)};margin-right:4px;">${initials(partner)}</span> Dépenses de ${esc(partner.displayName)}</div><div class="v">${fmtEUR(partnerTotal)}</div></div>
       <div class="card stat-card"><div class="k">${icon('wallet')} Total compte joint</div><div class="v" style="color:var(--violet)">${fmtEUR(total)}</div></div>
     </div>
 
@@ -2695,15 +2835,15 @@ function renderCompteJoint(){
 
     <div class="card" style="margin-bottom:16px;">
       <h3 style="font-size:14px;font-weight:600;margin-bottom:4px;">Part de chacun, au prorata des revenus</h3>
-      <div class="field-note" style="margin-bottom:16px;">Calculé automatiquement chaque mois : plus tu gagnes par rapport à ${partner.displayName}, plus ta part du compte joint est élevée — et inversement.${shares.myInc+shares.partnerInc<=0?' Aucun revenu déclaré ce mois-ci des deux côtés : répartition 50/50 par défaut.':''}</div>
+      <div class="field-note" style="margin-bottom:16px;">Calculé automatiquement chaque mois : plus tu gagnes par rapport à ${esc(partner.displayName)}, plus ta part du compte joint est élevée — et inversement.${shares.myInc+shares.partnerInc<=0?' Aucun revenu déclaré ce mois-ci des deux côtés : répartition 50/50 par défaut.':''}</div>
       <div class="grid g2">
         <div class="stat-mini">
-          <div class="k">${me.displayName} — revenu ${fmtEUR(shares.myInc)} (${Math.round(shares.myShare*100)}%)</div>
+          <div class="k">${esc(me.displayName)} — revenu ${fmtEUR(shares.myInc)} (${Math.round(shares.myShare*100)}%)</div>
           <div class="v" style="color:var(--teal)">${fmtEUR(shares.totalCharges*shares.myShare)}</div>
           <div class="progress" style="width:100%;margin-top:8px;"><div style="width:${shares.myShare*100}%"></div></div>
         </div>
         <div class="stat-mini">
-          <div class="k">${partner.displayName} — revenu ${fmtEUR(shares.partnerInc)} (${Math.round(shares.partnerShare*100)}%)</div>
+          <div class="k">${esc(partner.displayName)} — revenu ${fmtEUR(shares.partnerInc)} (${Math.round(shares.partnerShare*100)}%)</div>
           <div class="v" style="color:var(--teal)">${fmtEUR(shares.totalCharges*shares.partnerShare)}</div>
           <div class="progress" style="width:100%;margin-top:8px;"><div style="width:${shares.partnerShare*100}%"></div></div>
         </div>
@@ -2712,24 +2852,24 @@ function renderCompteJoint(){
 
     <div class="grid g2">
       <div class="card">
-        <div class="section-head" style="margin-bottom:10px;"><h3 style="font-size:14px;font-weight:600;">Mes lignes (${me.displayName})</h3></div>
+        <div class="section-head" style="margin-bottom:10px;"><h3 style="font-size:14px;font-weight:600;">Mes lignes (${esc(me.displayName)})</h3></div>
         ${myDetail.length===0 ? emptyState('link','Rien pour l\u2019instant','Tague un de tes abonnements ou charges sur "Compte Joint".','','') : `
         <div class="table-wrap"><table>
           <thead><tr><th>Élément</th><th>Catégorie</th><th>Montant / mois</th></tr></thead>
-          <tbody>${myDetail.map(d=>`<tr><td>${d.nom}</td><td><span class="pill pill-dim">${d.cat}</span></td><td class="num">${fmtEURPrecise(d.montant)}</td></tr>`).join('')}</tbody>
+          <tbody>${myDetail.map(d=>`<tr><td>${esc(d.nom)}</td><td><span class="pill pill-dim">${esc(d.cat)}</span></td><td class="num">${fmtEURPrecise(d.montant)}</td></tr>`).join('')}</tbody>
         </table></div>`}
       </div>
       <div class="card">
-        <div class="section-head" style="margin-bottom:10px;"><h3 style="font-size:14px;font-weight:600;">Lignes de ${partner.displayName}</h3></div>
+        <div class="section-head" style="margin-bottom:10px;"><h3 style="font-size:14px;font-weight:600;">Lignes de ${esc(partner.displayName)}</h3></div>
         ${partnerDetail.length===0 ? emptyState('link','Rien pour l\u2019instant','',  '', '') : `
         <div class="table-wrap"><table>
           <thead><tr><th>Élément</th><th>Catégorie</th><th>Montant / mois</th><th></th></tr></thead>
           <tbody>${partnerDetail.map(d=>{
             const pending = existingExpenseDeleteRequest(d.id);
-            return `<tr><td>${d.nom}</td><td><span class="pill pill-dim">${d.cat}</span></td><td class="num">${fmtEURPrecise(d.montant)}</td>
+            return `<tr><td>${esc(d.nom)}</td><td><span class="pill pill-dim">${esc(d.cat)}</span></td><td class="num">${fmtEURPrecise(d.montant)}</td>
             <td class="row-actions">${pending
               ? `<span class="pill pill-amber">Suppression demandée</span>`
-              : `<button class="icon-btn del" data-action="request-delete-expense" data-item-id="${d.id}" data-item-type="${d.itemType}" data-item-label="${d.nom.replace(/"/g,'&quot;')}" title="Demander la suppression">${icon('trash')}</button>`}</td>
+              : `<button class="icon-btn del" data-action="request-delete-expense" data-item-id="${d.id}" data-item-type="${d.itemType}" data-item-label="${d.nom.replace(/"/g,'&quot;')}" title="Demander la suppression" aria-label="Demander la suppression">${icon('trash')}</button>`}</td>
           </tr>`;}).join('')}</tbody>
         </table></div>`}
       </div>
@@ -2740,20 +2880,20 @@ function renderCompteJoint(){
       <div class="section-head" style="margin-bottom:10px;"><h3 style="font-size:14px;font-weight:600;">Demandes de suppression reçues</h3></div>
       ${myPendingExpenseDeleteRequestsReceived().map(r=>`
         <div class="user-row">
-          <div class="info"><div class="name">${r.itemLabel}</div><div class="meta">${partner.displayName} souhaite retirer cette ligne du compte joint</div></div>
+          <div class="info"><div class="name">${esc(r.itemLabel)}</div><div class="meta">${esc(partner.displayName)} souhaite retirer cette ligne du compte joint</div></div>
           <button class="btn btn-primary btn-sm" data-action="approve-expense-delete" data-id="${r.id}">${icon('check')}Accepter</button>
           <button class="btn btn-ghost btn-sm" data-action="decline-expense-delete" data-id="${r.id}">${icon('x')}Refuser</button>
         </div>`).join('')}
     </div>` : ''}
 
     <div class="card" style="margin-top:16px;">
-      <div class="section-head" style="margin-bottom:10px;"><h3 style="font-size:14px;font-weight:600;">Messages avec ${partner.displayName}</h3></div>
+      <div class="section-head" style="margin-bottom:10px;"><h3 style="font-size:14px;font-weight:600;">Messages avec ${esc(partner.displayName)}</h3></div>
       <div id="joint-messages" class="messages-list">
         ${renderMessagesList(partner)}
       </div>
       <div class="cp-foot" style="border-top:none;padding:12px 0 0;">
         <input type="text" id="msg-input" placeholder="Écris un message…" enterkeyhint="send" autocomplete="off">
-        <button class="cp-send" data-action="send-message">${icon('send')}</button>
+        <button class="cp-send" data-action="send-message" aria-label="Envoyer">${icon('send')}</button>
       </div>
     </div>
   `;
@@ -2849,7 +2989,28 @@ document.addEventListener('input', (e)=>{
 document.addEventListener('change', async (e)=>{
   if(e.target.id==='import-file-input' && e.target.files[0]){ importDataFile(e.target.files[0]); }
 });
+// Lignes de tableau et notifications cliquables : activables au clavier (Entrée / Espace),
+// et le focus est rendu à l'élément équivalent une fois la vue redessinée.
 document.addEventListener('keydown', (e)=>{
+  if(e.key!=='Enter' && e.key!==' ') return;
+  const el = e.target;
+  if(!el.matches || !el.matches('[data-action][tabindex="0"]:not(button)')) return;
+  e.preventDefault();
+  const sel = `[data-action="${el.dataset.action}"]` + (el.dataset.id ? `[data-id="${el.dataset.id}"]` : '');
+  el.click();
+  setTimeout(()=>{ const again = document.querySelector(sel); if(again && !again.closest('[hidden]')) again.focus(); }, 60);
+});
+document.addEventListener('keydown', (e)=>{
+  // Tab reste à l'intérieur de la modale ouverte (piège de focus).
+  if(e.key==='Tab' && document.querySelector('#modal-root .modal')){
+    const els = modalFocusables();
+    if(!els.length) return;
+    const first = els[0], last = els[els.length-1];
+    const outside = !els.includes(document.activeElement);
+    if(e.shiftKey && (outside || document.activeElement===first)){ e.preventDefault(); last.focus(); }
+    else if(!e.shiftKey && (outside || document.activeElement===last)){ e.preventDefault(); first.focus(); }
+    return;
+  }
   if(e.target.classList && e.target.classList.contains('cat-add-input') && e.key==='Enter'){
     e.preventDefault();
     e.target.closest('.cat-add-input-row')?.querySelector('[data-cat-add-confirm]')?.click();
@@ -2880,13 +3041,19 @@ document.addEventListener('keydown', (e)=>{
     if(yes){ e.preventDefault(); yes.click(); return; }
     const form = document.getElementById('modal-form');
     const submit = form?.querySelector('button[type=submit]');
-    if(form && submit){ e.preventDefault(); form.requestSubmit(submit); }
+    if(form && submit){ e.preventDefault(); if(!submit.disabled) form.requestSubmit(submit); }
     return;
   }
   const panelOk = document.querySelector('[data-action="col-filter-ok"],[data-action="chart-filter-ok"]');
   if(panelOk && (colFilterOpen || chartFilterOpen)){ e.preventDefault(); panelOk.click(); }
 });
 
+// Le lien « Aller au contenu » déplace le focus sans toucher à l'adresse (qui porte la vue courante).
+document.addEventListener('click', (e)=>{
+  if(!e.target.closest('.skip-link')) return;
+  e.preventDefault();
+  document.getElementById('view').focus();
+});
 document.addEventListener('click', async (e)=>{
   if(dragJustHappened){ dragJustHappened = false; return; } // évite de naviguer juste après un glisser-déposer d'onglet
   if(notifOpen && !e.target.closest('#notif-panel') && !e.target.closest('[data-action="toggle-notif-panel"]')){ toggleNotifPanel(false); }
@@ -2908,6 +3075,7 @@ document.addEventListener('click', async (e)=>{
     const wasOpen = wrap.classList.contains('open');
     document.querySelectorAll('.cat-select.open').forEach(w=>{ w.classList.remove('open'); resetCatDropdown(w); });
     if(!wasOpen) wrap.classList.add('open');
+    catToggle.setAttribute('aria-expanded', String(!wasOpen));
     return;
   }
   const catSelectEl = e.target.closest('[data-cat-select]');
@@ -2917,7 +3085,8 @@ document.addEventListener('click', async (e)=>{
     document.getElementById('f_'+field.dataset.catKey).value = nom;
     const label = field.querySelector('.cat-select-label');
     label.textContent = nom; label.classList.remove('is-placeholder');
-    field.querySelector('.cat-select').classList.remove('open');
+    const catWrap = field.querySelector('.cat-select');
+    catWrap.classList.remove('open'); resetCatDropdown(catWrap);
     clearFieldError(field.dataset.catKey);
     return;
   }
@@ -2967,7 +3136,8 @@ document.addEventListener('click', async (e)=>{
     const label = field.querySelector('.cat-select-label');
     label.textContent = result.cat.nom; label.classList.remove('is-placeholder');
     field.querySelector('.cat-dropdown').innerHTML = categoryDropdownListHTML(type, hidden.value);
-    field.querySelector('.cat-select').classList.remove('open');
+    const catWrap = field.querySelector('.cat-select');
+    catWrap.classList.remove('open'); resetCatDropdown(catWrap);
     clearFieldError(field.dataset.catKey);
     toast('Catégorie ajoutée');
     return;
@@ -3216,7 +3386,7 @@ async function handleAction(action, id, el){
       await persist(); await render(); toast('Objectif supprimé'); }); break; }
 
     /* Versements */
-    case 'add-versement': openModal(`Verser vers « ${el.dataset.obj} »`, VERS_FIELDS_BASE, {date:defaultDateForSelectedMonth()}, async (data)=>{
+    case 'add-versement': openModal(`Verser vers « ${esc(el.dataset.obj)} »`, VERS_FIELDS_BASE, {date:defaultDateForSelectedMonth()}, async (data)=>{
       if(reportFieldErrors(fieldRequiredErrors(VERS_FIELDS_BASE, data))) return false;
       state.versements.push({id:uid(), ownerId:currentUser().id, objectifNom:el.dataset.obj, ...data}); await persist(); await render(); toast('Versement enregistré'); }); break;
     case 'edit-versement': { const v = find(mine(state.versements)); openModal('Modifier le versement', VERS_FIELDS_BASE, v, async (data)=>{
@@ -3538,7 +3708,7 @@ function renderSetupScreen(){
   const syncOptionHTML = `
     <button type="button" class="btn btn-ghost" id="sync-token-btn" style="width:100%;justify-content:center;margin-bottom:10px;">${icon('cloud')}J'ai déjà un compte — entrer mon jeton d'accès</button>
     <div id="sync-token-fields" style="display:none;">
-      <div class="field"><label>Jeton d'accès</label><div class="pw-wrap"><input id="sy-token" type="password" placeholder="github_pat_..."><button type="button" class="pw-toggle" data-toggle-pw="sy-token">${icon('eye')}</button></div></div>
+      <div class="field"><label for="sy-token">Jeton d'accès</label><div class="pw-wrap"><input id="sy-token" type="password" placeholder="github_pat_…"><button type="button" class="pw-toggle" data-toggle-pw="sy-token" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>
       <div class="field-note" style="margin-top:-8px;margin-bottom:14px;">Ce jeton t'a été envoyé par email par la personne qui administre ce budget.</div>
       <button type="button" class="btn btn-primary" id="sy-connect" style="width:100%;justify-content:center;">${icon('check')}Synchroniser et me connecter</button>
     </div>`;
@@ -3579,7 +3749,7 @@ function renderAdminCodeScreen(){
       <div class="auth-sub">La création du compte administrateur est protégée par un code à usage unique.</div>
       <div id="auth-error-slot"></div>
       <form id="setup-code-form">
-        <div class="field"><label>Code d'accès</label><input id="su-code" type="text" placeholder="XXXX-XXXX-XXXX" required autocomplete="off" style="letter-spacing:1px;text-transform:uppercase;"></div>
+        <div class="field"><label for="su-code">Code d'accès</label><input id="su-code" type="text" placeholder="XXXX-XXXX-XXXX" required autocomplete="off" style="letter-spacing:1px;text-transform:uppercase;"></div>
         <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Continuer</button>
       </form>
       <button type="button" class="btn btn-ghost" id="back-to-setup-btn" style="width:100%;justify-content:center;margin-top:10px;">Retour</button>
@@ -3629,10 +3799,10 @@ function renderSetupAdminForm(verifiedCode){
       <div class="auth-sub">Code validé — crée maintenant l'unique compte administrateur de ce budget.</div>
       <div id="auth-error-slot"></div>
       <form id="setup-form">
-        <div class="field"><label>Nom affiché</label><input id="su-name" type="text" placeholder="Toi" required></div>
-        <div class="field"><label>Identifiant</label><input id="su-username" type="text" placeholder="admin" required autocomplete="username"></div>
-        <div class="field"><label>Mot de passe</label><div class="pw-wrap"><input id="su-pass" type="password" placeholder="••••••••" required autocomplete="new-password"><button type="button" class="pw-toggle" data-toggle-pw="su-pass">${icon('eye')}</button></div></div>
-        <div class="field"><label>Confirmer le mot de passe</label><div class="pw-wrap"><input id="su-pass2" type="password" placeholder="••••••••" required autocomplete="new-password"><button type="button" class="pw-toggle" data-toggle-pw="su-pass2">${icon('eye')}</button></div></div>
+        <div class="field"><label for="su-name">Nom affiché</label><input id="su-name" type="text" placeholder="Toi" required></div>
+        <div class="field"><label for="su-username">Identifiant</label><input id="su-username" type="text" placeholder="admin" required autocomplete="username"></div>
+        <div class="field"><label for="su-pass">Mot de passe</label><div class="pw-wrap"><input id="su-pass" type="password" placeholder="••••••••" required autocomplete="new-password"><button type="button" class="pw-toggle" data-toggle-pw="su-pass" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>
+        <div class="field"><label for="su-pass2">Confirmer le mot de passe</label><div class="pw-wrap"><input id="su-pass2" type="password" placeholder="••••••••" required autocomplete="new-password"><button type="button" class="pw-toggle" data-toggle-pw="su-pass2" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>
         <div class="field" style="display:flex;align-items:center;gap:9px;"><input id="su-remember" type="checkbox" style="width:16px;height:16px;accent-color:#FFFFFF;"><label style="margin:0;font-size:13px;color:var(--text);">Rester connecté (${REMEMBER_DAYS} jours)</label></div>
         <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Créer le compte administrateur</button>
       </form>
@@ -3686,8 +3856,8 @@ function renderLoginScreen(){
       <div class="auth-sub">Accède à ton budget partagé.</div>
       <div id="auth-error-slot"></div>
       <form id="login-form">
-        <div class="field"><label>Identifiant</label><input id="li-username" type="text" required autocomplete="username"></div>
-        <div class="field"><label>Mot de passe</label><div class="pw-wrap"><input id="li-pass" type="password" required autocomplete="current-password"><button type="button" class="pw-toggle" data-toggle-pw="li-pass">${icon('eye')}</button></div></div>
+        <div class="field"><label for="li-username">Identifiant</label><input id="li-username" type="text" required autocomplete="username"></div>
+        <div class="field"><label for="li-pass">Mot de passe</label><div class="pw-wrap"><input id="li-pass" type="password" required autocomplete="current-password"><button type="button" class="pw-toggle" data-toggle-pw="li-pass" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>
         <div class="field" style="display:flex;align-items:center;gap:9px;"><input id="li-remember" type="checkbox" style="width:16px;height:16px;accent-color:#FFFFFF;"><label style="margin:0;font-size:13px;color:var(--text);">Rester connecté (${REMEMBER_DAYS} jours)</label></div>
         <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Se connecter</button>
       </form>
@@ -3721,10 +3891,10 @@ function renderAccountRequestScreen(){
       <div class="auth-sub">Remplis ces informations — la personne qui administre ce budget les recevra et pourra approuver ou refuser ta demande.</div>
       <div id="auth-error-slot"></div>
       <form id="account-request-form">
-        <div class="field"><label>Ton nom</label><input id="ar-nom" type="text" required></div>
-        <div class="field"><label>Ton email (pour qu'on puisse te recontacter)</label><input id="ar-email" type="email" required></div>
-        <div class="field"><label>Identifiant souhaité</label><input id="ar-username" type="text" placeholder="ex. julie"></div>
-        <div class="field"><label>Pourquoi ce compte ? (optionnel)</label><textarea id="ar-message" rows="3" placeholder="Ex. je fais partie de la famille, on veut partager le budget du foyer..."></textarea></div>
+        <div class="field"><label for="ar-nom">Ton nom</label><input id="ar-nom" type="text" required></div>
+        <div class="field"><label for="ar-email">Ton email (pour qu'on puisse te recontacter)</label><input id="ar-email" type="email" required></div>
+        <div class="field"><label for="ar-username">Identifiant souhaité</label><input id="ar-username" type="text" placeholder="ex. julie"></div>
+        <div class="field"><label for="ar-message">Pourquoi ce compte ? (optionnel)</label><textarea id="ar-message" rows="3" placeholder="Ex. je fais partie de la famille, on veut partager le budget du foyer…"></textarea></div>
         <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Envoyer la demande</button>
       </form>
       <button type="button" class="btn btn-ghost" id="back-to-login-btn" style="width:100%;justify-content:center;margin-top:10px;">Retour</button>
@@ -3782,25 +3952,25 @@ function renderAnalyse(){
   const allYearsTotal = hasResults ? yearsWithData.reduce((s,y)=>s+analyseMonthlyTotals(term,y).reduce((s2,m)=>s2+m.total,0),0) : 0;
 
   return `
-    <div class="page-head"><div><div class="page-title">Analyse</div><div class="page-sub">Combien tu as dépensé pour un poste précis, mois par mois</div></div></div>
+    <div class="page-head"><div><h1 class="page-title">Analyse</h1><div class="page-sub">Combien tu as dépensé pour un poste précis, mois par mois</div></div></div>
 
     <div class="card" style="margin-bottom:16px;">
-      <div class="field"><label>Rechercher un poste (ex. Netflix, Tabac...)</label>
+      <div class="field"><label for="analyse-search">Rechercher un poste (ex. Netflix, Tabac…)</label>
         <div class="kv-input-row">
-          <input id="analyse-search" type="text" list="analyse-suggestions" placeholder="Netflix, Tabac, Loyer..." value="${term.replace(/"/g,'&quot;')}">
+          <input id="analyse-search" type="text" list="analyse-suggestions" placeholder="Netflix, Tabac, Loyer…" value="${term.replace(/"/g,'&quot;')}">
           <button class="btn btn-primary btn-sm" data-action="run-analyse">${icon('search')}Chercher</button>
         </div>
         <datalist id="analyse-suggestions">${suggestions.map(s=>`<option value="${s.replace(/"/g,'&quot;')}">`).join('')}</datalist>
       </div>
     </div>
 
-    ${!hasResults ? `<div class="card">${emptyState('search','Cherche un poste de dépense','Tape un nom (Netflix, Tabac, Loyer...) pour voir combien tu y as consacré, mois par mois et sur l\u2019année.','','')}</div>` : `
+    ${!hasResults ? `<div class="card">${emptyState('search','Cherche un poste de dépense','Tape un nom (Netflix, Tabac, Loyer…) pour voir combien tu y as consacré, mois par mois et sur l\u2019année.','','')}</div>` : `
 
-    <div class="page-head" style="margin-bottom:16px;"><div><div class="page-sub" style="margin-top:0;">Résultats pour "${term}" — ${months.filter(m=>m.total>0).length===0 ? 'aucune correspondance ce mois-ci' : ''}</div></div>${yearStepperHTML(year, 'analyse')}</div>
+    <div class="page-head" style="margin-bottom:16px;"><div><div class="page-sub" style="margin-top:0;">Résultats pour « ${esc(term)} » — ${months.filter(m=>m.total>0).length===0 ? 'aucune correspondance ce mois-ci' : ''}</div></div>${yearStepperHTML(year, 'analyse')}</div>
 
     <div class="grid g3" style="margin-bottom:16px;">
       <div class="card stat-card"><div class="k">${icon('calendar')} Total ${year}</div><div class="v">${fmtEUR(yearTotal)}</div>
-        ${partner && yearTotalPartner>0 ? `<div class="d">Toi : ${fmtEUR(yearTotalMine)} · ${partner.displayName} : ${fmtEUR(yearTotalPartner)}</div>` : ''}</div>
+        ${partner && yearTotalPartner>0 ? `<div class="d">Toi : ${fmtEUR(yearTotalMine)} · ${esc(partner.displayName)} : ${fmtEUR(yearTotalPartner)}</div>` : ''}</div>
       <div class="card stat-card"><div class="k">${icon('wallet')} Moyenne mensuelle ${year}</div><div class="v">${fmtEUR(yearTotal/12)}</div></div>
       <div class="card stat-card"><div class="k">${icon('chart')} Total tous les ans confondus</div><div class="v">${fmtEUR(allYearsTotal)}</div><div class="d">${yearsWithData.join(', ')}</div></div>
     </div>
@@ -3839,7 +4009,7 @@ function drawAnalyseChart(){
 
 function renderGroupesListe(){
   return `
-    <div class="page-head"><div><div class="page-title">Mes groupes</div><div class="page-sub">Dépenses partagées à plusieurs, façon Tricount</div></div></div>
+    <div class="page-head"><div><h1 class="page-title">Mes groupes</h1><div class="page-sub">Dépenses partagées à plusieurs, façon Tricount</div></div></div>
     <div class="card">
       ${emptyState('users','Bientôt disponible','Les groupes partagés arrivent dans une prochaine mise à jour — tu pourras créer un groupe, inviter des proches (avec ou sans compte), et répartir vos dépenses communes.', null, null)}
     </div>
@@ -3848,7 +4018,7 @@ function renderGroupesListe(){
 function renderParametres(){
   const me = currentUser();
   return `
-    <div class="page-head"><div><div class="page-title">Paramètres</div><div class="page-sub">Comptes, synchronisation et assistant</div></div></div>
+    <div class="page-head"><div><h1 class="page-title">Paramètres</h1><div class="page-sub">Comptes, synchronisation et assistant</div></div></div>
 
     <div class="card settings-block">
       <h3>Navigation</h3>
@@ -3866,12 +4036,12 @@ function renderParametres(){
       ${visibleUserRows(me).map(u=>`
         <div class="user-row">
           <div class="avatar" style="background:${avatarColor(u)}">${initials(u)}</div>
-          <div class="info"><div class="name">${u.displayName} ${u.id===me.id?'<span style="color:var(--text-faint);font-weight:400;">(toi)</span>':''}</div>
-            <div class="meta">@${u.username} · ${u.role==='admin'?'Administrateur':'Membre'}${u.jointWith ? ' · Compte joint avec '+((authState.users.find(x=>x.id===u.jointWith)||{}).displayName||'?') : ''}</div></div>
-          ${(isAdmin() && u.role!=='admin') ? `<button class="icon-btn" data-action="export-user-data" data-id="${u.id}" title="Exporter ses données">${icon('arrowDown')}</button>
-            <button class="icon-btn del" data-action="wipe-user-data" data-id="${u.id}" title="Vider ses données">${icon('refresh')}</button>` : ''}
-          ${(isAdmin() || u.id===me.id) ? `<button class="icon-btn" data-action="edit-user" data-id="${u.id}">${icon('edit')}</button>` : ''}
-          ${(isAdmin() && u.id!==me.id) ? `<button class="icon-btn del" data-action="del-user" data-id="${u.id}">${icon('trash')}</button>` : ''}
+          <div class="info"><div class="name">${esc(u.displayName)} ${u.id===me.id?'<span style="color:var(--text-faint);font-weight:400;">(toi)</span>':''}</div>
+            <div class="meta">@${esc(u.username)} · ${u.role==='admin'?'Administrateur':'Membre'}${u.jointWith ? ' · Compte joint avec '+esc((authState.users.find(x=>x.id===u.jointWith)||{}).displayName||'?') : ''}</div></div>
+          ${(isAdmin() && u.role!=='admin') ? `<button class="icon-btn" data-action="export-user-data" data-id="${u.id}" title="Exporter ses données" aria-label="Exporter ses données">${icon('arrowDown')}</button>
+            <button class="icon-btn del" data-action="wipe-user-data" data-id="${u.id}" title="Vider ses données" aria-label="Vider ses données">${icon('refresh')}</button>` : ''}
+          ${(isAdmin() || u.id===me.id) ? `<button class="icon-btn" data-action="edit-user" data-id="${u.id}" aria-label="Modifier">${icon('edit')}</button>` : ''}
+          ${(isAdmin() && u.id!==me.id) ? `<button class="icon-btn del" data-action="del-user" data-id="${u.id}" aria-label="Supprimer">${icon('trash')}</button>` : ''}
         </div>`).join('')}
       ${isAdmin() ? `<button class="btn btn-ghost btn-sm" data-action="add-user" style="margin-top:14px;">${icon('plus')}Ajouter un compte</button>` : ''}
 
@@ -3942,7 +4112,7 @@ function renderMemberAccountRequests(me){
           ? `<span class="pill pill-amber">Suppression demandée — en attente</span>`
           : `<button class="btn btn-ghost btn-sm" data-action="request-delete-account" style="color:var(--coral);">${icon('trash')}Demander la suppression de mon compte</button>`}
       </div>
-      <div class="field-note" style="margin-top:10px;">"Vider mes données" garde ton compte et tes identifiants — seules tes saisies (revenus, dépenses...) sont remises à zéro. "Supprimer mon compte" retire aussi tes identifiants, définitivement.</div>
+      <div class="field-note" style="margin-top:10px;">« Vider mes données » garde ton compte et tes identifiants — seules tes saisies (revenus, dépenses…) sont remises à zéro. "Supprimer mon compte" retire aussi tes identifiants, définitivement.</div>
     </div>`;
 }
 function accountRequestLabel(type){
@@ -3961,7 +4131,7 @@ function renderPendingAccountRequests(){
         const label = accountRequestLabel(r.type);
         return `<div class="user-row">
           <div class="avatar" style="background:${avatarColor(from)}">${initials(from)}</div>
-          <div class="info"><div class="name">${from?from.displayName:'?'}</div><div class="meta">${label}</div></div>
+          <div class="info"><div class="name">${esc(from?from.displayName:'?')}</div><div class="meta">${label}</div></div>
           <button class="btn btn-primary btn-sm" data-action="approve-account-request" data-id="${r.id}">${icon('check')}Traiter</button>
           <button class="btn btn-ghost btn-sm" data-action="decline-account-request" data-id="${r.id}">${icon('x')}Refuser</button>
         </div>`;
@@ -3976,7 +4146,7 @@ function renderJointRequestsSection(){
 
   if(me.jointWith){
     const partner = authState.users.find(u=>u.id===me.jointWith);
-    html += `<div class="status-row"><span class="status-dot" style="background:var(--teal);"></span>Compte joint actif avec ${partner?partner.displayName:'?'}</div>
+    html += `<div class="status-row"><span class="status-dot" style="background:var(--teal);"></span>Compte joint actif avec ${esc(partner?partner.displayName:'?')}</div>
       <div class="field-note" style="margin-bottom:12px;">Un seul compte joint à la fois. Quitte celui-ci si tu veux en rejoindre un autre.</div>
       <button class="btn btn-ghost btn-sm" data-action="break-joint">${icon('x')}Quitter le compte joint</button>`;
     return html;
@@ -3987,7 +4157,7 @@ function renderJointRequestsSection(){
     incoming.forEach(r=>{
       const from = authState.users.find(u=>u.id===r.fromId);
       html += `<div class="user-row"><div class="avatar" style="background:${avatarColor(from)}">${initials(from)}</div>
-        <div class="info"><div class="name">${from?from.displayName:'?'}</div><div class="meta">souhaite un compte joint avec toi</div></div>
+        <div class="info"><div class="name">${esc(from?from.displayName:'?')}</div><div class="meta">souhaite un compte joint avec toi</div></div>
         <button class="btn btn-primary btn-sm" data-action="accept-joint-request" data-id="${r.id}">${icon('check')}Accepter</button>
         <button class="btn btn-ghost btn-sm" data-action="decline-joint-request" data-id="${r.id}">${icon('x')}Refuser</button>
       </div>`;
@@ -4001,9 +4171,9 @@ function renderJointRequestsSection(){
     others.forEach(u=>{
       const sent = mySentPendingRequest(u.id);
       html += `<div class="user-row"><div class="avatar" style="background:${avatarColor(u)}">${initials(u)}</div>
-        <div class="info"><div class="name">${u.displayName}</div><div class="meta">@${u.username}</div></div>
+        <div class="info"><div class="name">${esc(u.displayName)}</div><div class="meta">@${esc(u.username)}</div></div>
         ${sent
-          ? `<span class="pill pill-amber">En attente</span><button class="icon-btn" data-action="cancel-joint-request" data-id="${sent.id}">${icon('x')}</button>`
+          ? `<span class="pill pill-amber">En attente</span><button class="icon-btn" data-action="cancel-joint-request" data-id="${sent.id}" aria-label="Annuler la demande">${icon('x')}</button>`
           : `<button class="btn btn-ghost btn-sm" data-action="send-joint-request" data-to="${u.id}">${icon('plus')}Proposer</button>`}
       </div>`;
     });
@@ -4011,7 +4181,7 @@ function renderJointRequestsSection(){
     // Un membre ne voit pas la liste des autres comptes : il saisit l'identifiant
     // de la personne à qui il veut proposer un compte joint.
     html += `<div class="sub" style="margin:${incoming.length?'16px':'0'} 0 8px;font-weight:600;color:var(--text);">Proposer un compte joint</div>
-      <div class="field"><label>Identifiant de la personne</label>
+      <div class="field"><label for="joint-target-username">Identifiant de la personne</label>
         <div class="kv-input-row"><input id="joint-target-username" type="text" placeholder="identifiant"><button class="btn btn-primary btn-sm" data-action="send-joint-request-by-username">${icon('plus')}Proposer</button></div>
       </div>
       <div id="joint-target-error" class="auth-error" style="display:none;"></div>`;
@@ -4354,7 +4524,7 @@ function renderGithubSection(){
   const cfg = ghConfig();
   if(!ghConfigured()){
     return `
-      <div class="field"><label>Jeton d'accès</label><div class="pw-wrap"><input id="gh-token" type="password" placeholder="github_pat_..."><button type="button" class="pw-toggle" data-toggle-pw="gh-token">${icon('eye')}</button></div></div>
+      <div class="field"><label for="gh-token">Jeton d'accès</label><div class="pw-wrap"><input id="gh-token" type="password" placeholder="github_pat_…"><button type="button" class="pw-toggle" data-toggle-pw="gh-token" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>
       <div class="field-note" style="margin-top:-8px;margin-bottom:14px;">Ce budget est relié à un seul dépôt fixe — seul le jeton d'accès est à saisir, sur chaque appareil.</div>
       <button class="btn btn-primary btn-sm" data-action="gh-connect">${icon('cloud')}Connecter</button>
       ${exportImportHTML()}`;
@@ -4385,8 +4555,8 @@ function renderClaudeSection(){
   const key = claudeKey();
   if(!key){
     return `
-      <div class="field"><label>Clé API Anthropic</label>
-        <div class="kv-input-row"><input id="claude-key-input" type="password" placeholder="sk-ant-..."><button class="btn btn-primary btn-sm" data-action="save-claude-key">Activer</button></div>
+      <div class="field"><label for="claude-key-input">Clé API Anthropic</label>
+        <div class="kv-input-row"><input id="claude-key-input" type="password" placeholder="sk-ant-…"><button class="btn btn-primary btn-sm" data-action="save-claude-key">Activer</button></div>
         <div class="field-note">Crée une clé sur console.anthropic.com → API Keys. Des frais d'usage s'appliquent selon ta consommation.</div>
       </div>`;
   }
@@ -4415,30 +4585,30 @@ function renderNotifPanel(){
     const from = authState.users.find(u=>u.id===r.fromId);
     items.push(`<div class="notif-item">
       <div class="avatar" style="background:${avatarColor(from)};width:32px;height:32px;font-size:12px;">${initials(from)}</div>
-      <div class="info"><div class="name">${from?from.displayName:'?'}</div><div class="meta">souhaite un compte joint avec toi</div></div>
+      <div class="info"><div class="name">${esc(from?from.displayName:'?')}</div><div class="meta">souhaite un compte joint avec toi</div></div>
       <div class="row-actions" style="gap:6px;">
-        <button class="icon-btn" data-action="accept-joint-request" data-id="${r.id}" style="color:var(--teal);">${icon('check')}</button>
-        <button class="icon-btn del" data-action="decline-joint-request" data-id="${r.id}">${icon('x')}</button>
+        <button class="icon-btn" data-action="accept-joint-request" data-id="${r.id}" style="color:var(--teal);" aria-label="Accepter">${icon('check')}</button>
+        <button class="icon-btn del" data-action="decline-joint-request" data-id="${r.id}" aria-label="Refuser">${icon('x')}</button>
       </div>
     </div>`);
   });
   unread.forEach(m=>{
     const from = authState.users.find(u=>u.id===m.fromId);
-    items.push(`<div class="notif-item" data-action="open-messages">
+    items.push(`<div class="notif-item" data-action="open-messages" role="button" tabindex="0">
       <div class="avatar" style="background:${avatarColor(from)};width:32px;height:32px;font-size:12px;">${initials(from)}</div>
-      <div class="info"><div class="name">${from?from.displayName:'?'}</div><div class="meta">${m.text}</div></div>
+      <div class="info"><div class="name">${esc(from?from.displayName:'?')}</div><div class="meta">${esc(m.text)}</div></div>
     </div>`);
   });
   pendingAccountRequests().forEach(r=>{
     const from = authState.users.find(u=>u.id===r.fromId);
     const label = accountRequestLabel(r.type);
-    items.push(`<div class="notif-item" data-action="open-parametres">
+    items.push(`<div class="notif-item" data-action="open-parametres" role="button" tabindex="0">
       <div class="avatar" style="background:${avatarColor(from)};width:32px;height:32px;font-size:12px;">${initials(from)}</div>
-      <div class="info"><div class="name">${from?from.displayName:'?'}</div><div class="meta">${label}</div></div>
+      <div class="info"><div class="name">${esc(from?from.displayName:'?')}</div><div class="meta">${label}</div></div>
     </div>`);
   });
   if(myApprovedExportRequest()){
-    items.push(`<div class="notif-item" data-action="open-parametres">
+    items.push(`<div class="notif-item" data-action="open-parametres" role="button" tabindex="0">
       <div class="avatar" style="background:${avatarColor(me)};width:32px;height:32px;font-size:12px;">${initials(me)}</div>
       <div class="info"><div class="name">Ton export est prêt</div><div class="meta">Va dans Paramètres pour le télécharger</div></div>
     </div>`);
@@ -4447,15 +4617,15 @@ function renderNotifPanel(){
     const from = authState.users.find(u=>u.id===r.fromId);
     items.push(`<div class="notif-item">
       <div class="avatar" style="background:${avatarColor(from)};width:32px;height:32px;font-size:12px;">${initials(from)}</div>
-      <div class="info"><div class="name">${r.itemLabel}</div><div class="meta">${from?from.displayName:'?'} souhaite retirer cette ligne du compte joint</div></div>
+      <div class="info"><div class="name">${esc(r.itemLabel)}</div><div class="meta">${esc(from?from.displayName:'?')} souhaite retirer cette ligne du compte joint</div></div>
       <div class="row-actions" style="gap:6px;">
-        <button class="icon-btn" data-action="approve-expense-delete" data-id="${r.id}" style="color:var(--teal);">${icon('check')}</button>
-        <button class="icon-btn del" data-action="decline-expense-delete" data-id="${r.id}">${icon('x')}</button>
+        <button class="icon-btn" data-action="approve-expense-delete" data-id="${r.id}" style="color:var(--teal);" aria-label="Approuver la suppression">${icon('check')}</button>
+        <button class="icon-btn del" data-action="decline-expense-delete" data-id="${r.id}" aria-label="Refuser la suppression">${icon('x')}</button>
       </div>
     </div>`);
   });
   panel.innerHTML = `
-    <div class="notif-head"><span>Notifications</span><button class="icon-btn" data-action="close-notif">${icon('x')}</button></div>
+    <div class="notif-head"><span>Notifications</span><button class="icon-btn" data-action="close-notif" aria-label="Fermer">${icon('x')}</button></div>
     <div class="notif-body">
       ${items.length===0 ? `<div class="cp-empty">${icon('bell')}<br>Rien de nouveau.</div>` : items.join('')}
     </div>`;
@@ -4497,13 +4667,13 @@ function toggleChat(force){
 function renderChatPanel(){
   const panel = document.getElementById('claude-panel');
   panel.innerHTML = `
-    <div class="cp-head"><span class="dot"></span><span class="t">Assistant budget</span><button class="icon-btn" data-action="close-chat">${icon('x')}</button></div>
+    <div class="cp-head"><span class="dot"></span><span class="t">Assistant budget</span><button class="icon-btn" data-action="close-chat" aria-label="Fermer">${icon('x')}</button></div>
     <div class="cp-body" id="cp-body">
       ${chatHistory.length===0 ? `<div class="cp-empty">${icon('bot')}<br>Demande-moi des conseils sur ton budget, ou comment tu pourrais faire évoluer ce site.</div>` : chatHistory.map(m=>`<div class="cp-msg ${m.role}">${escapeHTML(m.content)}</div>`).join('')}
     </div>
     <div class="cp-foot">
       <textarea id="cp-input" placeholder="Écris un message…" enterkeyhint="send"></textarea>
-      <button class="cp-send" id="cp-send">${icon('send')}</button>
+      <button class="cp-send" id="cp-send" aria-label="Envoyer">${icon('send')}</button>
     </div>`;
   const body = document.getElementById('cp-body'); body.scrollTop = body.scrollHeight;
   const input = document.getElementById('cp-input');
@@ -4564,6 +4734,8 @@ async function boot(){
   if(!ok) return;
   currentView = 'dashboard';
   currentSpace = 'finance';
+  lastRoutedView = null;
+  applyRouteFromUrl();
   await render();
   updateFab();
   if(ghConfigured()) startPolling();
