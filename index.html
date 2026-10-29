@@ -17,8 +17,9 @@
 /* ==========================================================================
    Système de design « Solde » — refonte V1
    Un fond noir calme, un chiffre énorme qui répond à la question du mois, et
-   cinq postes en camaïeu de bleus (de l’acier au glacier) et le reste à
-   vivre en or, la même palette partout dans l’app.
+   cinq postes en tons froids bien distincts (bleu roi, turquoise, lavande,
+   glacier, vieux rose) et le reste à vivre en or, la même palette partout
+   dans l’app.
    La couleur porte toujours un sens (un poste), jamais une décoration : elle
    ne sert ni aux boutons, ni aux liens, ni à la navigation.
    ========================================================================== */
@@ -28,11 +29,11 @@
   --bg:#050506; --surface:#111113; --raised:#1a1a1d; --line:#232327; --line-strong:#34343a;
   --text:#f5f5f7; --muted:#a8a8b0; --faint:#8a8a92;
   /* Une couleur par poste */
-  --c-fixe:#5f7fa8;      /* bleu acier — abonnements & charges */
-  --c-achats:#7f9cc0;    /* bleu ciel — achats */
-  --c-echeances:#a3bad6; /* bleu brume — échéances */
-  --c-joint:#c7d6e8;     /* bleu glacier — compte joint */
-  --c-epargne:#6f93a3;   /* bleu canard — épargne */
+  --c-fixe:#4f7bd9;      /* bleu roi — abonnements & charges */
+  --c-achats:#45b1ad;    /* turquoise — achats */
+  --c-echeances:#b49ce8; /* lavande — échéances */
+  --c-joint:#c9d8ea;     /* bleu glacier — compte joint */
+  --c-epargne:#c97f9f;   /* vieux rose — épargne */
   --c-reste:#d6b77c;     /* or — reste à vivre, revenus */
   --c-over:#d9735f;      /* terre cuite — dépassement */
   --font:"Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -761,8 +762,8 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
   color-scheme:light;
   --bg:#e8ecf2; --surface:#f5f7fa; --raised:#ffffff; --line:rgba(16,24,40,0.09); --line-strong:rgba(16,24,40,0.17);
   --text:#0c0e12; --muted:#454b57; --faint:#5f6676;
-  --c-fixe:#1e3557; --c-achats:#2f5687; --c-echeances:#46699a; --c-joint:#6a87b1;
-  --c-epargne:#3b6370; --c-reste:#86661f; --c-over:#b23f2c;
+  --c-fixe:#1d3f8f; --c-achats:#127a76; --c-echeances:#8a55c0; --c-joint:#6f88b4;
+  --c-epargne:#a24a6e; --c-reste:#86661f; --c-over:#b23f2c;
   --r-card:30px; --r-inner:18px;
   --shadow-soft:0 24px 60px rgba(30,40,70,0.18);
   --glass:rgba(255,255,255,0.52); --glass-strong:rgba(255,255,255,0.74);
@@ -780,8 +781,8 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
   --glass:rgba(110,230,240,0.07); --glass-strong:rgba(6,40,46,0.7);
   --glass-edge:rgba(150,240,250,0.16); --glass-hi:rgba(200,255,255,0.24); --glass-lo:rgba(150,240,250,0.04);
   --blur:22px; --sat:150%;
-  --c-fixe:#6f9fc8; --c-achats:#8fb6d8; --c-echeances:#b3cde4; --c-joint:#d3e3f0;
-  --c-epargne:#7fb5b8; --c-reste:#e0c285; --c-over:#ec7e6a;
+  --c-fixe:#5f93f5; --c-achats:#6fd0c8; --c-echeances:#cdb2f2; --c-joint:#dce6f2;
+  --c-epargne:#e895b4; --c-reste:#e0c285; --c-over:#ec7e6a;
   --field-a:color-mix(in srgb, #3f8fa8 26%, transparent);
   --field-b:color-mix(in srgb, #6f9fc8 18%, transparent);
   --field-c:color-mix(in srgb, #e0c285 10%, transparent);
@@ -2054,7 +2055,7 @@ function themeSwatchesHTML(){
 // Vignette d'un thème : son fond, son champ de couleur, une carte de verre et la pilule.
 function themePreviewHTML(id){
   const P = {
-    nuit:  {bg:'#050506', a:'#5f7fa8', b:'#7f9cc0', card:'rgba(255,255,255,.08)', ink:'#f5f5f7', r:10, isl:'#0b0b0e'},
+    nuit:  {bg:'#050506', a:'#4f7bd9', b:'#45b1ad', card:'rgba(255,255,255,.08)', ink:'#f5f5f7', r:10, isl:'#0b0b0e'},
     givre: {bg:'#e8ecf2', a:'#a9bfdc', b:'#e8d6ad', card:'rgba(255,255,255,.6)', ink:'#0c0e12', r:14, isl:'#ffffff'},
     lagon: {bg:'#031a1e', a:'#3f8fa8', b:'#6f9fc8', card:'rgba(110,230,240,.10)', ink:'#ecfdff', r:4, isl:'#06272d'},
   }[id];
