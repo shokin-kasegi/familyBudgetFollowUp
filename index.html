@@ -601,8 +601,6 @@ th.num .col-filter-panel{left:auto;right:0;}
 .status-row{display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:14px;}
 .kv-input-row{display:flex;gap:10px;}
 .kv-input-row input{flex:1;}
-.toggle-row{display:flex;align-items:flex-start;gap:10px;font-size:14px;}
-.toggle-row input{width:16px;height:16px;margin-top:2px;accent-color:#FFFFFF;flex:none;}
 
 /* ---------- Champ Catégorie personnalisable (dépenses & revenus) ---------- */
 .cat-select{position:relative;}
@@ -2263,6 +2261,15 @@ function dashCatsHTML(key){
     <div class="card-foot"><button class="link" data-nav="depenses">Voir toutes les dépenses →</button></div>`;
 }
 
+// Chacun vire sa part sur le compte joint, qui paie les dépenses communes :
+// l'encart donne le virement de chacun pour le mois.
+function jointTransfersHTML(me, partner, dueMe, duePartner){
+  return `<small>Virements à faire sur le compte joint</small>
+    <dl class="kv" style="margin-top:6px;font-size:15px;">
+      <dt style="color:var(--text);">Toi</dt><dd data-tween="cj:vir:me" data-fmt="eur" data-v="${dueMe}">${fmtEUR(dueMe)}</dd>
+      <dt style="color:var(--text);">${esc(partner.displayName)}</dt><dd data-tween="cj:vir:partner" data-fmt="eur" data-v="${duePartner}">${fmtEUR(duePartner)}</dd>
+    </dl>`;
+}
 function dashJointHTML(key, d){
   const me = currentUser(), partner = jointPartner();
   if(!partner) return `<h2 id="joint-h" class="card-title">Compte joint</h2>
@@ -2270,21 +2277,13 @@ function dashJointHTML(key, d){
     <button class="link" data-action="goto-parametres-comptes">Inviter quelqu’un →</button>`;
   const shares = jointIncomeShares(key);
   const dueMe = d.virementCJ, total = r2(shares.totalCharges), duePartner = r2(total - dueMe);
-  const paidMe = jointPaidBy(me.id, key);
-  const gap = r2(paidMe - dueMe);
-  const balance = state.jointShowBalance
-    ? (Math.abs(gap) < 0.01
-        ? `<small>Écart du mois</small><b>Vous êtes à l’équilibre</b>`
-        : `<small>Écart du mois, d’après ce que chacun a avancé</small><b>${gap>0?`${esc(partner.displayName)} → toi ${fmtEUR(gap)}`:`Toi → ${esc(partner.displayName)} ${fmtEUR(-gap)}`}</b>`)
-    : `<small>Virement à faire sur le compte joint</small><b>${fmtEUR(dueMe)}</b>`;
+  const balance = jointTransfersHTML(me, partner, dueMe, duePartner);
   return `<h2 id="joint-h" class="card-title">Compte joint</h2>
     <div class="duo"><span class="avatars">${avatarHTML(me,36)}${avatarHTML(partner,36)}</span><span style="min-width:0;overflow-wrap:anywhere;">${esc(me.displayName.split(/\s+/)[0])} &amp; ${esc(partner.displayName)}</span></div>
     <dl class="kv"><dt>Ta part au prorata des revenus</dt><dd>${pctFmt(shares.myShare)}</dd></dl>
     <div class="split" aria-hidden="true"><span class="a" style="width:calc((100% - 3px) * ${shares.myShare})"></span><span class="b"></span></div>
     <dl class="kv">
       <dt>Total commun du mois</dt><dd>${fmtEUR(total)}</dd>
-      <dt>Ta part</dt><dd>${fmtEUR(dueMe)}</dd>
-      <dt>Part de ${esc(partner.displayName)}</dt><dd>${fmtEUR(duePartner)}</dd>
     </dl>
     <div class="balance">${balance}</div>`;
 }
@@ -3425,7 +3424,6 @@ function renderCompteJoint(){
   const paidMe = jointPaidBy(me.id, key), paidPartner = jointPaidBy(partner.id, key);
   const total = r2(shares.totalCharges);
   const dueMe = myJointContribution(key), duePartner = r2(total - dueMe);
-  const gap = r2(paidMe - dueMe);
   const myDetail = jointDetailFor(me.id, key);
   const partnerDetail = jointDetailFor(partner.id, key);
   const msgs = socialState.messages.filter(m=>(m.fromId===me.id && m.toId===partner.id) || (m.fromId===partner.id && m.toId===me.id));
@@ -3437,10 +3435,7 @@ function renderCompteJoint(){
         <dt>Part due (${pctFmt(share)})</dt><dd data-tween="cj:due:${k}" data-fmt="eur" data-v="${due}">${fmtEUR(due)}</dd>
       </dl>
     </div>`;
-  const balance = state.jointShowBalance
-    ? (Math.abs(gap) < 0.01 ? `<small>Écart du mois</small><b>Vous êtes à l’équilibre</b>`
-      : `<small>Écart du mois, d’après ce que chacun a saisi</small><b>${gap>0?`${esc(partner.displayName)} → toi ${fmtEUR(gap)}`:`Toi → ${esc(partner.displayName)} ${fmtEUR(-gap)}`}</b>`)
-    : `<small>Virement à faire sur le compte joint</small><b>${fmtEUR(dueMe)}</b>`;
+  const balance = jointTransfersHTML(me, partner, dueMe, duePartner);
   return `
     ${pageHeadHTML({title:'Compte joint', color:VIEW_COLORS.compteJoint,
       finding:`Ta part ce mois-ci : <strong>${fmtEUR(dueMe)}</strong>, soit ${pctFmt(shares.myShare)} des ${fmtEUR(total)} de dépenses communes avec ${esc(partner.displayName)}.${shares.myInc+shares.partnerInc<=0?' Aucun revenu déclaré des deux côtés : répartition 50/50 par défaut.':''}`,
@@ -3942,7 +3937,6 @@ async function handleAction(action, id, el){
       if(currentView==='annuelle'){ state.selectedMonth = el.dataset.k; persist(); await navigateTo('dashboard'); }
       else await changeMonth(el.dataset.k);
       break; }
-    case 'toggle-joint-balance': state.jointShowBalance = !!el.checked; await persist(); toast(state.jointShowBalance ? 'Écart du mois affiché' : 'Virement à faire affiché'); break;
     case 'param-section': paramSection = el.dataset.sec; await withTransition('view', 0, ()=>render()); break;
 
     /* Échéances (vue calculée) : marquage manuel des mensualités payées */
@@ -4753,8 +4747,7 @@ function renderParametres(){
     joint: ()=>`
       <h3>Compte joint</h3>
       <div class="sub">Envoie une demande à quelqu’un pour partager vos dépenses communes. L’autre personne doit accepter.</div>
-      ${renderJointRequestsSection()}
-      ${me.jointWith ? `<label class="toggle-row" style="margin-top:18px;"><input type="checkbox" data-action="toggle-joint-balance" ${state.jointShowBalance?'checked':''}><span>Afficher l’écart du mois (qui doit combien à qui, d’après ce que chacun a saisi)<span class="field-note" style="display:block;">À activer si vous vous remboursez entre vous. Sinon, le tableau de bord affiche le virement à faire sur le compte joint.</span></span></label>` : ''}`,
+      ${renderJointRequestsSection()}`,
     sync: ()=>`
       <h3>Synchronisation</h3>
       <div class="sub">Fonctionne sur tout appareil et navigateur, y compris mobile. Nécessite un dépôt GitHub <strong>privé</strong>, séparé de celui qui héberge le site. Sans y être invité(e) comme collaborateur, personne d’autre ne peut lire ou écrire tes données, même avec le lien du site.</div>

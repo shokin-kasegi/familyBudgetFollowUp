@@ -133,6 +133,14 @@ try{
     await checkTables('#compteJoint/2026-09', 'Compte joint');
     await checkTables('#revenus/2026-09', 'Revenus');
 
+    // Compte joint : chacun vire sa part ; l'encart donne les deux virements (septembre : 828,15 € / 659,63 €).
+    for(const hash of ['#dashboard/2026-09','#compteJoint/2026-09']){
+      await gotoView(page, hash);
+      await page.waitForTimeout(900);
+      const vir = await page.evaluate(()=>[...document.querySelectorAll('#view .balance dd')].map(e=>e.innerText));
+      ok(vir.length===2 && num(vir[0])===828.15 && num(vir[1])===659.63, `${hash} : virements 828,15 € / 659,63 € attendus, reçu ${JSON.stringify(vir)}`);
+    }
+
     // Échéances : le reste à payer diminue quand une mensualité est échue.
     await gotoView(page, '#echeances/2026-09');
     const resteSep = await page.evaluate(()=>document.querySelector('[data-ech="reste"]')?.innerText);
