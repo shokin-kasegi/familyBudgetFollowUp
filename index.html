@@ -364,6 +364,7 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
 .auth-switch{text-align:center;font-size:12.5px;color:var(--text-dim);margin-top:16px;}
 .auth-switch button{color:var(--teal);font-weight:600;}
 .field-note{font-size:11.5px;color:var(--text-faint);margin-top:5px;}
+.temp-cred{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;letter-spacing:.5px;padding:9px 12px;border:1px solid var(--border);border-radius:10px;user-select:all;overflow-wrap:anywhere;}
 .pw-wrap{position:relative;}
 .pw-wrap input{width:100%;padding-right:42px;}
 .pw-toggle{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);}
@@ -3460,8 +3461,15 @@ async function handleAction(action, id, el){
       await Promise.all([persistAuth(), persist()]); await render(); toast('Compte créé — pense à transmettre le jeton d\u2019accès à cette personne par email, il lui sera demandé à sa première connexion.'); }); break; }
     case 'edit-user': {
       const u = find(authState.users);
-      const fields = (isAdmin() ? userFieldsAdmin(u.id) : userFieldsSelf(u.id)).concat(passwordFields('Nouveau mot de passe (optionnel)', false));
-      openModal('Modifier le compte', fields, u, async (data)=>{
+      // Identifiant à l'ancien format (antérieur au motif actuel) : l'admin doit le
+      // remplacer. Comme l'identifiant de connexion change, la personne reçoit un
+      // mot de passe à usage unique, à changer à sa première connexion.
+      const legacy = isAdmin() && !isValidUsername(u.username);
+      const resetPassword = legacy && u.id!==currentUser().id;
+      const baseFields = isAdmin() ? userFieldsAdmin(u.id) : userFieldsSelf(u.id);
+      const fields = resetPassword ? baseFields : baseFields.concat(passwordFields('Nouveau mot de passe (optionnel)', false));
+      const legacyNote = legacy ? `<div class="field-note" style="margin:-4px 0 14px;">L'identifiant « @${esc(u.username)} » n'est plus au format accepté (2 à 32 caractères : lettres, chiffres, . _ -). Un nouvel identifiant est proposé ci-dessus, modifiable.${resetPassword ? ` À l'enregistrement, un mot de passe à usage unique sera généré : ${esc(u.displayName)} devra le changer à sa première connexion.` : ''}</div>` : '';
+      openModal('Modifier le compte', fields, legacy ? {...u, username:suggestUsername(u)} : u, async (data)=>{
         if(reportFieldErrors(fieldRequiredErrors(fields, data).concat(userFieldErrors(data)))) return false;
         const newUsername = (data.username||u.username).trim().toLowerCase();
         if(isAdmin()){
@@ -3474,8 +3482,14 @@ async function handleAction(action, id, el){
         }
         u.displayName = data.displayName.trim();
         if(isAdmin()){ u.username = newUsername; u.role = data.role||u.role; }
-        if(data.password){ u.salt = randomSalt(); u.passwordHash = await hashPassword(data.password, u.salt); }
-        await persistAuth(); await render(); toast('Compte mis à jour'); }); break; }
+        const tempPassword = resetPassword ? generateTempPassword() : null;
+        const newPassword = tempPassword || data.password;
+        if(newPassword){ u.salt = randomSalt(); u.passwordHash = await hashPassword(newPassword, u.salt); }
+        if(tempPassword) u.mustChangePassword = true;
+        await persistAuth(); await render();
+        // Affiché après la fermeture de ce formulaire (closeModal suit le retour de onSave).
+        if(tempPassword) setTimeout(()=>showTempPasswordModal(u, tempPassword), 0);
+        else toast('Compte mis à jour'); }, legacyNote); break; }
     case 'del-user': { const u=find(authState.users); if(u.role==='admin' && authState.users.filter(x=>x.role==='admin').length<=1) return toast('Impossible de supprimer le dernier admin');
       confirmDelete(u.displayName, async ()=>{
         // Nettoyage : si quelqu'un avait un compte joint actif avec ce compte, on le libère.
@@ -3733,6 +3747,13 @@ async function renderAuthGate(){
   const shell = document.getElementById('shell');
   const session = getSession();
   const loggedIn = session && authState.users.some(u=>u.id===session.userId);
+  const me = loggedIn ? currentUser() : null;
+  if(me && me.mustChangePassword){
+    shell.style.display='none';
+    root.style.display='flex';
+    renderForcePasswordChangeScreen(me);
+    return false;
+  }
   if(loggedIn){
     root.style.display='none'; root.innerHTML='';
     shell.style.display='';
@@ -3924,6 +3945,40 @@ function renderLoginScreen(){
   };
   document.getElementById('ask-account-btn').onclick = renderAccountRequestScreen;
 }
+// Après un mot de passe à usage unique, l'accès reste bloqué tant que la
+// personne n'a pas choisi son propre mot de passe.
+function renderForcePasswordChangeScreen(user){
+  const root = document.getElementById('auth-root');
+  root.innerHTML = `
+    <div class="auth-card">
+      <div class="auth-brand"><div class="brand-mark">${icon('logo')}</div><div><div class="brand-name">Solde</div></div></div>
+      <div class="auth-title">Choisis ton mot de passe</div>
+      <div class="auth-sub">Ton compte a été mis à jour par un administrateur — ton identifiant est désormais <strong>@${esc(user.username)}</strong>. Remplace le mot de passe à usage unique par un mot de passe personnel.</div>
+      <div id="auth-error-slot"></div>
+      <form id="force-pass-form">
+        <input type="text" value="${attrEsc(user.username)}" autocomplete="username" hidden>
+        <div class="field"><label for="fp-pass">Nouveau mot de passe</label><div class="pw-wrap"><input id="fp-pass" type="password" placeholder="8 caractères minimum" required autocomplete="new-password"><button type="button" class="pw-toggle" data-toggle-pw="fp-pass" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>
+        <div class="field"><label for="fp-pass2">Confirmer le mot de passe</label><div class="pw-wrap"><input id="fp-pass2" type="password" required autocomplete="new-password"><button type="button" class="pw-toggle" data-toggle-pw="fp-pass2" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>
+        <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Enregistrer et continuer</button>
+      </form>
+      <button type="button" class="btn btn-ghost" id="fp-logout" style="width:100%;justify-content:center;margin-top:10px;">${icon('logout')}Se déconnecter</button>
+    </div>`;
+  document.getElementById('fp-logout').onclick = ()=>{ clearSession(); renderAuthGate(); };
+  document.getElementById('force-pass-form').onsubmit = async (e)=>{
+    e.preventDefault();
+    const pass = document.getElementById('fp-pass').value;
+    const pass2 = document.getElementById('fp-pass2').value;
+    if(pass.length<8) return authError('Le mot de passe doit faire au moins 8 caractères.');
+    if(pass!==pass2) return authError('Les mots de passe ne correspondent pas.');
+    if(await hashPassword(pass, user.salt) === user.passwordHash) return authError('Choisis un mot de passe différent du mot de passe à usage unique.');
+    user.salt = randomSalt();
+    user.passwordHash = await hashPassword(pass, user.salt);
+    delete user.mustChangePassword;
+    await persistAuth();
+    await boot();
+    toast('Mot de passe enregistré');
+  };
+}
 function renderAccountRequestScreen(){
   const root = document.getElementById('auth-root');
   root.innerHTML = `
@@ -4079,7 +4134,7 @@ function renderParametres(){
         <div class="user-row">
           <div class="avatar" style="background:${avatarColor(u)}">${initials(u)}</div>
           <div class="info"><div class="name">${esc(u.displayName)} ${u.id===me.id?'<span style="color:var(--text-faint);font-weight:400;">(toi)</span>':''}</div>
-            <div class="meta">@${esc(u.username)} · ${u.role==='admin'?'Administrateur':'Membre'}${u.jointWith ? ' · Compte joint avec '+esc((authState.users.find(x=>x.id===u.jointWith)||{}).displayName||'?') : ''}</div></div>
+            <div class="meta">@${esc(u.username)} · ${u.role==='admin'?'Administrateur':'Membre'}${u.mustChangePassword ? ' · Mot de passe à usage unique en attente' : ''}${u.jointWith ? ' · Compte joint avec '+esc((authState.users.find(x=>x.id===u.jointWith)||{}).displayName||'?') : ''}</div></div>
           ${userRowActionsHTML(u, me)}
         </div>`).join('')}
       ${isAdmin() ? `<button class="btn btn-ghost btn-sm" data-action="add-user" style="margin-top:14px;">${icon('plus')}Ajouter un compte</button>` : ''}
@@ -4153,13 +4208,49 @@ function passwordFields(label, required){
     {key:'password2', label:'Confirmer le mot de passe', type:'password'},
   ];
 }
+function isValidUsername(username){ return /^[a-z0-9._-]{2,32}$/.test(username||''); }
+// Proposition d'identifiant valide à partir d'un identifiant à l'ancien format
+// (« Prénom.Nom@exemple.com » → « prenom.nom »), sans collision avec un autre compte.
+function suggestUsername(u){
+  let base = (u.username||'').trim().toLowerCase().split('@')[0]
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9._-]+/g,'.').replace(/^[._-]+|[._-]+$/g,'').slice(0,32);
+  if(base.length<2) base = 'membre';
+  const taken = name => authState.users.some(x=>x.id!==u.id && x.username===name);
+  let candidate = base;
+  for(let i=2; taken(candidate); i++){ const suffix = '-'+i; candidate = base.slice(0, 32-suffix.length)+suffix; }
+  return candidate;
+}
+// Mot de passe à usage unique, lisible à l'oral (sans 0/O, 1/l/I) : XXXX-XXXX-XXXX.
+function generateTempPassword(){
+  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  const chars = [];
+  while(chars.length<12){
+    const b = crypto.getRandomValues(new Uint8Array(1))[0];
+    if(b < 256 - 256 % alphabet.length) chars.push(alphabet[b % alphabet.length]); // sans biais
+  }
+  return chars.join('').replace(/(.{4})(?=.)/g, '$1-');
+}
+function showTempPasswordModal(u, tempPassword){
+  openModal('Mot de passe à usage unique', [], {}, ()=>{}, `
+    <p style="color:var(--text-dim);font-size:13.5px;margin-bottom:12px;">Transmets ces informations à ${esc(u.displayName)}. Le mot de passe ne sera plus affiché ensuite ; il devra être changé à la première connexion.</p>
+    <div class="field"><label>Identifiant</label><div class="temp-cred">${esc(u.username)}</div></div>
+    <div class="field"><label>Mot de passe à usage unique</label><div class="temp-cred">${esc(tempPassword)}</div></div>
+    <div class="modal-actions"><button type="button" class="btn btn-ghost" id="temp-copy">Copier</button>
+    <button type="button" class="btn btn-primary" id="cancel-btn">${icon('check')}C'est noté</button></div>
+  `);
+  document.getElementById('temp-copy').onclick = ()=>{
+    navigator.clipboard.writeText(`Identifiant : ${u.username}\nMot de passe à usage unique : ${tempPassword}`)
+      .then(()=>toast('Copié'), ()=>toast('Copie impossible — note-le à la main'));
+  };
+}
 // Contrôles communs aux formulaires de compte. Les limites sont revérifiées ici
 // (et pas seulement via maxlength) car les comptes peuvent arriver par import
 // ou par la synchro GitHub. Un champ vide est laissé à fieldRequiredErrors.
 function userFieldErrors(data){
   const errors = [];
   if(typeof data.displayName==='string' && data.displayName.trim().length>60) errors.push(['displayName','60 caractères maximum']);
-  if(typeof data.username==='string' && data.username.trim() && !/^[a-z0-9._-]{2,32}$/.test(data.username.trim().toLowerCase())) errors.push(['username','2 à 32 caractères : lettres, chiffres, . _ -']);
+  if(typeof data.username==='string' && data.username.trim() && !isValidUsername(data.username.trim().toLowerCase())) errors.push(['username','2 à 32 caractères : lettres, chiffres, . _ -']);
   if(data.password){
     if(data.password.length<8) errors.push(['password','8 caractères minimum']);
     if(data.password!==data.password2) errors.push(['password2','Les mots de passe ne correspondent pas']);
