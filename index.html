@@ -402,6 +402,19 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
 .user-row .info{flex:1;min-width:0;}
 .user-row .name{font-size:13.5px;font-weight:600;}
 .user-row .meta{font-size:11.5px;color:var(--text-dim);}
+.user-row .name,.user-row .meta{overflow-wrap:anywhere;}
+.user-row{position:relative;}
+.user-actions{display:flex;gap:12px;flex-shrink:0;} /* même écart qu'avant entre les icônes */
+.user-more{display:none;flex-shrink:0;}
+@media(max-width:480px){
+  .user-more{display:flex;}
+  .user-actions{
+    display:none;position:absolute;right:0;top:calc(100% - 8px);z-index:20;gap:4px;
+    background:#161616;border:1px solid var(--border);border-radius:12px;padding:4px;
+    box-shadow:0 12px 32px rgba(0,0,0,0.5);
+  }
+  .user-row.actions-open .user-actions{display:flex;}
+}
 .sidebar-user{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;margin-bottom:4px;}
 .sidebar-user .info{flex:1;min-width:0;}
 .sidebar-user .name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -588,6 +601,7 @@ const ICONS = {
   chevR:'<polyline points="9 18 15 12 9 6"/>',
   chevU:'<polyline points="18 15 12 9 6 15"/>',
   chevD:'<polyline points="6 9 12 15 18 9"/>',
+  more:'<circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
   menu:'<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>',
   wallet:'<path d="M20 12V7H5a2 2 0 0 1 0-4h13v4"/><path d="M4 7v11a2 2 0 0 0 2 2h14v-6"/><circle cx="17" cy="14" r="1"/>',
   arrowDown:'<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>',
@@ -1400,7 +1414,7 @@ function renderSidebar(){
     <button class="nav-item" data-action="toggle-notif-panel" style="position:relative;">${icon('bell')}<span>Notifications</span>${badge>0?`<span class="notif-badge">${badge}</span>`:''}</button>
     <div class="sidebar-user">
       <div class="avatar" style="background:${avatarColor(me)}">${initials(me)}</div>
-      <div class="info"><div class="name">${esc(me?me.displayName:'')}</div><div class="role">${me?me.role:''}</div></div>
+      <div class="info"><div class="name" title="${attrEsc(me?me.displayName:'')}">${esc(me?me.displayName:'')}</div><div class="role">${me?me.role:''}</div></div>
       <button class="icon-btn" data-action="logout" title="Se déconnecter" aria-label="Se déconnecter">${icon('logout')}</button>
     </div>
     <div class="sidebar-foot">Données stockées sur cet appareil, synchronisées via GitHub si connecté.</div>
@@ -1408,7 +1422,15 @@ function renderSidebar(){
   document.getElementById('mobile-title').textContent = currentView==='parametres' ? 'Paramètres' : (orderedNavItems().find(n=>n.id===currentView)?.label || 'Solde');
   setupNavDragAndDrop();
 }
-function initials(u){ if(!u) return '?'; return (u.displayName||u.username||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
+function initials(u){
+  if(!u) return '?';
+  const name = (u.displayName||u.username||'').trim();
+  const words = name.split(/\s+/).filter(w=>/\p{L}/u.test(w)); // ignore les mots sans lettre (emoji seul…)
+  if(!words.length) return '?';
+  const first = w => [...w].find(ch=>/\p{L}/u.test(ch)) || '';
+  const pick = words.length>1 ? [words[0], words[words.length-1]] : [words[0]];
+  return pick.map(first).join('').toUpperCase();
+}
 function visibleUserRows(me){
   // Un admin voit tout le monde. Un membre ne voit que son propre compte
   // (+ celui de son/sa partenaire de compte joint, puisqu'ils sont déjà liés).
@@ -3025,6 +3047,8 @@ document.addEventListener('keydown', (e)=>{
     // Un menu de catégorie ouvert se referme d'abord, sans fermer la modale.
     const openCat = document.querySelector('.cat-select.open');
     if(openCat){ e.preventDefault(); openCat.classList.remove('open'); resetCatDropdown(openCat); return; }
+    const openUserMenu = !modalOpen && document.querySelector('.user-row.actions-open');
+    if(openUserMenu){ e.preventDefault(); closeUserActionMenus(); openUserMenu.querySelector('.user-more')?.focus(); return; }
     if(modalOpen){ e.preventDefault(); closeModal(); return; }
     const panelCancel = (colFilterOpen || chartFilterOpen) && document.querySelector('[data-action="col-filter-cancel"],[data-action="chart-filter-cancel"]');
     if(panelCancel){ e.preventDefault(); panelCancel.click(); return; }
@@ -3068,6 +3092,8 @@ document.addEventListener('click', async (e)=>{
   document.querySelectorAll('.cat-select.open').forEach(wrap=>{
     if(!e.target.closest('.cat-select')){ wrap.classList.remove('open'); resetCatDropdown(wrap); }
   });
+  // Menu « ••• » d'un compte : tout clic hors de son bouton le referme (y compris le choix d'une action).
+  if(!e.target.closest('.user-more')) closeUserActionMenus();
 
   const catToggle = e.target.closest('[data-cat-toggle]');
   if(catToggle){
@@ -3411,6 +3437,13 @@ async function handleAction(action, id, el){
     case 'logout': stopPolling(); clearSession(); await boot(); toast('Déconnecté'); break;
     case 'toggle-sidebar-collapse': state.navCollapsed = !state.navCollapsed; await persist(); await render(); break;
     case 'reset-nav-order': if(state.navOrder) state.navOrder[el.dataset.space||currentSpace] = null; await persist(); await render(); break;
+    case 'toggle-user-actions': {
+      const row = el.closest('.user-row');
+      const open = !row.classList.contains('actions-open');
+      closeUserActionMenus(row);
+      row.classList.toggle('actions-open', open);
+      el.setAttribute('aria-expanded', String(open));
+      break; }
     case 'add-user': {
       const addUserFields = userFieldsAdmin(null).concat(passwordFields('Mot de passe', true));
       openModal('Ajouter un compte', addUserFields, {role:'membre'}, async (data)=>{
@@ -4047,10 +4080,7 @@ function renderParametres(){
           <div class="avatar" style="background:${avatarColor(u)}">${initials(u)}</div>
           <div class="info"><div class="name">${esc(u.displayName)} ${u.id===me.id?'<span style="color:var(--text-faint);font-weight:400;">(toi)</span>':''}</div>
             <div class="meta">@${esc(u.username)} · ${u.role==='admin'?'Administrateur':'Membre'}${u.jointWith ? ' · Compte joint avec '+esc((authState.users.find(x=>x.id===u.jointWith)||{}).displayName||'?') : ''}</div></div>
-          ${(isAdmin() && u.role!=='admin') ? `<button class="icon-btn" data-action="export-user-data" data-id="${u.id}" title="Exporter ses données" aria-label="Exporter ses données">${icon('arrowDown')}</button>
-            <button class="icon-btn del" data-action="wipe-user-data" data-id="${u.id}" title="Vider ses données" aria-label="Vider ses données">${icon('refresh')}</button>` : ''}
-          ${(isAdmin() || u.id===me.id) ? `<button class="icon-btn" data-action="edit-user" data-id="${u.id}" aria-label="Modifier">${icon('edit')}</button>` : ''}
-          ${(isAdmin() && u.id!==me.id) ? `<button class="icon-btn del" data-action="del-user" data-id="${u.id}" aria-label="Supprimer">${icon('trash')}</button>` : ''}
+          ${userRowActionsHTML(u, me)}
         </div>`).join('')}
       ${isAdmin() ? `<button class="btn btn-ghost btn-sm" data-action="add-user" style="margin-top:14px;">${icon('plus')}Ajouter un compte</button>` : ''}
 
@@ -4082,6 +4112,24 @@ function renderParametres(){
       ${renderClaudeSection()}
     </div>
   `;
+}
+// Boutons d'action d'une ligne de compte. Sous 480 px ils sont regroupés
+// derrière un bouton « ••• » pour laisser la largeur au nom et à l'identifiant.
+function userRowActionsHTML(u, me){
+  const actions = `${(isAdmin() && u.role!=='admin') ? `<button class="icon-btn" data-action="export-user-data" data-id="${u.id}" title="Exporter ses données" aria-label="Exporter ses données">${icon('arrowDown')}</button>
+            <button class="icon-btn del" data-action="wipe-user-data" data-id="${u.id}" title="Vider ses données" aria-label="Vider ses données">${icon('refresh')}</button>` : ''}
+          ${(isAdmin() || u.id===me.id) ? `<button class="icon-btn" data-action="edit-user" data-id="${u.id}" aria-label="Modifier">${icon('edit')}</button>` : ''}
+          ${(isAdmin() && u.id!==me.id) ? `<button class="icon-btn del" data-action="del-user" data-id="${u.id}" aria-label="Supprimer">${icon('trash')}</button>` : ''}`;
+  if(!actions.trim()) return '';
+  return `<button class="icon-btn user-more" data-action="toggle-user-actions" aria-label="Actions" aria-expanded="false">${icon('more')}</button>
+          <div class="user-actions">${actions}</div>`;
+}
+function closeUserActionMenus(except){
+  document.querySelectorAll('.user-row.actions-open').forEach(row=>{
+    if(row===except) return;
+    row.classList.remove('actions-open');
+    row.querySelector('.user-more')?.setAttribute('aria-expanded','false');
+  });
 }
 function jointWithOptions(excludeId){
   return [{value:'', label:'Aucun'}, ...authState.users.filter(u=>u.id!==excludeId).map(u=>({value:u.id, label:u.displayName}))];
