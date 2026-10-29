@@ -17,8 +17,9 @@
 /* ==========================================================================
    Système de design « Solde » — refonte V1
    Un fond noir calme, un chiffre énorme qui répond à la question du mois, et
-   cinq postes qui ont chacun leur couleur, en tons sobres (désaturés), la
-   même partout dans l’app.
+   cinq postes qui ont chacun leur couleur — des pierres et des métaux
+   (saphir, cuivre, champagne, améthyste, platine), riches sans être vifs —,
+   la même partout dans l’app.
    La couleur porte toujours un sens (un poste), jamais une décoration : elle
    ne sert ni aux boutons, ni aux liens, ni à la navigation.
    ========================================================================== */
@@ -28,13 +29,13 @@
   --bg:#050506; --surface:#111113; --raised:#1a1a1d; --line:#232327; --line-strong:#34343a;
   --text:#f5f5f7; --muted:#a8a8b0; --faint:#8a8a92;
   /* Une couleur par poste */
-  --c-fixe:#7b93c4;      /* abonnements & charges */
-  --c-achats:#cf9b63;    /* achats */
-  --c-echeances:#c8b273; /* échéances */
-  --c-joint:#c4727f;     /* compte joint */
-  --c-epargne:#86b4c2;   /* épargne */
-  --c-reste:#7fbf93;     /* reste à vivre, revenus */
-  --c-over:#d4705f;      /* dépassement */
+  --c-fixe:#6f94ec;      /* saphir — abonnements & charges */
+  --c-achats:#d78a5b;    /* cuivre — achats */
+  --c-echeances:#dcc28c; /* champagne — échéances */
+  --c-joint:#b892e6;     /* améthyste — compte joint */
+  --c-epargne:#c5ccd8;   /* platine — épargne */
+  --c-reste:#4cc797;     /* émeraude — reste à vivre, revenus */
+  --c-over:#e0566a;      /* rubis — dépassement */
   --font:"Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --ease-out:cubic-bezier(.23,1,.32,1);
   --ease-io:cubic-bezier(.77,0,.175,1);
@@ -751,9 +752,9 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
   --glass:rgba(255,255,255,0.055); --glass-strong:rgba(28,28,32,0.62);
   --glass-edge:rgba(255,255,255,0.09); --glass-hi:rgba(255,255,255,0.16); --glass-lo:rgba(255,255,255,0.03);
   --blur:28px; --sat:170%;
-  --field-a:color-mix(in srgb, var(--c-fixe) 22%, transparent);
-  --field-b:color-mix(in srgb, var(--c-joint) 14%, transparent);
-  --field-c:color-mix(in srgb, var(--c-reste) 10%, transparent);
+  --field-a:color-mix(in srgb, var(--c-fixe) 26%, transparent);
+  --field-b:color-mix(in srgb, var(--c-joint) 20%, transparent);
+  --field-c:color-mix(in srgb, var(--c-echeances) 12%, transparent);
   --island:rgba(8,8,10,0.72); --island-ink:#f5f5f7; --island-blob:rgba(255,255,255,0.14);
   --spring:cubic-bezier(.34,1.42,.64,1);
 }
@@ -761,16 +762,16 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
   color-scheme:light;
   --bg:#e8ecf2; --surface:#f5f7fa; --raised:#ffffff; --line:rgba(16,24,40,0.09); --line-strong:rgba(16,24,40,0.17);
   --text:#0c0e12; --muted:#454b57; --faint:#5f6676;
-  --c-fixe:#46689c; --c-achats:#9c5a36; --c-echeances:#6b6a2c; --c-joint:#a14a5c;
-  --c-epargne:#3a7486; --c-reste:#3b7a50; --c-over:#a8443a;
+  --c-fixe:#2f5bc4; --c-achats:#a85a2a; --c-echeances:#826616; --c-joint:#7c4fb8;
+  --c-epargne:#535a6b; --c-reste:#0f7a55; --c-over:#bf2a40;
   --r-card:30px; --r-inner:18px;
   --shadow-soft:0 24px 60px rgba(30,40,70,0.18);
   --glass:rgba(255,255,255,0.52); --glass-strong:rgba(255,255,255,0.74);
   --glass-edge:rgba(255,255,255,0.75); --glass-hi:rgba(255,255,255,0.95); --glass-lo:rgba(16,24,40,0.04);
   --blur:34px; --sat:190%;
-  --field-a:color-mix(in srgb, #a9bdd6 45%, transparent);
-  --field-b:color-mix(in srgb, #d9b8bf 35%, transparent);
-  --field-c:color-mix(in srgb, #d8ccaa 35%, transparent);
+  --field-a:color-mix(in srgb, #a8bdf0 45%, transparent);
+  --field-b:color-mix(in srgb, #d4c0ee 40%, transparent);
+  --field-c:color-mix(in srgb, #ecdcb4 45%, transparent);
   --island:rgba(255,255,255,0.7); --island-ink:#0c0e12; --island-blob:rgba(12,14,18,0.08);
 }
 :root[data-theme="lagon"]{
@@ -780,11 +781,11 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
   --glass:rgba(110,230,240,0.07); --glass-strong:rgba(6,40,46,0.7);
   --glass-edge:rgba(150,240,250,0.16); --glass-hi:rgba(200,255,255,0.24); --glass-lo:rgba(150,240,250,0.04);
   --blur:22px; --sat:150%;
-  --c-fixe:#86a2d2; --c-achats:#d3a670; --c-echeances:#cfbf85; --c-joint:#d38593;
-  --c-epargne:#93c8c8; --c-reste:#8acb9f; --c-over:#e08575;
-  --field-a:color-mix(in srgb, #4f9a96 24%, transparent);
-  --field-b:color-mix(in srgb, #5b7fa6 18%, transparent);
-  --field-c:color-mix(in srgb, #8aa77a 10%, transparent);
+  --c-fixe:#86adff; --c-achats:#f0946f; --c-echeances:#e7c77d; --c-joint:#f2a3c0;
+  --c-epargne:#d7e3e6; --c-reste:#6fe0b0; --c-over:#ff7383;
+  --field-a:color-mix(in srgb, #3fb6a8 26%, transparent);
+  --field-b:color-mix(in srgb, #86adff 20%, transparent);
+  --field-c:color-mix(in srgb, #e7c77d 10%, transparent);
   --island:rgba(2,22,26,0.74); --island-ink:#ecfdff; --island-blob:rgba(120,240,240,0.18);
 }
 :root[data-theme="givre"] body{background:var(--bg);}
@@ -2054,16 +2055,16 @@ function themeSwatchesHTML(){
 // Vignette d'un thème : son fond, son champ de couleur, une carte de verre et la pilule.
 function themePreviewHTML(id){
   const P = {
-    nuit:  {bg:'#050506', a:'#7b93c4', b:'#c4727f', card:'rgba(255,255,255,.08)', ink:'#f5f5f7', r:10, isl:'#0b0b0e'},
-    givre: {bg:'#e8ecf2', a:'#a9bdd6', b:'#d9b8bf', card:'rgba(255,255,255,.6)', ink:'#0c0e12', r:14, isl:'#ffffff'},
-    lagon: {bg:'#031a1e', a:'#4f9a96', b:'#5b7fa6', card:'rgba(110,230,240,.10)', ink:'#ecfdff', r:4, isl:'#06272d'},
+    nuit:  {bg:'#050506', a:'#6f94ec', b:'#b892e6', card:'rgba(255,255,255,.08)', ink:'#f5f5f7', r:10, isl:'#0b0b0e'},
+    givre: {bg:'#e8ecf2', a:'#a8bdf0', b:'#d4c0ee', card:'rgba(255,255,255,.6)', ink:'#0c0e12', r:14, isl:'#ffffff'},
+    lagon: {bg:'#031a1e', a:'#3fb6a8', b:'#86adff', card:'rgba(110,230,240,.10)', ink:'#ecfdff', r:4, isl:'#06272d'},
   }[id];
   return `<i style="inset:0;background:${P.bg}"></i>
     <i style="width:90px;height:90px;border-radius:50%;left:-20px;top:-30px;background:${P.a};opacity:.55;filter:blur(22px)"></i>
     <i style="width:80px;height:80px;border-radius:50%;right:-10px;bottom:-30px;background:${P.b};opacity:.5;filter:blur(22px)"></i>
     <i style="left:50%;top:8px;width:64px;height:16px;margin-left:-32px;border-radius:9px;background:${P.isl};box-shadow:inset 0 0 0 1px rgba(127,127,127,.3)"></i>
     <i style="left:12px;right:12px;top:34px;bottom:12px;border-radius:${P.r}px;background:${P.card};backdrop-filter:blur(8px);box-shadow:inset 0 1px 0 rgba(255,255,255,.3)"></i>
-    <i style="left:24px;top:46px;width:56px;height:20px;border-radius:3px;background:${{nuit:'#7fbf93',givre:'#3b7a50',lagon:'#8acb9f'}[id]}"></i>
+    <i style="left:24px;top:46px;width:56px;height:20px;border-radius:3px;background:${{nuit:'#4cc797',givre:'#0f7a55',lagon:'#6fe0b0'}[id]}"></i>
     <i style="left:24px;top:74px;width:60%;height:6px;border-radius:3px;background:${P.ink};opacity:.35"></i>`;
 }
 /* ============================== L'ÎLE ============================== */
