@@ -175,22 +175,73 @@ main{flex:1;min-width:0;padding:34px 40px 80px;}
 @media(max-width:1000px){.g4{grid-template-columns:repeat(2,1fr);}.g3{grid-template-columns:1fr 1fr;}}
 @media(max-width:640px){.g2,.g3,.g4{grid-template-columns:1fr;}}
 
-/* ---------- Hero (dashboard) ---------- */
-.hero{
-  display:grid;grid-template-columns:280px 1fr;gap:32px;align-items:center;
-  padding:34px;margin-bottom:20px;position:relative;overflow:hidden;
+/* ---------- Tableau de bord ---------- */
+/* Surfaces opaques, sans verre flouté ni dégradé : la seule teinte de donnée
+   est celle du reste à vivre (--teal positif, --coral négatif). */
+.dash-head{align-items:flex-end;}
+.dash-constat{color:#A8A8A8;font-size:14px;margin-top:6px;}
+.dash-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.dash-panel{background:#0F0F0F;border:1px solid #1F1F1F;border-radius:16px;padding:22px;min-width:0;}
+.dash-panel h3{font-size:14px;font-weight:600;}
+.dash-num{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap;text-align:right;}
+.dash-link{color:var(--text);font-size:13px;font-weight:600;text-decoration:underline;text-underline-offset:3px;text-decoration-color:rgba(255,255,255,0.35);}
+.dash-link:hover{text-decoration-color:var(--text);}
+
+.dash-reste{display:grid;grid-template-columns:1fr;gap:28px;margin-bottom:16px;padding:28px;}
+.dash-reste.has-joint{grid-template-columns:minmax(0,1fr) 260px;}
+.dash-reste-label{font-size:14px;color:#A8A8A8;text-transform:none;}
+.dash-reste-value{font-size:36px;font-weight:600;letter-spacing:-0.02em;line-height:1.15;margin:4px 0 20px;font-variant-numeric:tabular-nums;}
+.dash-bar-head{display:flex;justify-content:space-between;gap:12px;font-size:13px;color:#A8A8A8;margin-bottom:8px;}
+.dash-bar-head .dash-num{color:var(--text);}
+.dash-bar{position:relative;display:flex;gap:2px;height:14px;border-radius:4px;overflow:hidden;background:#1F1F1F;}
+.dash-seg{flex-basis:0;min-width:2px;}
+.dash-overflow{position:absolute;top:0;bottom:0;right:0;background:var(--coral);border-left:2px solid #0F0F0F;}
+.dash-norev{font-size:14px;color:#A8A8A8;padding:12px 0;border-top:1px solid #1F1F1F;border-bottom:1px solid #1F1F1F;}
+.dash-rows{margin-top:16px;}
+.dash-row{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid #1F1F1F;font-size:14px;}
+.dash-row:first-child{border-top:none;}
+.dash-swatch{width:10px;height:10px;border-radius:2px;}
+.dash-row-label{font-weight:500;}
+.dash-row-sub{font-size:12px;color:#9A9A9A;margin-top:2px;}
+
+.dash-joint{border-left:1px solid #1F1F1F;padding-left:24px;display:flex;flex-direction:column;justify-content:center;gap:12px;font-size:13px;}
+.dash-joint-title{font-size:13px;color:#A8A8A8;}
+.dash-joint-bar{display:flex;gap:2px;height:8px;border-radius:4px;overflow:hidden;}
+.dash-joint-bar span{flex-basis:0;}
+.dash-joint-legend{display:flex;flex-direction:column;gap:6px;font-size:13px;}
+.dash-joint-legend > span{display:flex;align-items:center;gap:8px;overflow-wrap:anywhere;}
+.dash-joint-legend .dash-swatch{flex-shrink:0;}
+.dash-joint-legend b{margin-left:auto;}
+.dash-joint-total{font-size:12px;color:#9A9A9A;}
+.dash-joint-total .dash-num{color:var(--text);}
+
+.dash-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;}
+.dash-grid .chart-head{margin-bottom:16px;}
+.dash-chart-card{display:flex;flex-direction:column;}
+.dash-chart-wrap{position:relative;flex:1;min-height:260px;}
+.dash-chart-wrap canvas{position:absolute;inset:0;}
+.dash-rep{list-style:none;display:flex;flex-direction:column;}
+.dash-rep li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:start;padding:9px 0;border-top:1px solid #1F1F1F;font-size:14px;}
+.dash-rep li:first-child{border-top:none;padding-top:0;}
+.dash-rep-label{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.dash-rep-track{height:3px;margin:6px 0 4px;}
+.dash-rep-track span{display:block;height:100%;border-radius:2px;}
+.dash-rep-pct{font-size:12px;color:#9A9A9A;}
+.dash-rep-all{margin-top:10px;}
+.dash-empty{font-size:14px;color:#A8A8A8;padding:40px 0;text-align:center;}
+
+@media(max-width:880px){
+  .dash-head{flex-direction:column;align-items:stretch;}
+  .dash-actions{flex-direction:column;align-items:stretch;}
+  .dash-actions .stepper{justify-content:space-between;}
+  .dash-actions .btn{justify-content:center;}
+  .dash-reste,.dash-reste.has-joint{grid-template-columns:1fr;padding:20px;gap:20px;}
+  .dash-reste-value{font-size:32px;}
+  .dash-joint{border-left:none;padding-left:0;border-top:1px solid #1F1F1F;padding-top:18px;}
+  .dash-grid{grid-template-columns:1fr;}
+  .dash-panel{padding:18px;}
 }
-.hero::before{
-  content:"";position:absolute;inset:0;
-  background:radial-gradient(500px 300px at 90% 0%, rgba(140,124,255,0.10), transparent 60%);
-  pointer-events:none;
-}
-.gauge-wrap{position:relative;width:220px;height:220px;justify-self:center;}
-.gauge-wrap svg{width:100%;height:100%;transform:rotate(-90deg);}
-.gauge-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;}
-.gauge-value{font-family:'Space Grotesk',sans-serif;font-size:30px;font-weight:600;letter-spacing:-0.02em;}
-.gauge-label{font-size:11.5px;color:var(--text-dim);margin-top:4px;}
-.hero-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+
 .stat-mini{padding:14px 16px;border-radius:14px;background:rgba(255,255,255,0.025);border:1px solid var(--border);}
 .stat-mini .k{font-size:12px;color:var(--text-dim);margin-bottom:6px;}
 .stat-mini .v{font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:600;}
@@ -339,8 +390,6 @@ tfoot td{border-top:1px solid var(--border-strong);font-weight:600;color:var(--t
   }
   .mobile-topbar svg{width:22px;height:22px;stroke:var(--text);fill:none;stroke-width:1.8;}
   main{padding:22px 18px 60px;}
-  .hero{grid-template-columns:1fr;text-align:center;padding:26px;}
-  .hero-stats{grid-template-columns:1fr 1fr;}
   #overlay-scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:39;}
   #overlay-scrim.show{display:block;}
 }
@@ -1420,7 +1469,8 @@ function renderSidebar(){
     </div>
     <div class="sidebar-foot">Données stockées sur cet appareil, synchronisées via GitHub si connecté.</div>
   `;
-  document.getElementById('mobile-title').textContent = currentView==='parametres' ? 'Paramètres' : (orderedNavItems().find(n=>n.id===currentView)?.label || 'Solde');
+  // Le tableau de bord porte déjà son h1 : la barre mobile n'affiche que le nom de l'app.
+  document.getElementById('mobile-title').textContent = currentView==='parametres' ? 'Paramètres' : currentView==='dashboard' ? 'Solde' : (orderedNavItems().find(n=>n.id===currentView)?.label || 'Solde');
   setupNavDragAndDrop();
 }
 function initials(u){
@@ -1740,88 +1790,155 @@ if(window.matchMedia){
   });
 }
 
-function gaugeSVG(pct, positive){
-  const r = 92, c = 2*Math.PI*r;
-  const clamped = Math.max(0, Math.min(1, pct));
-  const offset = c - clamped*c;
-  const color = positive ? 'url(#gradTeal)' : 'url(#gradCoral)';
-  return `
-  <svg viewBox="0 0 220 220">
-    <defs>
-      <linearGradient id="gradTeal" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="#BFE9D2"/><stop offset="100%" stop-color="#FFFFFF"/>
-      </linearGradient>
-      <linearGradient id="gradCoral" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="#EFB6AC"/><stop offset="100%" stop-color="#E3D3A9"/>
-      </linearGradient>
-    </defs>
-    <circle cx="110" cy="110" r="${r}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="14"/>
-    <circle cx="110" cy="110" r="${r}" fill="none" stroke="${color}" stroke-width="14" stroke-linecap="round"
-      stroke-dasharray="${c}" stroke-dashoffset="${offset}" style="transition:stroke-dashoffset 1s cubic-bezier(.4,0,.2,1)"/>
-  </svg>`;
+/* Dépenses du mois comparées à la moyenne des 3 mois précédents : renvoie
+   l'écart en euros si le mois dépasse cette moyenne de plus de 15 %, sinon null. */
+function dashboardDepensesAnomalie(key){
+  const prev = [1,2,3].map(i=>dashboardData(addMonths(key,-i)).totalDepenses);
+  const moyenne = prev.reduce((s,v)=>s+v,0)/prev.length;
+  const total = dashboardData(key).totalDepenses;
+  if(moyenne<=0.01 || total <= moyenne*1.15) return null;
+  return total - moyenne;
 }
+function fmtPct(x){ return Math.round(x*100) + ' %'; }
+function fmtCount(n, singular, plural){ return `${n} ${n>1 ? plural : singular}`; }
 
 function renderDashboard(){
   const key = state.selectedMonth;
   const d = dashboardData(key);
+  const me = currentUser();
+  const partner = jointPartner();
+  const shares = partner ? jointIncomeShares(key) : null;
   const positive = d.solde >= 0;
-  const gaugePct = d.revenu>0 ? Math.max(0, Math.min(1, 1 - Math.abs(d.solde)/d.revenu)) : (positive?1:0);
+  const anomalie = dashboardDepensesAnomalie(key);
 
-  const echEnCours = mine(state.depenses).filter(d=>d.modePaiement==='Echelonne' && depenseResteAPayerReel(d)>0.01);
-  const objEnCours = mine(state.objectifs).filter(o=>objectifCalc(o).statut!=='Atteint').length;
-  const objAtteints = mine(state.objectifs).filter(o=>objectifCalc(o).statut==='Atteint').length;
+  // Contrôle : les postes affichés plus le reste redonnent exactement le revenu.
+  console.assert(Math.abs(d.aboHorsCJ + d.chargesHorsCJ + d.depensesHorsCJ + d.virementCJ + d.epargneObj + d.solde - d.revenu) < 0.01,
+    'Tableau de bord : postes + reste ≠ revenu', d);
+
+  // Sous-lignes, calculées sur le mois affiché (et hors compte joint quand il y en a un).
+  const exclCJ = partner ? 'Compte Joint' : null;
+  const nbAbos = abonnementsActifs().filter(a=> exclCJ ? a.compte!==exclCJ : true).length;
+  const nbCharges = chargesActivesMois(key, exclCJ||undefined).length;
+  const nbEcheanciers = mine(state.depenses).filter(x=>x.modePaiement==='Echelonne' && (exclCJ ? x.compte!==exclCJ : true) && depenseMensualiteDuMois(x,key)>0.01).length;
+  const nbObjectifs = mine(state.objectifs).filter(o=>inRangeMonth(key, o.dateDebut, o.dateFin) && objectifCalc(o).statut!=='Atteint').length;
+
+  const postes = [
+    { label:'Abonnements & charges', value:d.aboHorsCJ + d.chargesHorsCJ, color:'#E6E6E6',
+      sub:`${fmtCount(nbAbos,'abonnement','abonnements')} · ${fmtCount(nbCharges,'charge','charges')}${partner?', hors compte joint':''}` },
+    { label:'Achats & mensualités', value:d.depensesHorsCJ, color:'#ABABAB',
+      sub: nbEcheanciers ? `dont ${fmtCount(nbEcheanciers,'échéancier','échéanciers')} en cours` : 'aucun échéancier en cours' },
+  ];
+  if(partner) postes.push({ label:'Compte joint', value:d.virementCJ, color:'#737373',
+      sub:`ta part : ${fmtPct(shares.myShare)} · ${esc(partner.displayName)} ${fmtPct(shares.partnerShare)}` });
+  postes.push({ label:'Épargne', value:d.epargneObj, color:'#4A4A4A',
+      sub: fmtCount(nbObjectifs,'objectif en cours','objectifs en cours') });
+
+  // Phrase de constat, calculée à partir des chiffres du mois.
+  let constat;
+  if(d.revenu<=0.01) constat = `Aucun revenu saisi — ${fmtEUR(d.totalDepenses)} de dépenses prévues`;
+  else constat = `${positive?'Reste à vivre':'Dépassement'} : ${fmtEUR(Math.abs(d.solde))} — ${fmtPct(d.totalDepenses/d.revenu)} du revenu engagé`;
+  if(anomalie) constat += ` — ${fmtEUR(anomalie)} de plus qu'un mois habituel`;
+
+  // Barre empilée : à l'échelle du revenu, ou des dépenses si elles le dépassent.
+  let barHTML;
+  if(d.revenu<=0.01){
+    barHTML = `<div class="dash-norev">Aucun revenu saisi pour ${monthLabel(key)}. <button class="dash-link" data-action="add-revrec">Ajouter un revenu</button></div>`;
+  } else {
+    const scale = Math.max(d.revenu, d.totalDepenses);
+    const segs = postes.filter(p=>p.value>0.01).map(p=>`<span class="dash-seg" style="flex-grow:${p.value/scale};background:${p.color}" title="${attrEsc(p.label)} : ${fmtEUR(p.value)}"></span>`);
+    if(positive && d.solde>0.01) segs.push(`<span class="dash-seg" style="flex-grow:${d.solde/scale};background:var(--teal)" title="Reste : ${fmtEUR(d.solde)}"></span>`);
+    const overflow = positive ? '' : `<span class="dash-overflow" style="left:${(d.revenu/scale*100).toFixed(3)}%" title="Dépassement : ${fmtEUR(-d.solde)}"></span>`;
+    barHTML = `
+      <div class="dash-bar-head"><span>Revenu du mois</span><span class="dash-num">${fmtEUR(d.revenu)}</span></div>
+      <div class="dash-bar" role="img" aria-label="${attrEsc(postes.map(p=>`${p.label} ${fmtEUR(p.value)}`).join(', '))}, ${positive?'reste':'dépassement'} ${fmtEUR(Math.abs(d.solde))}">${segs.join('')}${overflow}</div>`;
+  }
+
+  const posteRow = p => `
+    <div class="dash-row">
+      <span class="dash-swatch" style="background:${p.color}"></span>
+      <div class="dash-row-text"><div class="dash-row-label">${p.label}</div><div class="dash-row-sub">${p.sub}</div></div>
+      <div class="dash-num">${fmtEUR(p.value)}</div>
+    </div>`;
+
+  // Part de chacun : teintes d'identité neutres, distinctes de la teinte de donnée.
+  const jointHTML = partner ? `
+      <aside class="dash-joint">
+        <div class="dash-joint-title">Part de chacun au compte joint</div>
+        <div class="dash-joint-bar">
+          <span style="flex-grow:${shares.myShare};background:#D9D9D9"></span>
+          <span style="flex-grow:${shares.partnerShare};background:#6B6B6B"></span>
+        </div>
+        <div class="dash-joint-legend">
+          <span><i class="dash-swatch" style="background:#D9D9D9"></i>${esc(me.displayName)}<b class="dash-num">${fmtPct(shares.myShare)}</b></span>
+          <span><i class="dash-swatch" style="background:#6B6B6B"></i>${esc(partner.displayName)}<b class="dash-num">${fmtPct(shares.partnerShare)}</b></span>
+        </div>
+        <div class="dash-joint-total">Total commun : <span class="dash-num">${fmtEUR(shares.totalCharges)}</span> · ta part <span class="dash-num">${fmtEUR(myJointContribution(key))}</span></div>
+      </aside>` : '';
 
   return `
-    <div class="page-head">
+    <div class="page-head dash-head">
       <div>
         <h1 class="page-title">Tableau de bord</h1>
-        <div class="page-sub">Vue d'ensemble de vos finances</div>
+        <div class="dash-constat">${constat}</div>
       </div>
-      ${monthStepperHTML(key,'dashboard')}
-    </div>
-
-    <div class="card hero">
-      <div class="gauge-wrap">
-        ${gaugeSVG(gaugePct, positive)}
-        <div class="gauge-center">
-          <div class="gauge-value display" style="color:${positive?'var(--teal)':'var(--coral)'}">${fmtEUR(d.solde)}</div>
-          <div class="gauge-label">solde ${monthLabel(key)}</div>
-        </div>
-      </div>
-      <div class="hero-stats">
-        <div class="stat-mini"><div class="k">Revenu prévu</div><div class="v" style="color:var(--teal)">${fmtEUR(d.revenu)}</div></div>
-        <div class="stat-mini"><div class="k">Dépenses totales</div><div class="v" style="color:var(--coral)">${fmtEUR(d.totalDepenses)}</div></div>
-        <div class="stat-mini"><div class="k">Abonnements + charges</div><div class="v">${fmtEUR(d.aboHorsCJ + d.chargesHorsCJ)}</div></div>
-        <div class="stat-mini"><div class="k">Virement compte joint</div><div class="v">${fmtEUR(d.virementCJ)}</div></div>
+      <div class="dash-actions">
+        ${monthStepperHTML(key,'dashboard')}
+        <button class="btn btn-primary" data-action="add-depense">${icon('plus')}Ajouter une dépense</button>
       </div>
     </div>
 
-    <div class="grid g4" style="margin-bottom:16px;">
-      <div class="card stat-card"><div class="k">${icon('repeat')} Abonnements actifs</div><div class="v">${fmtEUR(abonnementsTotalMensuel())}</div><div class="d">${abonnementsActifs().length} actifs / mois</div></div>
-      <div class="card stat-card"><div class="k">${icon('home')} Charges fixes</div><div class="v">${fmtEUR(chargesTotalMois(key))}</div><div class="d">tous comptes</div></div>
-      <div class="card stat-card"><div class="k">${icon('calendar')} Mensualités du mois</div><div class="v">${fmtEUR(d.depensesHorsCJ)}</div><div class="d">${echEnCours.length} engagement(s) en cours</div></div>
-      <div class="card stat-card"><div class="k">${icon('target')} Épargne à provisionner</div><div class="v">${fmtEUR(d.epargneObj)}</div><div class="d">${objEnCours} objectif(s) en cours · ${objAtteints} atteint(s)</div></div>
-    </div>
+    <section class="dash-panel dash-reste ${partner?'has-joint':''}">
+      <div class="dash-reste-main">
+        <div class="dash-reste-label">${positive?'Reste à vivre':'Dépassement'} — ${monthLabel(key)}</div>
+        <div class="dash-reste-value display" style="color:${positive?'var(--teal)':'var(--coral)'}">${fmtEUR(d.solde)}</div>
+        ${barHTML}
+        <div class="dash-rows">${postes.map(posteRow).join('')}</div>
+      </div>
+      ${jointHTML}
+    </section>
 
-    <div class="grid g2">
-      <div class="card chart-card">
+    <div class="dash-grid">
+      <section class="dash-panel">
         <div class="chart-head">
           <h3>Répartition des dépenses — ${monthLabel(key)}</h3>
           ${chartFilterButtonHTML('depRepartition', 'Nom de la dépense')}
         </div>
         ${chartFilterActive('depRepartition') ? chartFilterActiveBarHTML('depRepartition') : ''}
-        <div class="chart-wrap"><canvas id="chartRepartition"></canvas></div>
-      </div>
-      <div class="card chart-card">
+        ${dashRepartitionHTML()}
+      </section>
+      <section class="dash-panel dash-chart-card">
         <div class="chart-head">
           <h3>Revenus vs dépenses — ${state.selectedYear}</h3>
           ${chartFilterButtonHTML('revAnnuel', 'Nom du revenu')}
         </div>
         ${chartFilterActive('revAnnuel') ? chartFilterActiveBarHTML('revAnnuel') : ''}
-        <div class="chart-wrap"><canvas id="chartAnnuelMini"></canvas></div>
-      </div>
+        <div class="dash-chart-wrap"><canvas id="chartAnnuelMini"></canvas></div>
+      </section>
     </div>
   `;
+}
+/* Répartition des dépenses en liste triée (remplace l'ancien doughnut) :
+   6 lignes maximum, le reste regroupé dans « Autres ». */
+function dashRepartitionHTML(){
+  const parts = chartFilteredGrouped('depRepartition');
+  if(!parts.length) return `<div class="dash-empty">${chartFilterActive('depRepartition') ? 'Aucune dépense ne correspond au filtre.' : 'Aucune dépense ce mois-ci.'}</div>`;
+  const total = parts.reduce((s,p)=>s+p.value,0);
+  const MAX = 6;
+  const rows = parts.length>MAX+1 ? [...parts.slice(0,MAX), {label:'Autres', value:parts.slice(MAX).reduce((s,p)=>s+p.value,0), autres:true}] : parts;
+  const max = parts[0].value;
+  return `
+    <ol class="dash-rep">
+      ${rows.map((p,i)=>`
+        <li>
+          <div class="dash-rep-text">
+            <div class="dash-rep-label" title="${attrEsc(p.label)}">${esc(p.label)}</div>
+            <div class="dash-rep-track"><span style="width:${(p.value/max*100).toFixed(2)}%;background:${i===0?'var(--text)':'#5C5C5C'}"></span></div>
+            <div class="dash-rep-pct">${fmtPct(p.value/total)}${p.autres?` · ${fmtCount(parts.length-MAX,'poste','postes')}`:''}</div>
+          </div>
+          <div class="dash-num">${fmtEUR(p.value)}</div>
+        </li>`).join('')}
+    </ol>
+    <button class="dash-link dash-rep-all" data-nav="depenses">Tout voir</button>`;
 }
 function monthStepperHTML(key, target){
   return `<div class="stepper">
@@ -1851,9 +1968,6 @@ function chartUnavailableNote(canvasId){
    chaque graphique. Même mécanique "Excel" (panneau à cases à cocher,
    validé par OK) que le filtre des tableaux, mais l'état confirmé vit
    dans state.chartFilters plutôt que state.tableFilters. */
-const CHART_PALETTE = ['#FFFFFF','#E3D3A9','#BFE9D2','#EFB6AC','#C7C7CE','#9FD8E3','#D8B4E2','#F4D58D','#A8C7FA','#F2A6B0'];
-function paletteColor(i){ return CHART_PALETTE[i % CHART_PALETTE.length]; }
-
 let chartFilterOpen = null;          // clé du graphique dont le panneau est ouvert ('depRepartition' | 'revAnnuel')
 let chartFilterPendingDim = null;    // dimension en cours d'édition dans le panneau ouvert
 let chartFilterPendingChecked = null; // Set des valeurs cochées (= incluses) pour cette dimension, en cours d'édition
@@ -1953,36 +2067,64 @@ function chartFilterActiveBarHTML(chartKey){
 }
 
 function drawDashboardCharts(){
-  if(!chartLibReady()){ chartUnavailableNote('chartRepartition'); chartUnavailableNote('chartAnnuelMini'); return; }
+  if(!chartLibReady()){ chartUnavailableNote('chartAnnuelMini'); return; }
   const key = state.selectedMonth;
-  destroyChart('rep');
-  const ctx1 = document.getElementById('chartRepartition');
-  if(ctx1){
-    const parts = chartFilteredGrouped('depRepartition');
-    charts.rep = new Chart(ctx1, {
-      type:'doughnut',
-      data:{ labels: parts.map(p=>p.label), datasets:[{ data:parts.map(p=>p.value), backgroundColor:parts.map((p,i)=>paletteColor(i)), borderWidth:0, hoverOffset:6 }]},
-      options:{ responsive:true, maintainAspectRatio:false, cutout:'72%', plugins:{ legend:{ position:'bottom', labels:{ color:'#8D95A6', font:{family:'Inter',size:11.5}, boxWidth:8, boxHeight:8, usePointStyle:true, padding:14 } } } }
-    });
-  }
   destroyChart('annMini');
   const ctx2 = document.getElementById('chartAnnuelMini');
   if(ctx2){
     const {months} = anneeData(state.selectedYear);
+    // Mois sélectionné marqué seulement s'il appartient à l'année affichée.
+    const selIdx = months.findIndex(m=>m.key===key);
+    const anomalie = selIdx>=0 ? dashboardDepensesAnomalie(key) : null;
+    const isMobile = window.matchMedia && window.matchMedia('(max-width: 880px)').matches;
+    const TICK = {color:'#9A9A9A', font:{family:'Inter', size:12}};
+    const pointAt = (r)=> months.map((m,i)=> i===selIdx ? r : 0);
+    // Repère vertical du mois sélectionné + annotation d'écart à la moyenne.
+    const selectedMonthMarker = {
+      id:'selectedMonthMarker',
+      afterDatasetsDraw(chart){
+        if(selIdx<0) return;
+        const {ctx, chartArea, scales} = chart;
+        const x = scales.x.getPixelForValue(selIdx);
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(Math.round(x)+0.5, chartArea.top); ctx.lineTo(Math.round(x)+0.5, chartArea.bottom); ctx.stroke();
+        if(anomalie){
+          const y = scales.y.getPixelForValue(months[selIdx].totalDepenses);
+          const text = `+${fmtEUR(anomalie)} vs moyenne`;
+          ctx.font = '600 12px Inter, sans-serif';
+          const w = ctx.measureText(text).width;
+          const tx = Math.min(Math.max(x - w/2, chartArea.left), chartArea.right - w);
+          const ty = Math.max(y - 12, chartArea.top + 16);
+          ctx.fillStyle = '#0F0F0F'; ctx.fillRect(tx-4, ty-16, w+8, 20); // fond pour rester lisible sur les courbes
+          ctx.fillStyle = '#FFFFFF'; ctx.textBaseline = 'bottom';
+          ctx.fillText(text, tx, ty);
+        }
+        ctx.restore();
+      }
+    };
     charts.annMini = new Chart(ctx2, {
       type:'line',
       data:{ labels: months.map(m=>MONTH_NAMES[Number(m.key.split('-')[1])-1].slice(0,3)),
         datasets:[
-          {label:'Revenus', data:months.map(m=>revAnnuelFilteredTotalForMonth(m.key)), borderColor:'#BFE9D2', backgroundColor:'rgba(191,233,210,0.08)', fill:true, tension:.35, pointRadius:0, borderWidth:2},
-          {label:'Dépenses', data:months.map(m=>m.totalDepenses), borderColor:'#EFB6AC', backgroundColor:'rgba(239,182,172,0.06)', fill:true, tension:.35, pointRadius:0, borderWidth:2}
+          {label:'Revenus', data:months.map(m=>revAnnuelFilteredTotalForMonth(m.key)), borderColor:'#8A8A8A', backgroundColor:'#8A8A8A', fill:false, tension:0, borderWidth:1.5, pointRadius:pointAt(3), pointHoverRadius:4},
+          {label:'Dépenses', data:months.map(m=>m.totalDepenses), borderColor:'#FFFFFF', backgroundColor:'#FFFFFF', fill:false, tension:0, borderWidth:2, pointRadius:pointAt(3), pointHoverRadius:4}
         ]},
-      options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{display:false}, ticks:{color:'#565D6C', font:{size:10.5}} }, y:{ grid:{color:'rgba(255,255,255,0.05)'}, ticks:{color:'#565D6C', font:{size:10.5}, callback:v=>v>=1000?(v/1000)+'k':v} } },
-        plugins:{ legend:{ position:'bottom', labels:{ color:'#8D95A6', font:{size:11.5}, boxWidth:8, boxHeight:8, usePointStyle:true, padding:14 } } },
-        interaction:{intersect:false, mode:'index'} }
+      options:{ responsive:true, maintainAspectRatio:false, layout:{padding:{top:20}},
+        scales:{
+          x:{ grid:{display:false}, border:{display:false}, ticks:{...TICK, maxRotation:0, autoSkip:true, maxTicksLimit: isMobile ? 6 : 12} },
+          y:{ beginAtZero:true, grid:{color:'rgba(255,255,255,0.06)'}, border:{display:false},
+              ticks:{...TICK, maxTicksLimit:5, callback:v=> v>=1000 ? (v/1000).toLocaleString('fr-FR')+' k' : v} }
+        },
+        plugins:{
+          legend:{ position:'bottom', labels:{ color:'#9A9A9A', font:{family:'Inter', size:12}, boxWidth:8, boxHeight:8, usePointStyle:true, padding:14 } },
+          tooltip:{ callbacks:{ label:c=>`${c.dataset.label} : ${fmtEUR(c.parsed.y)}` } }
+        },
+        interaction:{intersect:false, mode:'index'} },
+      plugins:[selectedMonthMarker]
     });
   }
 }
-
 /* ============================== VUE ANNUELLE ============================== */
 function renderAnnuelle(){
   const year = state.selectedYear;
