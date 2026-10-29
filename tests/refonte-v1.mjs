@@ -67,7 +67,7 @@ async function gotoView(page, hash){
 }
 async function visibleText(page){ return page.evaluate(()=>document.getElementById('view').innerText); }
 
-const VIEWS = ['#dashboard/2026-09','#revenus/2026-09','#depenses/2026-09','#echeances/2026-09','#objectifs/2026-09','#charges/2026-09','#compteJoint/2026-09','#annuelle/2026','#analyse','#parametres'];
+const VIEWS = ['#dashboard/2026-09','#revenus/2026-09','#depenses/2026-09','#releve','#echeances/2026-09','#objectifs/2026-09','#charges/2026-09','#compteJoint/2026-09','#annuelle/2026','#analyse','#parametres'];
 
 const browser = await chromium.launch();
 try{
