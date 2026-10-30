@@ -3984,15 +3984,25 @@ async function handleAction(action, id, el){
       }
       break;
     }
-    case 'releve-signe': if(releveInverserSigne(id)){ releveFocusApres = null; await render(); document.querySelector(`[data-action="releve-signe"][data-id="${id}"]`)?.focus(); } break;
+    case 'releve-signe': if(releveInverserSigne(id)){
+      const n = releveApprendreColonne(id);
+      releveFocusApres = null; await render(); document.querySelector(`[data-action="releve-signe"][data-id="${id}"]`)?.focus();
+      if(n) toast(`Colonne corrigée · ${fmtCount(n, 'autre ligne inversée', 'autres lignes inversées')}`);
+    } break;
     case 'releve-filtre':
       releveFiltre.conf = releveFiltre.conf===el.dataset.conf ? '' : el.dataset.conf;
       releveAffichees = RELEVE_TRANCHE;
       await render();
       document.querySelector(`[data-action="releve-filtre"][data-conf="${releveFiltre.conf}"]`)?.focus();
       break;
+    case 'releve-tri':
+      releveFiltre.tri = el.dataset.tri;
+      releveAffichees = RELEVE_TRANCHE;
+      await render();
+      document.querySelector(`[data-action="releve-tri"][data-tri="${releveFiltre.tri}"]`)?.focus();
+      break;
     case 'releve-filtre-effacer':
-      releveFiltre = {q:'', conf:''}; releveAffichees = RELEVE_TRANCHE;
+      releveFiltre = {...releveFiltre, q:'', conf:''}; releveAffichees = RELEVE_TRANCHE;
       await render(); document.getElementById('releve-recherche')?.focus();
       break;
     case 'releve-valider-affichees': await releveValider(releveLignesFiltrees((releveSession?.lignes||[]).filter(l=>l.etat==='attente')).map(l=>l.id)); break;
@@ -4629,7 +4639,7 @@ let releveFocusApres = null;     // index de la ligne à focaliser après un re-
 // milliers d'éléments et la page ne suit plus.
 const RELEVE_TRANCHE = 50;
 let releveAffichees = RELEVE_TRANCHE;
-let releveFiltre = {q:'', conf:''}; // lignes à vérifier : recherche et badge (vide = tous)
+let releveFiltre = {q:'', conf:'', tri:''}; // lignes à vérifier : recherche, badge (vide = tous) et ordre (vide = celui du relevé)
 let releveReglesQ = '';              // « Ce que Solde a appris » : recherche
 
 function releveModele(creer){
@@ -4893,12 +4903,29 @@ function releveTexteEnLignes(texte){
     return items;
   }).filter(items=>items.length);
 }
-const RELEVE_ARGENT = /^[-+−]?\d{1,3}(?:[\s  .]\d{3})*,\d{2}\s?€?-?$|^[-+−]?\d+\.\d{2}\s?€?-?$|^[-+−]?\d{1,3}(?:,\d{3})+\.\d{2}\s?€?-?$/;
+const RELEVE_ARGENT = /^[-+−]?(?:\d{1,3}(?:[\s  .]\d{3})+|\d+),\d{2}\s?€?-?$|^[-+−]?\d+\.\d{2}\s?€?-?$|^[-+−]?\d{1,3}(?:,\d{3})+\.\d{2}\s?€?-?$/;
 const RELEVE_DATE_DEBUT = /^(\d{1,2}[\/.-]\d{1,2}(?:[\/.-]\d{2,4})?|\d{1,2} [A-Za-zÀ-ÿ]{3,9}\.?(?: \d{4})?)\s+/;
 const RELEVE_ENTREE = /\b(VIR(EMENT)?S? (SEPA )?(RECU|DE|INST RECU)|REMBOURSEMENT|REMB|SALAIRE|AVOIR|ALLOCATION|CAF|POLE EMPLOI|FRANCE TRAVAIL|PRIME|INTERETS)\b/i;
+// Signature du format : les premières lignes, sans chiffres ni noms de mois
+// (« Généré le 11 oct. 2026 »), pour reconnaître la même banque d'un mois à l'autre.
 function releveSigTexte(lignes){
-  return 'pdf:' + releveSansAccents(lignes.slice(0,3).map(l=>l.map(i=>i.str).join(' ')).join(' ')).toUpperCase().replace(/[^A-Z]+/g,' ').trim().slice(0,60);
+  return 'pdf:' + releveSansAccents(lignes.slice(0,3).map(l=>l.map(i=>i.str).join(' ')).join(' ')).toUpperCase().replace(/[^A-Z]+/g,' ')
+    .replace(/\b(JANV?(IER)?|FEVR?(IER)?|MARS|AVR(IL)?|MAI|JUIN|JUIL(LET)?|AOUT|SEPT?(EMBRE)?|OCT(OBRE)?|NOV(EMBRE)?|DEC(EMBRE)?)\b/g,' ').replace(/\s+/g,' ').trim().slice(0,60);
 }
+// Colonnes d'un relevé PDF ou collé : bords gauche (g) et droit (d) de « Débit »,
+// « Crédit » et « Solde » ; les colonnes apprises avant ne gardaient que le bord droit.
+// Un montant est rangé dans la colonne la plus proche, en comparant le même bord
+// (alignés à droite, ou à gauche chez Revolut). Si l'on ne connaît qu'une colonne
+// (apprise d'une correction), le montant doit être juste dessous.
+function releveEcartColonne(c, p){ return typeof c==='number' ? Math.abs(c-p.d) : Math.min(Math.abs(c.d-p.d), Math.abs(c.g-p.g)); }
+function releveColonneDe(colonnes, p){
+  const ks = ['debit','credit','solde'].filter(k=>colonnes && colonnes[k]!=null);
+  if(!ks.length || !p) return null;
+  const k = ks.sort((a,b)=>releveEcartColonne(colonnes[a],p)-releveEcartColonne(colonnes[b],p))[0];
+  const complet = colonnes.debit!=null && colonnes.credit!=null;
+  return complet || releveEcartColonne(colonnes[k], p) <= Math.max(2, (p.d-p.g)*0.6) ? k : null;
+}
+function releveSigneColonne(colonnes, p){ const k = releveColonneDe(colonnes, p); return k==='debit' ? -1 : k==='credit' ? 1 : 0; }
 function releveDepuisLignes(lignes, format, colonnesApprises){
   // Année des dates sans année : la plus récente trouvée en toutes lettres dans le document.
   const datesCompletes = [];
@@ -4908,13 +4935,21 @@ function releveDepuisLignes(lignes, format, colonnesApprises){
   const ordre = releveOrdre(lignes.map(l=>(l[0]||{}).str));
   let colonnes = colonnesApprises || null, colonnesVues = null;
   const ops = [];
-  let dernier = null, dernierIndex = -2;
+  let dernier = null, dernierIndex = -2, horsCompte = false;
   lignes.forEach((items, idx)=>{
     const texte = items.map(i=>i.str).join(' ').replace(/\s+/g,' ').trim();
     const norm = releveNormEntete(texte);
-    if(/debit/.test(norm) && /credit/.test(norm)){
+    // Revolut ajoute après le compte courant les paiements annulés (« Renvoyé de … »),
+    // en attente, et le compte d'épargne (« Transactions de dépôt », les mêmes virements
+    // internes vus de l'autre côté) : on ne lit que les sections du compte.
+    if(/^(transactions (de depot|du compte|en attente)|renvoye de|annulee?s? de)\b/.test(norm)){ horsCompte = !/^transactions du compte/.test(norm); dernier = null; return; }
+    if(horsCompte) return;
+    // « Débit / Crédit », ou « Argent sortant / Argent entrant » (Revolut).
+    if(/debit|sortant/.test(norm) && /credit|entrant/.test(norm)){
+      // Colonnes déjà retenues pour ce format (éventuellement corrigées) : elles priment.
+      if(colonnesApprises && colonnesApprises.debit!=null && colonnesApprises.credit!=null) return;
       colonnes = {};
-      items.forEach(i=>{ const n = releveNormEntete(i.str); const k = /debit/.test(n) ? 'debit' : /credit/.test(n) ? 'credit' : /solde/.test(n) ? 'solde' : null; if(k) colonnes[k] = i.x + i.w; });
+      items.forEach(i=>{ const n = releveNormEntete(i.str); const k = /debit|sortant/.test(n) ? 'debit' : /credit|entrant/.test(n) ? 'credit' : /solde/.test(n) ? 'solde' : null; if(k) colonnes[k] = {g: i.x, d: i.x + i.w}; });
       colonnesVues = colonnes;
       return;
     }
@@ -4930,14 +4965,10 @@ function releveDepuisLignes(lignes, format, colonnesApprises){
     const sansAnnee = /^\d{1,2}[\/.-]\d{1,2}$|^\d{1,2} [A-Za-zÀ-ÿ]{3,9}\.?$/.test(brut);
     if(date && sansAnnee && Number(date.slice(5,7)) > moisFin + 1) date = releveDate(brut, ordre, anneeFin-1); // relevé à cheval sur deux années
     if(!date || !argent.length) return;
-    let choisi = null, signe = 0;
-    if(colonnes && (colonnes.debit!==undefined || colonnes.credit!==undefined)){
-      // Montants alignés à droite : on compare le bord droit de chaque montant à celui des en-têtes.
-      const proche = i => Object.entries(colonnes).sort((a,b)=>Math.abs(a[1]-(i.x+i.w)) - Math.abs(b[1]-(i.x+i.w)))[0][0];
-      choisi = argent.find(i=>proche(i)!=='solde');
-      if(choisi) signe = proche(choisi)==='debit' ? -1 : 1;
-    }
-    if(!choisi){ choisi = argent[0]; } // sans colonnes : le premier montant après le libellé (le solde, s'il y en a un, vient après)
+    const posDe = i => ({g: i.x, d: i.x + i.w});
+    // Sans colonnes (ou hors d'elles) : le premier montant après le libellé (le solde, s'il y en a un, vient après).
+    const choisi = argent.find(i=>releveColonneDe(colonnes, posDe(i))!=='solde') || argent[0];
+    const pos = posDe(choisi), signe = releveSigneColonne(colonnes, pos);
     let montant = releveMontant(choisi.str);
     if(isNaN(montant) || montant===0) return;
     const explicite = /^[-+−]|-$/.test(choisi.str.trim());
@@ -4949,7 +4980,8 @@ function releveDepuisLignes(lignes, format, colonnesApprises){
     argent.forEach(i=>{ const a = i.str.replace(/\s+/g,' '), k = libelle.lastIndexOf(a); if(k>=0) libelle = libelle.slice(0,k) + libelle.slice(k+a.length); });
     libelle = libelle.replace(/\s+/g,' ').trim();
     if(!libelle || RELEVE_HORS_OPS.test(libelle)) return;
-    dernier = {date, libelle, montant, signeIncertain}; dernierIndex = idx;
+    // La position du montant sert à apprendre les colonnes si l'utilisateur corrige le sens.
+    dernier = {date, libelle, montant, signeIncertain, ...(explicite ? {} : {pos})}; dernierIndex = idx;
     ops.push(dernier);
   });
   return {format, ops, sig: releveSigTexte(lignes), colonnes: colonnesVues};
@@ -5086,7 +5118,7 @@ function releveCreerLignes(ops){
           raison: ecart ? `Abonnement attendu : ${attendu.libelle} · nouveau prix (avant ${fmtEUR(attendu.montant)})` : `Abonnement attendu : ${attendu.libelle}`});
       }
       const {cle, confiance, raison, ...valeurs} = s;
-      return {id: uid(), date: o.date, brut: o.libelle.trim(), montant: r2(o.montant), cle, suivi: !!suivi, incertain: !!o.signeIncertain, confiance, raison, etat:'attente', ...(attendu ? {aboPrevId: attendu.id, aboSerieId: attendu.aboId} : {}), ...(mensualite ? {ppfPrevId: mensualite.id, ppfSerieId: mensualite.ppfId} : {}), s:{...valeurs}, v:{...valeurs}};
+      return {id: uid(), date: o.date, brut: o.libelle.trim(), montant: r2(o.montant), cle, suivi: !!suivi, incertain: !!o.signeIncertain, ...(o.pos ? {pos: o.pos} : {}), confiance, raison, etat:'attente', ...(attendu ? {aboPrevId: attendu.id, aboSerieId: attendu.aboId} : {}), ...(mensualite ? {ppfPrevId: mensualite.id, ppfSerieId: mensualite.ppfId} : {}), s:{...valeurs}, v:{...valeurs}};
     });
 }
 
@@ -5144,7 +5176,7 @@ async function releveDemarrer(nom, res){
   releveSession = {nom, format: res.format, sig: res.sig||null, csv: res.csv||null, colonnes: res.colonnes||null,
     formatConnu: !!(res.sig && modele.formats[res.sig]), lignes, debut: new Date().toISOString()};
   releveAffichees = RELEVE_TRANCHE;
-  releveFiltre = {q:'', conf:''};
+  releveFiltre = {q:'', conf:'', tri:''};
   releveSauverSession();
   await render();
   toast(`${lignes.length} opération${lignes.length>1?'s':''} à vérifier`);
@@ -5183,10 +5215,39 @@ function releveAppliquerType(l, type){
 // Inverse le sens d'une ligne mal reconnue (+ ↔ −).
 function releveInverserSigne(id){
   const l = releveSession && releveSession.lignes.find(x=>x.id===id); if(!l) return false;
-  if(l.v.type==='ignorer') l.montant = -l.montant;
-  else releveAppliquerType(l, l.montant<0 ? 'revenu' : 'depense');
+  releveBasculerSens(l);
+  l.signeManuel = true;
   releveSauverSession();
   return true;
+}
+function releveBasculerSens(l){
+  if(l.v.type==='ignorer') l.montant = -l.montant;
+  else releveAppliquerType(l, l.montant<0 ? 'revenu' : 'depense');
+}
+// Une ligne mal reconnue (+ ↔ −) dans un PDF ou un texte collé : la colonne où se
+// trouvait son montant est celle des entrées (ou des sorties). Solde corrige sa
+// lecture du relevé — les autres lignes de cette colonne suivent — et la retient
+// pour ce format à la validation. Renvoie le nombre d'autres lignes corrigées.
+function releveApprendreColonne(id){
+  const s = releveSession; if(!s || s.csv) return 0;
+  const l = s.lignes.find(x=>x.id===id); if(!l || !l.pos) return 0;
+  const k = l.montant<0 ? 'debit' : 'credit', autre = k==='debit' ? 'credit' : 'debit';
+  const avant = s.colonnes || (s.sig && releveModele(false).formats[s.sig] || {}).colonnes || {};
+  const col = {...avant};
+  if(releveColonneDe(col, l.pos)===autre){
+    // Débit et crédit étaient inversés : on les échange.
+    if(col[k]!=null){ col[k] = avant[autre]; col[autre] = avant[k]; }
+    else { delete col[autre]; col[k] = l.pos; }
+  } else if(releveColonneDe(col, l.pos)!==k) col[k] = l.pos;
+  s.colonnes = col;
+  let n = 0;
+  s.lignes.forEach(x=>{
+    if(x===l || x.etat!=='attente' || !x.pos || x.signeManuel) return;
+    const signe = releveSigneColonne(col, x.pos);
+    if(signe && signe!==Math.sign(x.montant)){ releveBasculerSens(x); x.incertain = false; n++; }
+  });
+  releveSauverSession();
+  return n;
 }
 // Montant tel qu'affiché dans le champ de saisie : sans signe (porté par le bouton + / −).
 function releveMontantSaisie(m){ return Math.abs(m).toFixed(2).replace('.', ','); }
@@ -5538,15 +5599,21 @@ function releveCorrespond(l, q){
 function releveLignesFiltrees(attente){
   return attente.filter(l=>(!releveFiltre.conf || releveBadge(l)===releveFiltre.conf) && releveCorrespond(l, releveFiltre.q));
 }
-// Les lignes sont regroupées par catégorie (« Ne pas importer » et « Sans catégorie » en dernier),
-// par date dans chaque groupe.
+// Par défaut les lignes restent dans l'ordre du relevé : une ligne ne bouge pas pendant
+// qu'on la corrige. Sur demande, elles sont triées par libellé ou par montant, ou
+// regroupées par catégorie (« Ne pas importer » et « Sans catégorie » en dernier).
+const RELEVE_TRIS = [{tri:'', label:'Ordre du relevé'}, {tri:'categorie', label:'Par catégorie'}, {tri:'libelle', label:'Par libellé'}, {tri:'montant', label:'Par montant'}];
 function releveGroupeDe(l){ return l.v.type==='ignorer' ? 'Ne pas importer' : (String(l.v.categorie||'').trim() || 'Sans catégorie'); }
 function releveGroupes(lignes){
+  const parDate = (a,b)=>a.date.localeCompare(b.date);
+  if(releveFiltre.tri==='libelle') return [{nom:'', lignes: [...lignes].sort((a,b)=>String(a.v.libelle||'').localeCompare(String(b.v.libelle||''),'fr') || parDate(a,b))}];
+  if(releveFiltre.tri==='montant') return [{nom:'', lignes: [...lignes].sort((a,b)=>Math.abs(b.montant)-Math.abs(a.montant) || parDate(a,b))}];
+  if(releveFiltre.tri!=='categorie') return [{nom:'', lignes: [...lignes].sort(parDate)}];
   const m = new Map();
   lignes.forEach(l=>{ const g = releveGroupeDe(l); if(!m.has(g)) m.set(g, []); m.get(g).push(l); });
   const rang = g => g==='Ne pas importer' ? 2 : g==='Sans catégorie' ? 1 : 0;
   return [...m.entries()].sort((a,b)=>rang(a[0])-rang(b[0]) || a[0].localeCompare(b[0],'fr'))
-    .map(([nom, ls])=>({nom, lignes: ls.sort((a,b)=>a.date.localeCompare(b.date))}));
+    .map(([nom, ls])=>({nom, lignes: ls.sort(parDate)}));
 }
 function releveFiltresHTML(attente){
   const nb = c => attente.filter(l=>releveBadge(l)===c).length;
@@ -5554,6 +5621,7 @@ function releveFiltresHTML(attente){
   return `<div class="rl-filtres">
     <input type="search" class="rl-ctl rl-recherche" id="releve-recherche" value="${attrEsc(releveFiltre.q)}" placeholder="Chercher un libellé, une catégorie, un montant…" aria-label="Chercher dans les lignes à vérifier" autocomplete="off" enterkeyhint="search">
     <div class="chips" role="group" aria-label="Filtrer par badge"><button type="button" class="chip rl-chip" data-action="releve-filtre" data-conf="" aria-pressed="${!releveFiltre.conf}">Toutes<span class="amt">${attente.length}</span></button>${chips}</div>
+    <div class="chips" role="group" aria-label="Ordre des lignes">${RELEVE_TRIS.map(t=>`<button type="button" class="chip rl-chip" data-action="releve-tri" data-tri="${t.tri}" aria-pressed="${(releveFiltre.tri||'')===t.tri}">${t.label}</button>`).join('')}</div>
   </div>`;
 }
 function releveLignesHTML(attente){
@@ -5565,7 +5633,7 @@ function releveLignesHTML(attente){
   const groupes = ordre.map(g=>({...g, vis: g.lignes.filter(l=>visibles.has(l.id))})).filter(g=>g.vis.length);
   return `${filtre ? `<div class="rl-filtre-res"><span class="side-note">${fmtCount(filtrees.length, 'ligne affichée', 'lignes affichées')} sur ${attente.length}</span>
       ${filtrees.length>1 ? `<button class="btn btn-ghost btn-sm" data-action="releve-valider-affichees">${icon('check')}Valider les ${filtrees.length} affichées</button>` : ''}</div>` : ''}
-    ${groupes.map(g=>`<section class="rl-groupe" aria-label="${attrEsc(g.nom)}">
+    ${groupes.map(g=>!g.nom ? `<ul class="rl-list">${g.vis.map(l=>releveLigneHTML(l)).join('')}</ul>` : `<section class="rl-groupe" aria-label="${attrEsc(g.nom)}">
       <div class="rl-groupe-head"><h3>${esc(g.nom)}</h3><span class="side-note">${fmtCount(g.lignes.length, 'ligne', 'lignes')}</span>
         ${g.lignes.length>1 ? `<button class="btn btn-text btn-sm" data-action="releve-valider-groupe" data-groupe="${attrEsc(g.nom)}">${g.nom==='Ne pas importer' ? 'Tout confirmer' : 'Tout valider'}</button>` : ''}</div>
       <ul class="rl-list">${g.vis.map(l=>releveLigneHTML(l)).join('')}</ul>
