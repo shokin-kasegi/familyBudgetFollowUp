@@ -3347,7 +3347,27 @@ function openDepenseEditModal(depenseId){
       else if(nouveau) ppfDemarrer(dep, data.montantTotal); else { ppfFixerTotal(dep.ppfId, data.montantTotal); ppfRecaler(dep.ppfId); }
       msg = ppfToast(ppfEtat(dep.ppfId), rattache ? 'Mensualité ajoutée' : nouveau ? 'Paiement en plusieurs fois' : 'Mensualité mise à jour');
     }
-    await persist(); await render(); toast(msg); });
+    await persist(); await render(); toast(msg); }, `<p class="field-note">Ce n’est pas une dépense mais une entrée d’argent ? <button type="button" class="link" id="dep-vers-revenu">Basculer en revenu</button></p>`);
+  document.getElementById('dep-vers-revenu').onclick = ()=>openBasculerEnRevenu(dep);
+}
+// Une dépense saisie (ou importée) par erreur devient un revenu : on repart de ce qui
+// est dans le formulaire, avec un montant positif, puis la dépense est retirée — et
+// avec elle son abonnement ou sa place dans un paiement en plusieurs fois.
+function openBasculerEnRevenu(dep){
+  const lu = k => { const el = document.getElementById('f_'+k); return el ? el.value : dep[k]; };
+  const cats = myCategories('revenus');
+  const categorie = (cats.find(c=>c.nom===lu('categorie')) || cats.find(c=>c.nom==='Autre') || cats[0] || {}).nom || '';
+  const valeurs = {date:lu('date')||dep.date, libelle:lu('libelle'), categorie, montant:r2(Math.abs(Number(lu('montant'))||0)), notes:lu('notes')||''};
+  openModal('Basculer en revenu', revexcFields(), valeurs, async (data)=>{
+    data.montant = Math.abs(Number(data.montant)||0);
+    if(!(data.montant>0)){ markFieldError('montant','Renseigne un montant supérieur à 0'); return false; }
+    if(reportFieldErrors(fieldRequiredErrors(revexcFields(), data))) return false;
+    if(dep.aboId) aboArreter(dep.aboId);
+    if(dep.ppfId) ppfDetacher(dep);
+    state.depenses = state.depenses.filter(x=>x.id!==dep.id);
+    state.revenusExceptionnels.push({id:uid(), ownerId:currentUser().id, ...data, notes:(data.notes||'').trim()});
+    await persist(); await render(); toast(`Basculée en revenu · ${fmtEUR(data.montant)} en ${monthLabel(moisDe(data.date))}`);
+  }, `<p class="field-note">La dépense « ${esc(dep.libelle||'')} » sera retirée des dépenses et comptée en revenu, en positif.</p>`);
 }
 // Message après une mensualité : clôture, ou prochaine mensualité annoncée.
 function ppfToast(e, debut){
