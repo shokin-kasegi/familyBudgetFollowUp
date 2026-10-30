@@ -781,6 +781,16 @@ button,a,[role="button"]{touch-action:manipulation;-webkit-tap-highlight-color:t
    fait tomber le défilement, alors que le champ de couleur derrière est déjà un dégradé doux. */
 .rl-row .btn-ghost,.rl-plus .btn-ghost,.card.rl-carte{-webkit-backdrop-filter:none;backdrop-filter:none;}
 .rl-rules{list-style:none;margin:0;padding:0;}
+.rl-filtres{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;}
+.rl-recherche{max-width:420px;}
+.card > .rl-recherche{margin-bottom:12px;}
+.rl-chip{height:30px;padding:0 12px;font-size:13px;background:none;color:var(--muted);cursor:pointer;font-family:inherit;}
+.rl-chip[aria-pressed="true"]{border-color:var(--text);color:var(--text);background:var(--raised);}
+.rl-filtre-res{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-bottom:6px;}
+.rl-groupe + .rl-groupe{margin-top:14px;}
+.rl-groupe-head{display:flex;align-items:baseline;gap:10px;padding:6px 0;}
+.rl-groupe-head h3{margin:0;font-size:14px;font-weight:600;}
+.rl-groupe-head .btn{margin-left:auto;}
 .rl-rules li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) auto 32px;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:14px;}
 .rl-rule-key{font-size:12px;color:var(--muted);letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .rl-rule-val{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -3429,7 +3439,17 @@ function redrawCurrentCharts(){
   }catch(e){ console.error('redrawCurrentCharts: erreur non bloquante', e); }
 }
 
+let releveRechercheMinuteur = null;
 document.addEventListener('input', (e)=>{
+  if(e.target.id==='releve-recherche' || e.target.id==='releve-regles-recherche'){
+    const lignes = e.target.id==='releve-recherche', val = e.target.value;
+    clearTimeout(releveRechercheMinuteur);
+    releveRechercheMinuteur = setTimeout(()=>{
+      if(lignes){ releveFiltre.q = val; releveAffichees = RELEVE_TRANCHE; releveRedessinerLignes(); }
+      else { releveReglesQ = val; releveRedessinerRegles(); }
+    }, 120);
+    return;
+  }
   if(e.target.dataset && e.target.dataset.action==='col-filter-search'){
     colFilterSearch = e.target.value;
     // Filtre la liste affichée sans re-render complet, pour ne pas perdre le focus pendant la frappe.
@@ -3965,6 +3985,18 @@ async function handleAction(action, id, el){
       break;
     }
     case 'releve-signe': if(releveInverserSigne(id)){ releveFocusApres = null; await render(); document.querySelector(`[data-action="releve-signe"][data-id="${id}"]`)?.focus(); } break;
+    case 'releve-filtre':
+      releveFiltre.conf = releveFiltre.conf===el.dataset.conf ? '' : el.dataset.conf;
+      releveAffichees = RELEVE_TRANCHE;
+      await render();
+      document.querySelector(`[data-action="releve-filtre"][data-conf="${releveFiltre.conf}"]`)?.focus();
+      break;
+    case 'releve-filtre-effacer':
+      releveFiltre = {q:'', conf:''}; releveAffichees = RELEVE_TRANCHE;
+      await render(); document.getElementById('releve-recherche')?.focus();
+      break;
+    case 'releve-valider-affichees': await releveValider(releveLignesFiltrees((releveSession?.lignes||[]).filter(l=>l.etat==='attente')).map(l=>l.id)); break;
+    case 'releve-valider-groupe': await releveValider(releveLignesFiltrees((releveSession?.lignes||[]).filter(l=>l.etat==='attente')).filter(l=>releveGroupeDe(l)===el.dataset.groupe).map(l=>l.id)); break;
     case 'releve-valider-surs': await releveValider((releveSession?.lignes||[]).filter(l=>l.etat==='attente' && l.confiance==='sur').map(l=>l.id)); break;
     case 'releve-valider-tout': await releveValider((releveSession?.lignes||[]).filter(l=>l.etat==='attente').map(l=>l.id)); break;
     case 'releve-plus': {
@@ -4597,6 +4629,8 @@ let releveFocusApres = null;     // index de la ligne à focaliser après un re-
 // milliers d'éléments et la page ne suit plus.
 const RELEVE_TRANCHE = 50;
 let releveAffichees = RELEVE_TRANCHE;
+let releveFiltre = {q:'', conf:''}; // lignes à vérifier : recherche et badge (vide = tous)
+let releveReglesQ = '';              // « Ce que Solde a appris » : recherche
 
 function releveModele(creer){
   const me = currentUser();
@@ -5110,6 +5144,7 @@ async function releveDemarrer(nom, res){
   releveSession = {nom, format: res.format, sig: res.sig||null, csv: res.csv||null, colonnes: res.colonnes||null,
     formatConnu: !!(res.sig && modele.formats[res.sig]), lignes, debut: new Date().toISOString()};
   releveAffichees = RELEVE_TRANCHE;
+  releveFiltre = {q:'', conf:''};
   releveSauverSession();
   await render();
   toast(`${lignes.length} opération${lignes.length>1?'s':''} à vérifier`);
@@ -5464,13 +5499,91 @@ function releveApprentissageHTML(modele){
       <dt>Formats de fichier</dt><dd>${nbFormats}</dd>
       ${recente!==null ? `<dt>Suggestions justes</dt><dd>${Math.round(recente*100)} %${debut!==null ? ` <span class="side-note">(${Math.round(debut*100)} % au début)</span>` : ''}</dd>` : ''}
     </dl>
-    ${regles.length ? `<ul class="rl-rules">${regles.slice(0,60).map(([cle,r])=>`<li>
+    ${regles.length ? `<input type="search" class="rl-ctl rl-recherche" id="releve-regles-recherche" value="${attrEsc(releveReglesQ)}" placeholder="Chercher un commerçant ou une catégorie…" aria-label="Chercher dans ce que Solde a appris" autocomplete="off" enterkeyhint="search">
+    <div id="rl-regles">${releveReglesHTML(modele)}</div>` : ''}
+  </div>`;
+}
+// Commerçants appris, regroupés par catégorie (rentrées et lignes ignorées à part).
+function releveReglesHTML(modele){
+  const q = releveNorm(releveReglesQ);
+  const groupeDe = r => r.type==='ignorer' ? 'Ne pas importer' : `${r.categorie||'Sans catégorie'}${r.type==='revenu' ? ' · rentrées' : ''}`;
+  const regles = Object.entries(modele.regles)
+    .filter(([cle,r])=>!q || q.split(/\s+/).every(m=>[cle, r.libelle, r.categorie, groupeDe(r)].some(c=>releveNorm(c).includes(m))))
+    .sort((a,b)=>String(a[1].libelle||releveJoli(a[0])).localeCompare(String(b[1].libelle||releveJoli(b[0])),'fr'));
+  if(!regles.length) return `<div class="empty-line">Aucun commerçant appris ne correspond à « ${esc(releveReglesQ)} ».</div>`;
+  const m = new Map();
+  regles.forEach(e=>{ const g = groupeDe(e[1]); if(!m.has(g)) m.set(g, []); m.get(g).push(e); });
+  const rang = g => g==='Ne pas importer' ? 2 : /rentrées$/.test(g) ? 1 : 0;
+  return [...m.entries()].sort((a,b)=>rang(a[0])-rang(b[0]) || a[0].localeCompare(b[0],'fr')).map(([g, es])=>`<section class="rl-groupe" aria-label="${attrEsc(g)}">
+    <div class="rl-groupe-head"><h3>${esc(g)}</h3><span class="side-note">${fmtCount(es.length, 'commerçant', 'commerçants')}</span></div>
+    <ul class="rl-rules">${es.map(([cle,r])=>`<li>
       <span class="rl-rule-key">${esc(cle)}</span>
-      <span class="rl-rule-val">${r.type==='ignorer' ? '<span class="nil">ne pas importer</span>' : `${esc(r.libelle||releveJoli(cle))} · ${esc(r.categorie||'sans catégorie')}${r.type==='revenu'?' · rentrée':''}${r.abo?' · abonnement':''}`}</span>
+      <span class="rl-rule-val">${r.type==='ignorer' ? '<span class="nil">ne pas importer</span>' : `${esc(r.libelle||releveJoli(cle))}${r.abo?' · abonnement':''}`}</span>
       <span class="side-note">${r.n>1 ? r.n+' fois' : '1 fois'}</span>
       <button class="icon-btn del" data-action="releve-oublier" data-cle="${attrEsc(cle)}" aria-label="Oublier ${attrEsc(cle)}">${icon('trash')}</button>
-    </li>`).join('')}</ul>${regles.length>60 ? `<div class="field-note">Et ${regles.length-60} autres.</div>` : ''}` : ''}
+    </li>`).join('')}</ul></section>`).join('');
+}
+/* ---------- Filtrer, regrouper et chercher ---------- */
+// Badge d'une ligne, tel qu'affiché (« Déjà suivie » à part).
+function releveBadge(l){ return l.suivi ? 'suivi' : RELEVE_BADGES[l.confiance] ? l.confiance : 'nouveau'; }
+const RELEVE_FILTRES = [{conf:'sur', label:'Reconnues'}, {conf:'appris', label:'Apprises'}, {conf:'devine', label:'Devinées'}, {conf:'nouveau', label:'Nouvelles'}, {conf:'suivi', label:'Déjà suivies'}];
+function releveNorm(t){ return releveSansAccents(t).toLowerCase().trim(); }
+// Une recherche trouve le libellé, le texte de la banque, la catégorie, le commentaire ou le montant.
+function releveCorrespond(l, q){
+  if(!q) return true;
+  const montant = releveMontantSaisie(l.montant);
+  const champs = [l.v.libelle, l.brut, l.v.categorie, l.v.notes, montant, montant.replace(',', '.')];
+  return releveNorm(q).split(/\s+/).every(m=>champs.some(c=>releveNorm(c).includes(m)));
+}
+function releveLignesFiltrees(attente){
+  return attente.filter(l=>(!releveFiltre.conf || releveBadge(l)===releveFiltre.conf) && releveCorrespond(l, releveFiltre.q));
+}
+// Les lignes sont regroupées par catégorie (« Ne pas importer » et « Sans catégorie » en dernier),
+// par date dans chaque groupe.
+function releveGroupeDe(l){ return l.v.type==='ignorer' ? 'Ne pas importer' : (String(l.v.categorie||'').trim() || 'Sans catégorie'); }
+function releveGroupes(lignes){
+  const m = new Map();
+  lignes.forEach(l=>{ const g = releveGroupeDe(l); if(!m.has(g)) m.set(g, []); m.get(g).push(l); });
+  const rang = g => g==='Ne pas importer' ? 2 : g==='Sans catégorie' ? 1 : 0;
+  return [...m.entries()].sort((a,b)=>rang(a[0])-rang(b[0]) || a[0].localeCompare(b[0],'fr'))
+    .map(([nom, ls])=>({nom, lignes: ls.sort((a,b)=>a.date.localeCompare(b.date))}));
+}
+function releveFiltresHTML(attente){
+  const nb = c => attente.filter(l=>releveBadge(l)===c).length;
+  const chips = RELEVE_FILTRES.filter(f=>nb(f.conf)).map(f=>`<button type="button" class="chip rl-chip" data-action="releve-filtre" data-conf="${f.conf}" aria-pressed="${releveFiltre.conf===f.conf}">${f.label}<span class="amt">${nb(f.conf)}</span></button>`).join('');
+  return `<div class="rl-filtres">
+    <input type="search" class="rl-ctl rl-recherche" id="releve-recherche" value="${attrEsc(releveFiltre.q)}" placeholder="Chercher un libellé, une catégorie, un montant…" aria-label="Chercher dans les lignes à vérifier" autocomplete="off" enterkeyhint="search">
+    <div class="chips" role="group" aria-label="Filtrer par badge"><button type="button" class="chip rl-chip" data-action="releve-filtre" data-conf="" aria-pressed="${!releveFiltre.conf}">Toutes<span class="amt">${attente.length}</span></button>${chips}</div>
   </div>`;
+}
+function releveLignesHTML(attente){
+  const filtrees = releveLignesFiltrees(attente);
+  const filtre = !!(releveFiltre.q || releveFiltre.conf);
+  if(!filtrees.length) return `<div class="empty-line">Aucune ligne ne correspond${releveFiltre.q ? ` à « ${esc(releveFiltre.q)} »` : ''}. <button class="link" data-action="releve-filtre-effacer">Tout afficher</button></div>`;
+  const ordre = releveGroupes(filtrees);
+  const visibles = new Set(ordre.flatMap(g=>g.lignes).slice(0, releveAffichees).map(l=>l.id));
+  const groupes = ordre.map(g=>({...g, vis: g.lignes.filter(l=>visibles.has(l.id))})).filter(g=>g.vis.length);
+  return `${filtre ? `<div class="rl-filtre-res"><span class="side-note">${fmtCount(filtrees.length, 'ligne affichée', 'lignes affichées')} sur ${attente.length}</span>
+      ${filtrees.length>1 ? `<button class="btn btn-ghost btn-sm" data-action="releve-valider-affichees">${icon('check')}Valider les ${filtrees.length} affichées</button>` : ''}</div>` : ''}
+    ${groupes.map(g=>`<section class="rl-groupe" aria-label="${attrEsc(g.nom)}">
+      <div class="rl-groupe-head"><h3>${esc(g.nom)}</h3><span class="side-note">${fmtCount(g.lignes.length, 'ligne', 'lignes')}</span>
+        ${g.lignes.length>1 ? `<button class="btn btn-text btn-sm" data-action="releve-valider-groupe" data-groupe="${attrEsc(g.nom)}">${g.nom==='Ne pas importer' ? 'Tout confirmer' : 'Tout valider'}</button>` : ''}</div>
+      <ul class="rl-list">${g.vis.map(l=>releveLigneHTML(l)).join('')}</ul>
+    </section>`).join('')}
+    ${filtrees.length>releveAffichees ? `<div class="rl-plus">
+      <button class="btn btn-ghost btn-sm" data-action="releve-plus">${icon('chevD')}Afficher ${Math.min(RELEVE_TRANCHE, filtrees.length-releveAffichees)} lignes de plus</button>
+      <span class="side-note">${releveAffichees} sur ${filtrees.length} affichées</span>
+    </div>` : ''}`;
+}
+// Pendant la frappe, seule la liste est redessinée : le champ de recherche garde le focus.
+function releveRedessinerLignes(){
+  const el = document.getElementById('rl-lignes');
+  if(!el || !releveSession) return;
+  el.innerHTML = releveLignesHTML(releveSession.lignes.filter(l=>l.etat==='attente'));
+}
+function releveRedessinerRegles(){
+  const el = document.getElementById('rl-regles');
+  if(el) el.innerHTML = releveReglesHTML(releveModele(false));
 }
 function renderReleve(){
   releveChargerSession();
@@ -5514,11 +5627,7 @@ function renderReleve(){
       </div>
       ${validees+ignorees ? `<div class="field-note" style="margin:-4px 0 12px;">${fmtCount(validees, 'ajoutée', 'ajoutées')} · ${fmtCount(ignorees, 'ignorée', 'ignorées')}</div>` : ''}
       ${s.csv ? releveColonnesHTML(s) : ''}
-      ${attente.length ? `<ul class="rl-list">${attente.slice(0, releveAffichees).map(l=>releveLigneHTML(l)).join('')}</ul>
-        ${attente.length>releveAffichees ? `<div class="rl-plus">
-          <button class="btn btn-ghost btn-sm" data-action="releve-plus">${icon('chevD')}Afficher ${Math.min(RELEVE_TRANCHE, attente.length-releveAffichees)} lignes de plus</button>
-          <span class="side-note">${releveAffichees} sur ${attente.length} affichées</span>
-        </div>` : ''}`
+      ${attente.length ? `${releveFiltresHTML(attente)}<div id="rl-lignes">${releveLignesHTML(attente)}</div>`
         : emptyRow('Toutes les lignes ont été traitées.', 'releve-fermer', 'Importer un autre relevé')}
     </div>
     ${releveApprentissageHTML(modele)}`;

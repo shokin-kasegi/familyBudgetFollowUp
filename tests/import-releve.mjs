@@ -371,6 +371,84 @@ try{
     await ctx.close();
   }
 
+  console.log('\n— Chercher, filtrer, regrouper par catégorie');
+  {
+    const {ctx, page, errors} = await openApp(browser, {width:1280, height:900});
+    await importer(page, 'releve-filtres.csv', ['Date;Libellé;Montant',
+      '02/10/2026;CB CARREFOUR MARKET;-45,30',
+      '03/10/2026;CB SNCF VOYAGES;-60,00',
+      '04/10/2026;CB CARREFOUR CITY;-12,00',
+      '05/10/2026;VIR SALAIRE ACME;2000,00'].join('\n'));
+    const vue = () => page.evaluate(()=>({
+      groupes: [...document.querySelectorAll('#rl-lignes .rl-groupe')].map(g=>({nom:g.querySelector('h3').innerText, cats:[...g.querySelectorAll('.rl-row')].map(r=>{ const t = r.querySelector('[data-rl-champ="type"]').value; return t==='ignorer' ? 'Ne pas importer' : (r.querySelector('[data-rl-champ="categorie"]')?.value || 'Sans catégorie'); })})),
+      libs: [...document.querySelectorAll('#rl-lignes .rl-row')].map(r=>r.querySelector('.rl-brut').innerText),
+    }));
+    {
+      const v = await vue();
+      ok(v.libs.length===4 && v.groupes.length>=1 && v.groupes.every(g=>g.cats.every(c=>c===g.nom)), `lignes regroupées par catégorie (${JSON.stringify(v.groupes)})`);
+    }
+    await page.fill('#releve-recherche', 'carrefour');
+    await page.waitForTimeout(300);
+    {
+      const v = await vue();
+      ok(v.libs.length===2 && v.libs.every(t=>/CARREFOUR/.test(t)), `recherche « carrefour » : 2 lignes (${v.libs})`);
+      ok(await page.evaluate(()=>document.activeElement?.id==='releve-recherche'), 'la recherche garde le focus pendant la frappe');
+      ok(/2 lignes affichées sur 4/.test(await page.innerText('#rl-lignes')), 'nombre de lignes affichées');
+    }
+    await page.fill('#releve-recherche', '60,00');
+    await page.waitForTimeout(300);
+    ok((await vue()).libs.join()==='CB SNCF VOYAGES', 'recherche par montant');
+    await page.fill('#releve-recherche', 'introuvable');
+    await page.waitForTimeout(300);
+    ok(/Aucune ligne ne correspond/.test(await page.innerText('#rl-lignes')), 'aucune ligne : message');
+    await page.click('[data-action="releve-filtre-effacer"]');
+    await page.waitForTimeout(250);
+    ok((await vue()).libs.length===4 && await page.inputValue('#releve-recherche')==='', '« Tout afficher » efface la recherche');
+    {
+      const chips = await page.$$eval('[data-action="releve-filtre"]', b=>b.map(x=>({conf:x.dataset.conf, n:Number(x.querySelector('.amt').innerText)})));
+      const c = chips.find(x=>x.conf && x.n>0);
+      await page.click(`[data-action="releve-filtre"][data-conf="${c.conf}"]`);
+      await page.waitForTimeout(250);
+      const badges = await page.$$eval('#rl-lignes .rl-row .rl-meta .pill', p=>p.map(x=>x.innerText));
+      ok(badges.length===c.n && new Set(badges).size===1, `filtre par badge « ${c.conf} » : ${c.n} lignes (${badges})`);
+      ok(await page.$eval(`[data-action="releve-filtre"][data-conf="${c.conf}"]`, b=>b.getAttribute('aria-pressed'))==='true', 'le filtre actif est signalé');
+      await page.click(`[data-action="releve-filtre"][data-conf="${c.conf}"]`);
+      await page.waitForTimeout(250);
+      ok((await vue()).libs.length===4, 'un second clic retire le filtre');
+    }
+    await page.fill('#releve-recherche', 'carrefour');
+    await page.waitForTimeout(300);
+    if(SHOTS) await page.screenshot({path:path.join(SHOTS,'releve-filtres.png'), fullPage:true});
+    await page.click('[data-action="releve-valider-affichees"]');
+    await page.waitForTimeout(400);
+    const ajoutees = await page.evaluate(()=>state.depenses.filter(d=>d.source==='releve').map(d=>d.libelle));
+    ok(ajoutees.length===2, `« Valider les affichées » ne valide que les lignes trouvées (${ajoutees})`);
+    await page.click('[data-action="releve-filtre-effacer"]');
+    await page.waitForTimeout(250);
+    ok((await vue()).libs.length===2, 'les autres lignes restent à vérifier');
+    // Groupe : « Tout valider » valide les lignes de cette catégorie seulement.
+    {
+      const g = await page.$eval('#rl-lignes .rl-groupe', x=>({nom:x.querySelector('h3').innerText, n:x.querySelectorAll('.rl-row').length}));
+      const btn = await page.$('#rl-lignes .rl-groupe [data-action="releve-valider-groupe"]');
+      ok(!btn || g.n>1, 'bouton du groupe seulement à partir de 2 lignes');
+    }
+    // Ce que Solde a appris : regroupé par catégorie, avec recherche.
+    {
+      const groupes = await page.$$eval('#rl-regles .rl-groupe h3', h=>h.map(x=>x.innerText));
+      ok(groupes.length>=1, `appris : regroupé par catégorie (${groupes})`);
+      await page.fill('#releve-regles-recherche', 'carrefour');
+      await page.waitForTimeout(300);
+      const regles = await page.$$eval('#rl-regles .rl-rules li', l=>l.map(x=>x.innerText));
+      ok(regles.length>=1 && regles.every(t=>/carrefour/i.test(t)), `appris : recherche « carrefour » (${regles.length})`);
+      ok(await page.evaluate(()=>document.activeElement?.id==='releve-regles-recherche'), 'appris : la recherche garde le focus');
+      await page.fill('#releve-regles-recherche', 'zzzz');
+      await page.waitForTimeout(300);
+      ok(/Aucun commerçant appris ne correspond/.test(await page.innerText('#rl-regles')), 'appris : aucun résultat');
+    }
+    ok(errors.length===0, `erreurs console : ${errors.join(' | ')}`);
+    await ctx.close();
+  }
+
   console.log('\n— 390 px');
   {
     const {ctx, page, errors} = await openApp(browser, {width:390, height:844});
