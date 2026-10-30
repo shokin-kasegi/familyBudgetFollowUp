@@ -773,6 +773,10 @@ button,a,[role="button"]{touch-action:manipulation;-webkit-tap-highlight-color:t
 }
 
 /* Import de relevé : zone de dépôt, lignes à valider, règles apprises. */
+.rl-soldes{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:0 0 14px;padding:12px 14px;border:1px solid var(--c-over);border-radius:12px;font-size:14px;}
+.rl-soldes p{margin:0;flex:1 1 280px;}
+.rl-soldes.is-ok{gap:8px;flex-wrap:nowrap;border-color:var(--line);color:var(--muted);}
+.rl-soldes.is-ok svg{width:16px;height:16px;flex:none;stroke:var(--c-reste);fill:none;stroke-width:2;}
 .rl-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:150px;padding:24px 16px;border:1.5px dashed var(--line-strong);border-radius:var(--r-card);text-align:center;cursor:pointer;transition:background-color .15s ease,border-color .15s ease;}
 .rl-drop svg{width:28px;height:28px;stroke:var(--muted);fill:none;stroke-width:1.6;}
 .rl-drop-t{font-weight:600;font-size:15px;}
@@ -4290,6 +4294,14 @@ async function handleAction(action, id, el){
     case 'releve-valider-groupe': await releveValider(releveLignesFiltrees((releveSession?.lignes||[]).filter(l=>l.etat==='attente')).filter(l=>releveGroupeDe(l)===el.dataset.groupe).map(l=>l.id)); break;
     case 'releve-valider-surs': await releveValider((releveSession?.lignes||[]).filter(l=>l.etat==='attente' && l.confiance==='sur').map(l=>l.id)); break;
     case 'releve-valider-tout': await releveValider((releveSession?.lignes||[]).filter(l=>l.etat==='attente').map(l=>l.id)); break;
+    case 'releve-regul': {
+      const l = releveAjouterRegul(releveSession);
+      if(!l) break;
+      releveSauverSession(); await render();
+      document.querySelector(`.rl-row[data-rl-row="${l.id}"] [data-action="releve-valider"]`)?.focus();
+      toast('Ligne de régulation ajoutée : vérifie-la puis valide');
+      break;
+    }
     case 'releve-plus': {
       releveAffichees += RELEVE_TRANCHE;
       releveFocusApres = releveAffichees - RELEVE_TRANCHE; // le focus va sur la première ligne ajoutée
@@ -5057,6 +5069,33 @@ function releveOrdre(valeurs){
   return mdy>dmy ? 'mdy' : 'dmy';
 }
 
+/* ---------- Soldes annoncés par le relevé ---------- */
+// « Ancien solde au 30/09/2026 1 234,56 », « Solde précédent », « Nouveau solde
+// débiteur au 31/10 » ou « Solde de clôture » : le relevé donne le solde du
+// compte au début et à la fin de la période. En fin d'import, le premier plus
+// les opérations doit donner le second (releveControleSoldes).
+const RELEVE_SOLDE_FIN = /\b(nouveau|nouvel|final|cloture|fin|actuel)\b/;
+const RELEVE_SOLDE_DEBUT = /\b(ancien|precedent|initial|ouverture|debut|anterieur|report)/;
+// texte : la ligne entière ; montant : le dernier montant de la ligne, déjà signé
+// s'il était sous la colonne Débit. Une opération qui parle de solde (« VIR SOLDE
+// DE TOUT COMPTE ») n'est pas une ligne de solde : le libellé doit commencer par lui.
+function releveSoldeLigne(texte, montant){
+  const n = releveNormEntete(texte).replace(/^(\d{1,2}[\/.-]\d{1,2}(?:[\/.-]\d{2,4})?\s+)+/, '');
+  if(!/^((ancien|nouveau|nouvel)\s+)?solde\b/.test(n) || /tout compte/.test(n) || !isFinite(montant)) return null;
+  const m = /\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b/.exec(n) || /\b\d{1,2} [a-z]{3,9}\.? \d{4}\b/.exec(n);
+  return {quand: RELEVE_SOLDE_FIN.test(n) ? 'fin' : RELEVE_SOLDE_DEBUT.test(n) ? 'debut' : null,
+    montant: r2(/debiteur/.test(n) ? -Math.abs(montant) : montant), date: m ? releveDate(m[0], 'dmy') : null};
+}
+// Le premier solde de début et le dernier solde de fin (un relevé de plusieurs
+// pages répète le « solde reporté ») ; à défaut de mot-clé, « Solde au … » le
+// plus ancien et le plus récent.
+function releveSoldesRetenir(trouves){
+  let debut = trouves.find(t=>t.quand==='debut'), fin = [...trouves].reverse().find(t=>t.quand==='fin');
+  const dates = trouves.filter(t=>!t.quand && t.date).sort((a,b)=>a.date.localeCompare(b.date));
+  if(dates.length>=2 && dates[0].date!==dates[dates.length-1].date){ debut = debut || dates[0]; fin = fin || dates[dates.length-1]; }
+  return debut && fin ? {debut: debut.montant, fin: fin.montant, dateFin: fin.date || null} : null;
+}
+
 /* ---------- Formats de fichier ---------- */
 function releveDecoder(buffer){
   let texte;
@@ -5102,7 +5141,10 @@ function releveCsvStructure(texte){
   const iEntete = rows.findIndex((r,i)=>r.some(c=>/^date/.test(releveNormEntete(c))) && r.some(c=>/libelle|label|montant|amount|debit|credit|description/.test(releveNormEntete(c))) && rows.slice(i+1).some(estDonnee));
   const premiere = iEntete>=0 ? rows.findIndex((r,i)=>i>iEntete && estDonnee(r)) : rows.findIndex(estDonnee);
   if(premiere<0) return null;
-  const donnees = rows.slice(premiere).filter(r=>r.some(releveEstDateCsv));
+  // Les lignes « Solde au … » annoncent le solde du compte : ce ne sont pas des opérations.
+  const soldeDe = (r, montant) => { const c = r.find(c=>releveSoldeLigne(c, 0)); return c ? releveSoldeLigne([c, ...r.filter(x=>x!==c)].join(' '), montant) : null; };
+  const soldes = rows.map(r=>soldeDe(r, releveMontant(r.filter(releveEstMontant).pop()))).filter(Boolean);
+  const donnees = rows.slice(premiere).filter(r=>r.some(releveEstDateCsv) && !soldeDe(r, 0));
   const freq = {}; donnees.forEach(r=>{ freq[r.length] = (freq[r.length]||0)+1; });
   const nbCol = Number(Object.entries(freq).sort((a,b)=>b[1]-a[1])[0][0]);
   let entete = iEntete>=0 ? rows[iEntete] : null;
@@ -5110,16 +5152,17 @@ function releveCsvStructure(texte){
     if(!rows[i].some(releveEstDateCsv) && Math.abs(rows[i].length-nbCol)<=1 && rows[i].filter(Boolean).length>=2){ entete = rows[i]; break; }
   }
   const sig = entete ? 'csv:'+entete.map(releveNormEntete).join('|') : 'csv:sans-entete:'+nbCol;
-  return {rows: donnees, entete, nbCol, sig};
+  return {rows: donnees, entete, nbCol, sig, soldes};
 }
 // Devine les colonnes : d'abord par les noms d'en-tête, puis par le contenu.
 function releveCsvDeviner(st){
   const {rows, entete, nbCol} = st;
-  const col = {date:-1, libelle:-1, libelle2:-1, montant:-1, debit:-1, credit:-1};
+  const col = {date:-1, libelle:-1, libelle2:-1, montant:-1, debit:-1, credit:-1, solde:-1};
   (entete||[]).forEach((h,i)=>{
     const n = releveNormEntete(h);
     if(/date/.test(n)){ if(col.date<0 && !/valeur/.test(n)) col.date = i; }
-    else if(/^type|categor|devise|currency|solde|balance/.test(n)){ /* ni libellé ni montant de l'opération */ }
+    else if(/solde|balance/.test(n)){ if(col.solde<0) col.solde = i; } // solde après l'opération : sert au contrôle des soldes
+    else if(/^type|categor|devise|currency/.test(n)){ /* ni libellé ni montant de l'opération */ }
     else if(/debit|sortie|depense/.test(n)){ if(col.debit<0) col.debit = i; }
     else if(/credit|entree|recette/.test(n)){ if(col.credit<0) col.credit = i; }
     else if(/montant|amount|somme|^eur|euros?$|valeur/.test(n)){ if(col.montant<0) col.montant = i; }
@@ -5141,7 +5184,7 @@ function releveCsvDeviner(st){
   if(col.montant>=0){ col.debit = col.credit = -1; }
   if(col.libelle<0){
     const longueur = i => rows.reduce((s,r)=>s+((r[i]||'').length),0);
-    col.libelle = [...Array(nbCol).keys()].filter(i=>![col.date,col.montant,col.debit,col.credit].includes(i) && part(i, releveEstMontant)<0.5)
+    col.libelle = [...Array(nbCol).keys()].filter(i=>![col.date,col.montant,col.debit,col.credit,col.solde].includes(i) && part(i, releveEstMontant)<0.5)
       .sort((a,b)=>longueur(b)-longueur(a))[0] ?? -1;
   }
   return col;
@@ -5158,6 +5201,17 @@ function releveCsvOps(st, col){
     }
     return {date: releveDate(r[col.date], ordre), libelle: lib, montant};
   });
+}
+// Colonne « Solde » d'un CSV (solde après chaque opération) : le solde de début
+// est celui de la première opération moins son montant. Les banques listent
+// les opérations dans un sens ou dans l'autre.
+function releveCsvSoldeColonne(rows, col, ops){
+  if(!(col.solde>=0)) return null;
+  const l = rows.map((r,i)=>({date: ops[i].date, montant: ops[i].montant, solde: releveMontant(r[col.solde])}))
+    .filter(x=>x.date && isFinite(x.montant) && isFinite(x.solde));
+  if(!l.length) return null;
+  if(l[0].date > l[l.length-1].date) l.reverse();
+  return {debut: r2(l[0].solde - l[0].montant), fin: r2(l[l.length-1].solde), dateFin: l[l.length-1].date, colonne: true};
 }
 function releveHtmlEntites(s){ return String(s||'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;|&#39;/g,"'"); }
 function releveOfx(texte){
@@ -5258,6 +5312,8 @@ function releveDepuisLignes(lignes, format, colonnesApprises){
   let colonnes = colonnesApprises || null, colonnesVues = null;
   const ops = [];
   let dernier = null, dernierIndex = -2, horsCompte = false;
+  const soldes = [];
+  const posDe = i => ({g: i.x, d: i.x + i.w});
   lignes.forEach((items, idx)=>{
     const texte = items.map(i=>i.str).join(' ').replace(/\s+/g,' ').trim();
     const norm = releveNormEntete(texte);
@@ -5277,6 +5333,12 @@ function releveDepuisLignes(lignes, format, colonnesApprises){
     }
     const md = RELEVE_DATE_DEBUT.exec(texte + ' ');
     const argent = items.filter(i=>RELEVE_ARGENT.test(i.str));
+    if(argent.length){
+      // Ligne de solde : son montant est le dernier de la ligne, négatif sous la colonne Débit.
+      const a = argent[argent.length-1];
+      const solde = releveSoldeLigne(texte, releveColonneDe(colonnes, posDe(a))==='debit' ? -Math.abs(releveMontant(a.str)) : releveMontant(a.str));
+      if(solde){ soldes.push(solde); dernier = null; return; }
+    }
     if(!md){
       // Suite du libellé de l'opération précédente (libellés sur deux lignes).
       if(dernier && dernierIndex===idx-1 && !argent.length && texte.length<70 && !RELEVE_HORS_OPS.test(texte)){ dernier.libelle += ' ' + texte; }
@@ -5287,7 +5349,6 @@ function releveDepuisLignes(lignes, format, colonnesApprises){
     const sansAnnee = /^\d{1,2}[\/.-]\d{1,2}$|^\d{1,2} [A-Za-zÀ-ÿ]{3,9}\.?$/.test(brut);
     if(date && sansAnnee && Number(date.slice(5,7)) > moisFin + 1) date = releveDate(brut, ordre, anneeFin-1); // relevé à cheval sur deux années
     if(!date || !argent.length) return;
-    const posDe = i => ({g: i.x, d: i.x + i.w});
     // Sans colonnes (ou hors d'elles) : le premier montant après le libellé (le solde, s'il y en a un, vient après).
     const choisi = argent.find(i=>releveColonneDe(colonnes, posDe(i))!=='solde') || argent[0];
     const pos = posDe(choisi), signe = releveSigneColonne(colonnes, pos);
@@ -5306,7 +5367,7 @@ function releveDepuisLignes(lignes, format, colonnesApprises){
     dernier = {date, libelle, montant, signeIncertain, ...(explicite ? {} : {pos})}; dernierIndex = idx;
     ops.push(dernier);
   });
-  return {format, ops, sig: releveSigTexte(lignes), colonnes: colonnesVues};
+  return {format, ops, sig: releveSigTexte(lignes), colonnes: colonnesVues, soldes: releveSoldesRetenir(soldes)};
 }
 
 /* ---------- Suggestions ---------- */
@@ -5485,7 +5546,10 @@ function releveAnalyserTexte(texte, modele){
   if(st && st.nbCol>=3){
     const appris = modele.formats[st.sig];
     const col = appris && appris.colonnes ? {...appris.colonnes} : releveCsvDeviner(st);
-    return {format:'csv', ops: releveCsvOps(st, col), sig: st.sig, csv:{rows: st.rows, entete: st.entete, nbCol: st.nbCol, col}, formatConnu: !!appris};
+    if(col.solde===undefined) col.solde = releveCsvDeviner(st).solde; // format appris avant le contrôle des soldes
+    const ops = releveCsvOps(st, col);
+    return {format:'csv', ops, sig: st.sig, csv:{rows: st.rows, entete: st.entete, nbCol: st.nbCol, col}, formatConnu: !!appris,
+      soldes: releveSoldesRetenir(st.soldes) || releveCsvSoldeColonne(st.rows, col, ops)};
   }
   const lignes = releveTexteEnLignes(texte);
   const appris = modele.formats[releveSigTexte(lignes)];
@@ -5495,7 +5559,7 @@ async function releveDemarrer(nom, res){
   const lignes = res ? releveCreerLignes(res.ops||[]) : [];
   if(!lignes.length){ toast('Aucune opération trouvée — essaie l’export CSV ou OFX de ta banque'); return; }
   const modele = releveModele(false);
-  releveSession = {nom, format: res.format, sig: res.sig||null, csv: res.csv||null, colonnes: res.colonnes||null,
+  releveSession = {nom, format: res.format, sig: res.sig||null, csv: res.csv||null, colonnes: res.colonnes||null, soldes: res.soldes||null,
     formatConnu: !!(res.sig && modele.formats[res.sig]), lignes, debut: new Date().toISOString()};
   releveAffichees = RELEVE_TRANCHE;
   releveFiltre = {q:'', conf:'', tri:''};
@@ -5514,8 +5578,9 @@ async function releveChangerColonne(el){
     else{ col.debit = col.montant>=0 ? col.montant : 0; col.credit = Math.min(col.debit+1, s.csv.nbCol-1); col.montant = -1; }
   } else col[champ] = val;
   s.csv.col = col;
-  const traitees = s.lignes.filter(l=>l.etat!=='attente');
-  s.lignes = [...traitees, ...releveCreerLignes(releveCsvOps(s.csv, col))];
+  const traitees = s.lignes.filter(l=>l.etat!=='attente'), ops = releveCsvOps(s.csv, col);
+  s.lignes = [...traitees, ...releveCreerLignes(ops)];
+  if(!s.soldes || s.soldes.colonne) s.soldes = releveCsvSoldeColonne(s.csv.rows, col, ops);
   const modele = releveModele(true);
   modele.formats[s.sig] = {...(modele.formats[s.sig]||{}), colonnes: col, nom: s.nom, maj: new Date().toISOString().slice(0,10)};
   s.formatConnu = true;
@@ -5638,6 +5703,7 @@ function releveApprendre(modele, l){
   modele.historique.push(juste ? 1 : 0);
   if(modele.historique.length>300) modele.historique = modele.historique.slice(-300);
   if(l.suivi && v.type==='ignorer') return; // ignorée parce que déjà suivie ailleurs : rien à retenir sur ce commerçant
+  if(l.regul) return; // régularisation de solde : pas un commerçant
   const prev = modele.regles[l.cle], maj = new Date().toISOString().slice(0,10);
   const decision = v.type==='ignorer' ? {type:'ignorer', maj} : {type:v.type, libelle:(v.libelle||'').trim(), categorie:v.categorie||'', ...(v.type==='depense' && v.abo ? {abo:true} : {}), maj};
   const memeQue = r => r && r.type===v.type && (v.type==='ignorer' || r.categorie===v.categorie);
@@ -5747,7 +5813,7 @@ function releveRafraichirAttente(s){
   let n = 0;
   s.lignes.forEach(l=>{
     l.maj = false;
-    if(l.etat!=='attente' || l.suivi || l.aboPrevId || l.aboChoisi || l.ppfPrevId || l.ppfChoisi) return;
+    if(l.etat!=='attente' || l.suivi || l.regul || l.aboPrevId || l.aboChoisi || l.ppfPrevId || l.ppfChoisi) return;
     if(RELEVE_CHAMPS_SUGGERES.some(k=>(l.v[k]||'')!==(l.s[k]||''))) return;
     const {cle, confiance, raison, ...valeurs} = releveSuggestion({libelle:l.brut, montant:l.montant, signeIncertain:l.incertain}, modele);
     const change = RELEVE_CHAMPS_SUGGERES.some(k=>(valeurs[k]||'')!==(l.s[k]||''));
@@ -5755,6 +5821,36 @@ function releveRafraichirAttente(s){
     if(change || confiance!==l.confiance){ l.confiance = confiance; l.raison = raison; }
   });
   return n;
+}
+// Contrôle des soldes : solde de début + toutes les opérations du relevé (même
+// celles qu'on n'importe pas : elles ont bien eu lieu sur le compte) = solde de
+// fin. Une régularisation refusée ne compte pas.
+function releveControleSoldes(s){
+  if(!s || !s.soldes) return null;
+  const somme = sumR2(s.lignes.filter(l=>!(l.regul && l.etat==='ignoree')), l=>l.montant);
+  const ecart = r2(s.soldes.fin - s.soldes.debut - somme);
+  return {somme, ecart, ok: Math.abs(ecart)<0.005};
+}
+// Ligne de régularisation : l'écart, à valider (ou non) comme les autres lignes.
+function releveAjouterRegul(s){
+  const c = releveControleSoldes(s); if(!c || c.ok) return null;
+  const type = c.ecart<0 ? 'depense' : 'revenu';
+  const valeurs = {type, libelle:'Régularisation de solde', categorie: releveCategorieDefaut(type), abo:false, ppf:false,
+    notes:`Écart entre les soldes du relevé (${fmtEUR(s.soldes.debut)} → ${fmtEUR(s.soldes.fin)}) et ses opérations`};
+  const l = {id: uid(), date: s.soldes.dateFin || s.lignes.map(x=>x.date).sort().pop(), brut:'Régularisation de solde', montant: c.ecart, cle:'', suivi:false, incertain:false,
+    regul:true, confiance:'sur', raison:'Proposée pour que les soldes du relevé concordent', etat:'attente', s:{...valeurs}, v:{...valeurs}};
+  s.lignes.push(l);
+  return l;
+}
+function releveSoldesHTML(s){
+  const c = releveControleSoldes(s); if(!c) return '';
+  const {debut, fin} = s.soldes;
+  if(c.ok) return `<p class="rl-soldes is-ok">${icon('check')}<span>Soldes cohérents : ${fmtEUR(debut)} au début, ${c.somme<0?'−':'+'}&nbsp;${fmtEUR(Math.abs(c.somme))} d’opérations, ${fmtEUR(fin)} à la fin.</span></p>`;
+  const refusee = s.lignes.some(l=>l.regul && l.etat==='ignoree');
+  return `<div class="rl-soldes" role="status">
+    <p><strong>Les soldes ne concordent pas.</strong> Le relevé passe de ${fmtEUR(debut)} à ${fmtEUR(fin)}, soit ${fmtEUR(r2(fin-debut))}, mais ses opérations font ${fmtEUR(c.somme)} : il manque <strong>${c.ecart<0?'−':'+'}&nbsp;${fmtEUR(Math.abs(c.ecart))}</strong>.</p>
+    ${refusee ? '' : `<button class="btn btn-ghost btn-sm" data-action="releve-regul">${icon('plus')}Ajouter une ligne de régulation</button>`}
+  </div>`;
 }
 function releveRetirerCategorie(type, nom){
   if(!releveSession) return;
@@ -6018,7 +6114,7 @@ function renderReleve(){
       ${validees+ignorees ? `<div class="field-note" style="margin:-4px 0 12px;">${fmtCount(validees, 'ajoutée', 'ajoutées')} · ${fmtCount(ignorees, 'ignorée', 'ignorées')}</div>` : ''}
       ${s.csv ? releveColonnesHTML(s) : ''}
       ${attente.length ? `${releveFiltresHTML(attente)}<div id="rl-lignes">${releveLignesHTML(attente)}</div>`
-        : emptyRow('Toutes les lignes ont été traitées.', 'releve-fermer', 'Importer un autre relevé')}
+        : releveSoldesHTML(s) + emptyRow('Toutes les lignes ont été traitées.', 'releve-fermer', 'Importer un autre relevé')}
     </div>
     ${releveApprentissageHTML(modele)}`;
 }
