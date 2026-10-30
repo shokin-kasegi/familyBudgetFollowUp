@@ -78,7 +78,7 @@ try{
     ok(new Set(d.postes.map(p=>p.color)).size===d.postes.length, 'septembre : une couleur par catégorie');
     const segs = await page.$$eval('.flow .seg:not([data-k="reste"])', s=>s.length);
     ok(segs===4, `barre du revenu : un segment par catégorie (${segs})`);
-    const legende = await page.$$eval('.ychart .legend > span', s=>s.map(x=>x.innerText.trim()));
+    const legende = await page.$$eval('.ychart .legend > *', s=>s.map(x=>x.innerText.trim()));
     ok(legende.includes('Alimentation') && legende.includes('Revenu'), `graphique annuel : légende par catégorie (${legende})`);
     const rects = await page.$$eval('.ychart-host rect.b title', t=>t.map(x=>x.textContent));
     ok(rects.some(t=>/^Transport : /.test(t)), 'graphique annuel : colonnes empilées par catégorie');
