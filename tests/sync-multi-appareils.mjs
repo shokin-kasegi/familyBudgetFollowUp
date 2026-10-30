@@ -8,7 +8,9 @@
    - les saisies du partenaire continuent d'arriver ;
    - un onglet resté ouvert récupère tout seul les changements (sondage) ;
    - un compte supprimé ne réapparaît pas quand un appareil qui en a encore
-     une copie se relance, et sa session y est fermée. */
+     une copie se relance, et sa session y est fermée ;
+   - quand l'admin change le mot de passe d'un compte, les sessions ouvertes
+     de ce compte sont fermées (l'admin, lui, reste connecté). */
 import { createRequire } from 'node:module';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -138,8 +140,27 @@ try{
   await pc.page.evaluate(()=>pollNow());
   ok(has(await localBudget(pc.page),'lina-2'), 'le sondage périodique récupère aussi le budget');
 
-  console.log('\n— Suppression du compte de Lina par l\'admin (PC)');
+  console.log('\n— L\'admin change le mot de passe de Lina (PC)');
   const lina = await device(browser, DEMO.store, 'u-lina'); // appareil de Lina, copie locale du compte
+  ok(await lina.page.evaluate(()=>currentUser()?.id==='u-lina'), 'Lina est connectée sur son appareil');
+  await pc.page.evaluate(async ()=>{ const u = authState.users.find(x=>x.id==='u-lina'); u.salt = randomSalt(); u.passwordHash = await hashPassword('nouveau-mdp', u.salt); await persistAuth(); });
+  await pc.page.waitForTimeout(2200);
+  ok(await pc.page.evaluate(()=>currentUser()?.id==='u-me'), 'l\'admin reste connecté');
+  await lina.page.evaluate(()=>pollNow());
+  await lina.page.waitForLoadState('load'); await lina.page.waitForTimeout(1000);
+  ok(await lina.page.evaluate(()=>!currentUser() && !!document.getElementById('login-form')), 'sur l\'appareil de Lina, la session est fermée : écran de connexion');
+  ok(/mot de passe a été modifié/.test(await lina.page.textContent('#auth-root')), 'Lina voit pourquoi elle doit se reconnecter');
+  await lina.page.evaluate(()=>{ document.getElementById('li-username').value='lina'; document.getElementById('li-pass').value='nouveau-mdp'; document.getElementById('login-form').requestSubmit(); });
+  await lina.page.waitForSelector('#view > *', {timeout:10000});
+  ok(await lina.page.evaluate(()=>currentUser()?.id==='u-lina'), 'Lina se reconnecte avec le nouveau mot de passe');
+
+  console.log('\n— Lina change elle-même son mot de passe : son appareil reste connecté');
+  await lina.page.evaluate(async ()=>{ const u = authState.users.find(x=>x.id==='u-lina'); u.salt = randomSalt(); u.passwordHash = await hashPassword('mdp-lina', u.salt); refreshSessionStamp(); await persistAuth(); });
+  await lina.page.waitForTimeout(2200);
+  await lina.page.evaluate(()=>pollNow()); await lina.page.waitForTimeout(500);
+  ok(await lina.page.evaluate(()=>currentUser()?.id==='u-lina'), 'l\'appareil où le mot de passe a été changé reste connecté');
+
+  console.log('\n— Suppression du compte de Lina par l\'admin (PC)');
   await lina.page.evaluate(()=>{ document.dispatchEvent(new Event('visibilitychange')); });
   await pc.page.evaluate(async ()=>{ supprimerCompte('u-lina'); await Promise.all([persistAuth(), persistSocial(), persist()]); });
   await pc.page.waitForTimeout(2200);

@@ -4376,6 +4376,8 @@ async function handleAction(action, id, el){
         const newPassword = tempPassword || data.password;
         if(newPassword){ u.salt = randomSalt(); u.passwordHash = await hashPassword(newPassword, u.salt); }
         if(tempPassword) u.mustChangePassword = true;
+        // Son propre mot de passe : cet appareil reste connecté, les autres non.
+        if(newPassword && u.id===getSession()?.userId) refreshSessionStamp();
         await persistAuth(); await render();
         // Affiché après la fermeture de ce formulaire (closeModal suit le retour de onSave).
         if(tempPassword) setTimeout(()=>showTempPasswordModal(u, tempPassword), 0);
@@ -4485,6 +4487,10 @@ async function hashPassword(pass, salt){
   return sha256(salt + ':' + pass);
 }
 const REMEMBER_DAYS = 15;
+// Empreinte du mot de passe gardée dans la session : quand le mot de passe
+// change (par l'admin ou depuis un autre appareil), les sessions ouvertes
+// avec l'ancien ne correspondent plus et sont fermées.
+function sessionStamp(u){ return String(u.passwordHash||'').slice(0,16); }
 function getSession(){
   // Session de l'onglet en cours (par défaut, ne survit pas à la fermeture du navigateur)
   try{
@@ -4496,35 +4502,55 @@ function getSession(){
     const raw = localStorage.getItem('budget_session_remember');
     if(raw){
       const parsed = JSON.parse(raw);
-      if(parsed.expiresAt && parsed.expiresAt > Date.now()) return {userId: parsed.userId};
+      if(parsed.expiresAt && parsed.expiresAt > Date.now()) return {userId: parsed.userId, pw: parsed.pw, remember:true, expiresAt: parsed.expiresAt};
       localStorage.removeItem('budget_session_remember'); // expiré
     }
   }catch(e){}
   return null;
 }
+function writeSession(s){
+  try{
+    if(s.remember) localStorage.setItem('budget_session_remember', JSON.stringify({userId:s.userId, pw:s.pw, expiresAt:s.expiresAt}));
+    else sessionStorage.setItem('budget_session', JSON.stringify({userId:s.userId, pw:s.pw}));
+  }catch(e){}
+}
 function setSession(userId, remember){
   try{ sessionStorage.removeItem('budget_session'); }catch(e){}
   try{ localStorage.removeItem('budget_session_remember'); }catch(e){}
-  if(remember){
-    try{ localStorage.setItem('budget_session_remember', JSON.stringify({userId, expiresAt: Date.now() + REMEMBER_DAYS*24*60*60*1000})); }catch(e){}
-  } else {
-    try{ sessionStorage.setItem('budget_session', JSON.stringify({userId})); }catch(e){}
-  }
+  const u = authState.users.find(x=>x.id===userId);
+  writeSession({userId, pw: u ? sessionStamp(u) : undefined, remember:!!remember, expiresAt: Date.now() + REMEMBER_DAYS*24*60*60*1000});
+}
+// Après avoir changé son propre mot de passe : cet appareil reste connecté.
+function refreshSessionStamp(){
+  const s = getSession(); if(!s) return;
+  const u = authState.users.find(x=>x.id===s.userId); if(!u) return;
+  writeSession({...s, pw: sessionStamp(u)});
 }
 function clearSession(){
   try{ sessionStorage.removeItem('budget_session'); }catch(e){}
   try{ localStorage.removeItem('budget_session_remember'); }catch(e){}
   try{ localStorage.removeItem('budget_session'); }catch(e){} // ancienne clé (avant cette mise à jour)
 }
-function currentUser(){ const s = getSession(); return s ? authState.users.find(u=>u.id===s.userId) : null; }
+function currentUser(){
+  const s = getSession(); if(!s) return null;
+  const u = authState.users.find(x=>x.id===s.userId); if(!u) return null;
+  // Session ouverte avant l'ajout de l'empreinte : on la complète une fois.
+  if(s.pw===undefined){ writeSession({...s, pw: sessionStamp(u)}); return u; }
+  return s.pw===sessionStamp(u) ? u : null;
+}
 function isAdmin(){ const u = currentUser(); return u && u.role==='admin'; }
 
 async function renderAuthGate(){
   const root = document.getElementById('auth-root');
   const shell = document.getElementById('shell');
   const session = getSession();
-  const loggedIn = session && authState.users.some(u=>u.id===session.userId);
-  const me = loggedIn ? currentUser() : null;
+  const me = currentUser();
+  const loggedIn = !!me;
+  // Mot de passe changé ailleurs (par l'admin, par exemple) : on ferme la session.
+  if(session && !me && authState.users.some(u=>u.id===session.userId)){
+    clearSession();
+    try{ sessionStorage.setItem('budget_logout_reason', 'Ton mot de passe a été modifié. Reconnecte-toi avec le nouveau.'); }catch(e){}
+  }
   if(me && me.mustChangePassword){
     shell.style.display='none';
     root.style.display='flex';
@@ -4704,6 +4730,10 @@ function renderLoginScreen(){
       </div>
       <button type="button" class="btn btn-ghost" id="ask-account-btn" style="width:100%;justify-content:center;">${icon('plus')}Pas encore de compte ? Demander une création</button>
     </div>`;
+  try{
+    const reason = sessionStorage.getItem('budget_logout_reason');
+    if(reason){ sessionStorage.removeItem('budget_logout_reason'); authError(esc(reason)); }
+  }catch(e){}
   document.getElementById('login-form').onsubmit = async (e)=>{
     e.preventDefault();
     const username = document.getElementById('li-username').value.trim().toLowerCase();
@@ -4749,6 +4779,7 @@ function renderForcePasswordChangeScreen(user){
     user.salt = randomSalt();
     user.passwordHash = await hashPassword(pass, user.salt);
     delete user.mustChangePassword;
+    refreshSessionStamp();
     await persistAuth();
     await boot();
     toast('Mot de passe enregistré');
@@ -6490,9 +6521,13 @@ async function ghPullAuth(){
   }catch(e){ console.error('GitHub pull error (auth)', e); return false; }
 }
 // La session ouverte ici appartient à un compte supprimé depuis un autre appareil : on déconnecte.
+// Idem si son mot de passe a été changé ailleurs : il faut se reconnecter.
 function sessionRevoquee(){
   const s = getSession();
-  if(!s || authState.users.some(u=>u.id===s.userId)) return false;
+  if(!s || currentUser()) return false;
+  if(authState.users.some(u=>u.id===s.userId)){
+    try{ sessionStorage.setItem('budget_logout_reason', 'Ton mot de passe a été modifié. Reconnecte-toi avec le nouveau.'); }catch(e){}
+  }
   clearSession(); stopPolling(); location.reload();
   return true;
 }
@@ -6800,6 +6835,7 @@ function persistChat(){ chatHistory = chatHistory.slice(-30); localStorage.setIt
 /* ============================== BOOT ============================== */
 async function boot(){
   await loadState();
+  currentUser(); // complète l'empreinte d'une ancienne session avec la copie locale, avant la synchro
   if(ghConfigured()){ await ghPull().catch(()=>{}); }
   const ok = await renderAuthGate();
   if(!ok) return;
