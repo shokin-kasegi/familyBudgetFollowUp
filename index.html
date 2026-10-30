@@ -804,7 +804,7 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
 .rl-note::placeholder{color:var(--faint);}
 .rl-paie{grid-area:paie;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;min-width:0;}
 .rl-paie .rl-menu{width:160px;}
-.rl-paie .rl-menu.rl-echeanceId{width:240px;}
+.rl-paie .rl-menu.rl-echeanceId,.rl-paie .rl-menu.rl-abonnementId{width:240px;}
 .rl-paie .cat-select-btn.rl-ctl,.rl-nb .rl-ctl{height:32px;font-size:13px;}
 .rl-nb{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);}
 .rl-nb .rl-ctl{width:64px;padding:0 8px;}
@@ -1496,8 +1496,26 @@ function inRangeMonth(key, dateDebut, dateFin){
   if(d1 && d1 < start) return false;
   return true;
 }
-function monthlyCost(ab){
-  const m = Number(ab.montant)||0;
+/* Tarifs d'un abonnement : ab.tarifs = [{depuis:'AAAA-MM-JJ', montant}], trié
+   par date ; le premier tarif a depuis:'' (depuis toujours). Sans historique,
+   ab.montant fait foi. ab.montant reste toujours égal au dernier tarif. */
+function abonnementMontant(ab, key){
+  const t = ab.tarifs;
+  if(!Array.isArray(t) || !t.length) return Number(ab.montant)||0;
+  let m = t[0].montant;
+  t.forEach(x=>{ if((x.depuis||'').slice(0,7) <= key) m = x.montant; });
+  return Number(m)||0;
+}
+function abonnementChangerTarif(ab, depuis, montant){
+  if(!Array.isArray(ab.tarifs) || !ab.tarifs.length) ab.tarifs = [{depuis:'', montant:Number(ab.montant)||0}];
+  const mois = depuis.slice(0,7);
+  ab.tarifs = ab.tarifs.filter(x=>!x.depuis || x.depuis.slice(0,7)!==mois); // un seul tarif par mois : le plus récent saisi gagne
+  ab.tarifs.push({depuis, montant:r2(montant)});
+  ab.tarifs.sort((a,b)=>(a.depuis||'').localeCompare(b.depuis||''));
+  ab.montant = ab.tarifs[ab.tarifs.length-1].montant;
+}
+function monthlyCost(ab, key){
+  const m = abonnementMontant(ab, key || state.selectedMonth);
   switch(ab.frequence){
     case 'Annuel': return m/12;
     case 'Trimestriel': return m/3;
@@ -1687,7 +1705,7 @@ function depenseMensualiteDuMois(dep, key){
     return inRangeMonth(key, dep.dateDebut, dateFin) ? depenseMensualite(dep) : 0;
   }
   if(dep.modePaiement==='Recurrent'){
-    return dep.statut==='Actif' ? monthlyCost(dep) : 0;
+    return dep.statut==='Actif' ? monthlyCost(dep, key) : 0;
   }
   if(dep.modePaiement==='Previsionnelle') return 0;
   if(!dep.date) return 0;
@@ -3495,12 +3513,12 @@ function renderDepenses(){
         </tr></thead>
         <tbody>${recurrentes.map(x=>{
           const paused = x.statut!=='Actif';
-          const billed = x.frequence && x.frequence!=='Mensuel' ? `<span class="cell-sub">${fmtEUR(x.montant)} / ${FREQ_UNIT[x.frequence]||esc(x.frequence)}</span>` : '';
+          const billed = x.frequence && x.frequence!=='Mensuel' ? `<span class="cell-sub">${fmtEUR(abonnementMontant(x, key))} / ${FREQ_UNIT[x.frequence]||esc(x.frequence)}</span>` : '';
           return `<tr class="${paused?'is-paused':''}">
-          <td><span class="cell-main">${dash(x.libelle)}</span>${noteSub(x)}${billed}${paused?'<span class="cell-sub">en pause</span>':''}</td>
+          <td><span class="cell-main">${dash(x.libelle)}</span>${noteSub(x)}${billed}${tarifSub(x, key)}${paused?'<span class="cell-sub">en pause</span>':''}</td>
           <td class="sub first-sub">${dash(x.categorie)}</td><td class="sub">${dash(x.compte)}</td>
           <td class="num key" data-v="${paused?0:r2(monthlyCost(x))}">${paused?'<span class="nil">en pause</span>':fmtEUR(monthlyCost(x))}</td>
-          <td class="row-actions">${bulkCheckHTML('recurrentes', [x.id], 'Sélectionner '+(x.libelle||''))}<button class="btn btn-text btn-sm" data-action="toggle-depense-statut" data-id="${x.id}">${paused?'Reprendre':'Mettre en pause'}</button><button class="icon-btn" data-action="edit-depense" data-id="${x.id}" aria-label="Modifier ${attrEsc(x.libelle)}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${x.id}" aria-label="Supprimer ${attrEsc(x.libelle)}">${icon('trash')}</button></td>
+          <td class="row-actions">${bulkCheckHTML('recurrentes', [x.id], 'Sélectionner '+(x.libelle||''))}<button class="btn btn-text btn-sm" data-action="toggle-depense-statut" data-id="${x.id}">${paused?'Reprendre':'Mettre en pause'}</button><button class="icon-btn" data-action="abo-tarif" data-id="${x.id}" aria-label="Nouveau tarif pour ${attrEsc(x.libelle)}" title="Nouveau tarif">${icon('arrowUp')}</button><button class="icon-btn" data-action="edit-depense" data-id="${x.id}" aria-label="Modifier ${attrEsc(x.libelle)}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${x.id}" aria-label="Supprimer ${attrEsc(x.libelle)}">${icon('trash')}</button></td>
         </tr>`;}).join('')}</tbody>
         <tfoot><tr><td>Total mensuel${activeRec.length<recurrentes.length?' (hors pause)':''}</td><td></td><td></td><td class="num key" data-v="${sumR2(activeRec, monthlyCost)}">${fmtEUR(sumR2(activeRec, monthlyCost))}</td><td></td></tr></tfoot>
       </table></div>`}
@@ -3549,6 +3567,19 @@ function renderDepenses(){
     </div>
   `;
 }
+// Sous-ligne d'un abonnement dont le tarif a changé (ou va changer).
+function tarifSub(ab, key){
+  const t = ab.tarifs; if(!Array.isArray(t) || t.length<2) return '';
+  const futur = t.find(x=>x.depuis && x.depuis.slice(0,7) > key);
+  if(futur) return `<span class="cell-sub">Passe à ${fmtEUR(futur.montant)} en ${monthName(futur.depuis.slice(0,7))} ${futur.depuis.slice(0,4)}</span>`;
+  const i = t.map(x=>(x.depuis||'').slice(0,7) <= key).lastIndexOf(true);
+  if(i<1) return '';
+  return `<span class="cell-sub">Depuis ${monthName(t[i].depuis.slice(0,7))} ${t[i].depuis.slice(0,4)} · avant ${fmtEUR(t[i-1].montant)}</span>`;
+}
+const ABO_TARIF_FIELDS = [
+  {key:'montant', label:'Nouveau montant (€)', type:'number', step:'0.01', required:true},
+  {key:'depuis', label:'À partir du', type:'date', required:true},
+];
 const REC_COLUMNS = {
   libelle: { label:'Nom', type:'text', get:d=>d.libelle },
   categorie: { label:'Catégorie', type:'text', get:d=>d.categorie },
@@ -3668,6 +3699,9 @@ function openDepenseEditModal(depenseId, overrideValues){
     else if(data.modePaiement==='Previsionnelle'){ dep.priorite=data.priorite; }
     else if(data.modePaiement==='Recurrent'){ dep.frequence=data.frequence; dep.statut=data.statut; }
     else{ dep.date=data.date; }
+    // Le montant saisi ici corrige le dernier tarif (un changement daté passe par « Nouveau tarif »).
+    if(data.modePaiement!=='Recurrent') delete dep.tarifs;
+    else if(Array.isArray(dep.tarifs) && dep.tarifs.length) dep.tarifs[dep.tarifs.length-1].montant = Number(dep.montant)||0;
     const justPlanned = wasPrevisionnelle && data.modePaiement!=='Previsionnelle';
     await persist(); await render(); toast(justPlanned ? 'Dépense planifiée' : 'Dépense mise à jour'); },
     '<div id="depense-preview" class="field-note" style="margin-top:-8px;margin-bottom:14px;min-height:16px;"></div>');
@@ -4537,6 +4571,15 @@ async function handleAction(action, id, el){
       state.echVersements = state.echVersements.filter(v=>v.echeanceId!==id);
       await persist(); await render(); toast('Dépense supprimée'); }); break; }
     case 'toggle-dep-group': { const g = el.dataset.group; if(depGroupsOpen.has(g)) depGroupsOpen.delete(g); else depGroupsOpen.add(g); await render(); break; }
+    case 'abo-tarif': {
+      const ab = find(mine(state.depenses));
+      openModal(`Nouveau tarif — ${ab.libelle}`, ABO_TARIF_FIELDS, {montant:ab.montant, depuis:defaultDateForSelectedMonth()}, async (data)=>{
+        if(reportFieldErrors(fieldRequiredErrors(ABO_TARIF_FIELDS, data))) return false;
+        if(!(Number(data.montant)>0)){ markFieldError('montant','Renseigne un montant supérieur à 0'); toast('Renseigne un montant supérieur à 0'); return false; }
+        abonnementChangerTarif(ab, data.depuis, Number(data.montant));
+        await persist(); await render(); toast(`Nouveau tarif à partir du ${fmtDate(data.depuis)}`); },
+        `<div class="field-note" style="margin-top:-8px;margin-bottom:14px;">Le tarif actuel (${fmtEUR(ab.montant)}) reste appliqué aux mois précédents.</div>`);
+      break; }
     case 'toggle-depense-statut': { const item=find(mine(state.depenses)); item.statut = item.statut==='Actif'?'Inactif':'Actif'; await persist(); await render(); toast('Statut mis à jour'); break; }
     case 'goto-depenses': currentView = 'depenses'; await render(); break;
     case 'switch-space': currentSpace = el.dataset.space; currentView = defaultViewForSpace(currentSpace); await render(); break;
@@ -5843,7 +5886,7 @@ function releveDejaSuivi(op, info){
     const deps = mine(state.depenses);
     const d = deps.find(x=>x.modePaiement==='Unique' && egal(x.montant) && proche(x.date));
     if(d) return `Déjà saisie : ${d.libelle}`;
-    const ab = deps.find(x=>x.modePaiement==='Recurrent' && x.statut==='Actif' && egal(x.montant));
+    const ab = deps.find(x=>x.modePaiement==='Recurrent' && x.statut==='Actif' && egal(abonnementMontant(x, key)));
     if(ab) return `Abonnement déjà suivi : ${ab.libelle}`;
     const ech = deps.find(x=>x.modePaiement==='Echelonne' && egal(depenseMensualiteDuMois(x, key)));
     if(ech){ if(info) info.echeanceId = ech.id; return `Mensualité déjà suivie : ${ech.libelle}`; }
@@ -5876,7 +5919,8 @@ function releveSuggestion(op, modele){
     return {...base, type: sens, libelle: (sens==='revenu' ? 'Remboursement ' : '') + (regle.libelle || releveJoli(cle)), categorie: cat, compte: regle.compte || 'Compte Perso', confiance:'devine', raison:'Sens inhabituel pour ce commerçant'};
   }
   if(regle){
-    const ech = regle.echeanceId && releveEcheanceOuverte(regle.echeanceId) ? {paiement:'Echelonne', echeanceId:regle.echeanceId} : {};
+    const ech = regle.echeanceId && releveEcheanceOuverte(regle.echeanceId) ? {paiement:'Echelonne', echeanceId:regle.echeanceId}
+      : regle.abonnementId && releveAbonnement(regle.abonnementId) ? {paiement:'Recurrent', abonnementId:regle.abonnementId} : {};
     return {...base, ...ech, type: regle.type, libelle: regle.libelle || releveJoli(cle), categorie: regle.categorie || '', compte: regle.compte || 'Compte Perso',
       confiance: regle.n>=2 ? 'sur' : 'appris', raison: regle.type==='ignorer' ? `Déjà ignorée ${regle.n>1?regle.n+' fois':'une fois'}` : `Reconnue (${regle.n>1?regle.n+' fois':'une fois'})`};
   }
@@ -5911,6 +5955,13 @@ function releveCreerLignes(ops){
       if(suivi){ s.type = 'ignorer'; s.confiance = 'sur'; s.raison = suivi; }
       // Mensualité reconnue : si on la passe en dépense « en plusieurs fois », l'échéance est déjà choisie.
       if(info.echeanceId){ s.paiement = 'Echelonne'; s.echeanceId = info.echeanceId; }
+      // Prélèvement d'un abonnement suivi, mais à un autre tarif : on propose le nouveau tarif.
+      const ab = !suivi && o.montant<0 && (s.abonnementId ? releveAbonnement(s.abonnementId) : (!modele.regles[s.cle] && releveAbonnementProche(o)));
+      if(ab){
+        const avant = abonnementMontant(ab, o.date.slice(0,7));
+        Object.assign(s, {type:'depense', paiement:'Recurrent', abonnementId:ab.id, libelle:ab.libelle, categorie:ab.categorie||s.categorie, compte:ab.compte||s.compte,
+          confiance: s.confiance==='sur' ? 'sur' : 'appris', raison:`Nouveau tarif pour ${ab.libelle} (avant ${fmtEUR(avant)})`});
+      }
       const {cle, confiance, raison, ...valeurs} = s;
       return {id: uid(), date: o.date, brut: o.libelle.trim(), montant: r2(o.montant), cle, suivi: !!suivi, incertain: !!o.signeIncertain, confiance, raison, etat:'attente', s:{...valeurs}, v:{...valeurs}};
     });
@@ -6024,7 +6075,7 @@ function releveChangerChamp(el){
     if(tot) tot.textContent = `${fmtEUR(r2(Math.abs(l.montant)*nb))} au total`;
   }
   releveSauverSession();
-  if(champ==='type' || champ==='paiement' || champ==='echeanceId') return render();
+  if(champ==='type' || champ==='paiement' || champ==='echeanceId' || champ==='abonnementId') return render();
 }
 // Retient la décision de l'utilisateur : règle du commerçant, mots du libellé,
 // format du fichier, et si la suggestion était juste.
@@ -6038,6 +6089,8 @@ function releveApprendre(modele, l){
   const decision = v.type==='ignorer' ? {type:'ignorer', maj} : {type:v.type, libelle:(v.libelle||'').trim(), categorie:v.categorie||'', compte:v.compte||'Compte Perso', maj};
   // Paiement en plusieurs fois rattaché à une échéance : les prochaines lignes de ce commerçant y seront rattachées aussi.
   if(v.type==='depense' && v.paiement==='Echelonne' && v.echeanceId) decision.echeanceId = v.echeanceId;
+  // Idem pour un abonnement : ses prochains prélèvements y sont rattachés (changement de tarif reconnu).
+  if(v.type==='depense' && v.paiement==='Recurrent' && v.abonnementId) decision.abonnementId = v.abonnementId;
   const memeQue = r => r && r.type===v.type && (v.type==='ignorer' || r.categorie===v.categorie);
   if(prev && prev.type!=='ignorer' && v.type!=='ignorer' && prev.type!==v.type){
     // Sens opposé à l'habitude (un remboursement chez un commerçant en dépense,
@@ -6056,7 +6109,7 @@ function releveApprendre(modele, l){
 async function releveValider(ids){
   const s = releveSession; if(!s) return;
   const me = currentUser(), modele = releveModele(true);
-  let ajoutees = 0, ignorees = 0;
+  let ajoutees = 0, ignorees = 0, tarifs = 0, abos = 0;
   const parId = new Map(s.lignes.map(l=>[l.id, l]));
   ids.forEach(id=>{
     const l = parId.get(id); if(!l || l.etat!=='attente') return;
@@ -6076,8 +6129,16 @@ async function releveValider(ids){
           Object.assign(dep, {modePaiement:'Echelonne', montant:r2(montant*nb), dateDebut:l.date, nbMensualites:nb, moisRetires:[]});
           v.echeanceId = dep.id;
         } else if(v.paiement==='Recurrent'){
+          const ab = v.abonnementId ? releveAbonnement(v.abonnementId) : null;
+          if(ab){
+            // Abonnement déjà suivi : la ligne n'est pas une nouvelle dépense, elle en fixe le tarif à partir de sa date.
+            if(Math.abs(abonnementMontant(ab, l.date.slice(0,7)) - montant) >= 0.005){ abonnementChangerTarif(ab, l.date, montant); tarifs++; }
+            abos++; l.etat = 'validee'; releveApprendre(modele, l);
+            return;
+          }
           delete dep.date;
           Object.assign(dep, {modePaiement:'Recurrent', frequence:v.frequence||'Mensuel', statut:'Actif'});
+          v.abonnementId = dep.id;
         }
         state.depenses.push(dep);
       }
@@ -6089,7 +6150,7 @@ async function releveValider(ids){
     l.etat = v.type==='ignorer' ? 'ignoree' : 'validee';
     releveApprendre(modele, l);
   });
-  if(ajoutees+ignorees===0) return;
+  if(ajoutees+ignorees+abos===0) return;
   // Le format du fichier est retenu dès la première ligne acceptée.
   if(s.sig && (s.csv || s.colonnes)){
     const f = modele.formats[s.sig] || {};
@@ -6100,13 +6161,15 @@ async function releveValider(ids){
   releveSauverSession();
   await persist(); await render();
   const msg = ajoutees && ignorees ? `${ajoutees} ajoutée${ajoutees>1?'s':''}, ${ignorees} ignorée${ignorees>1?'s':''}` : ajoutees ? (ajoutees>1 ? `${ajoutees} opérations ajoutées` : 'Opération ajoutée') : (ignorees>1 ? `${ignorees} lignes ignorées` : 'Ligne ignorée');
-  toast(majs ? `${msg} · ${fmtCount(majs, 'autre ligne mise à jour', 'autres lignes mises à jour')}` : msg);
+  const msgT = tarifs ? fmtCount(tarifs, 'tarif d’abonnement mis à jour', 'tarifs d’abonnement mis à jour') : '';
+  const msgTout = [ajoutees+ignorees ? msg : '', msgT].filter(Boolean).join(' · ') || 'Abonnement déjà à jour';
+  toast(majs ? `${msgTout} · ${fmtCount(majs, 'autre ligne mise à jour', 'autres lignes mises à jour')}` : msgTout);
 }
 // Après chaque validation, les lignes encore en attente profitent de ce qui
 // vient d'être appris (« CARREFOUR » validé en Courses → les autres CARREFOUR
 // du relevé passent en Courses). Une ligne que l'utilisateur a déjà modifiée
 // garde ses choix, et une ligne déjà suivie ailleurs reste ignorée.
-const RELEVE_CHAMPS_SUGGERES = ['type','libelle','categorie','compte'];
+const RELEVE_CHAMPS_SUGGERES = ['type','libelle','categorie','compte','paiement'];
 function releveRafraichirAttente(s){
   const modele = releveModele(false);
   let n = 0;
@@ -6144,6 +6207,23 @@ function releveEcheanceOuverte(id, memeSoldee){
   const d = mine(state.depenses).find(x=>x.id===id && x.modePaiement==='Echelonne');
   return d && (memeSoldee || depenseResteAPayerReel(d)>0.005) ? d : null;
 }
+function releveAbonnement(id){ return mine(state.depenses).find(x=>x.id===id && x.modePaiement==='Recurrent' && x.statut==='Actif') || null; }
+// Abonnement suivi dont le nom ressemble au libellé du prélèvement, à un tarif
+// plausible (de la moitié au double) : un achat ponctuel chez le même commerçant
+// (« Amazon » ≠ « Amazon Prime ») ne doit pas passer pour un changement de tarif.
+function releveAbonnementProche(op){
+  const mots = new Set(releveMots(op.libelle).filter(w=>w.length>=4)), abs = Math.abs(op.montant);
+  return mine(state.depenses).find(ab=>{
+    if(ab.modePaiement!=='Recurrent' || ab.statut!=='Actif') return false;
+    const prix = abonnementMontant(ab, op.date.slice(0,7));
+    if(!(prix>0) || abs < prix/2 || abs > prix*2) return false;
+    return releveMots(ab.libelle).some(w=>w.length>=4 && mots.has(w));
+  }) || null;
+}
+function releveAbonnementsOptions(l){
+  const liste = mine(state.depenses).filter(d=>d.modePaiement==='Recurrent' && d.statut==='Actif');
+  return [{value:'', label:'Nouvel abonnement'}].concat(liste.map(d=>({value:d.id, label:`${d.libelle} — ${fmtEUR(abonnementMontant(d, l.date.slice(0,7)))}`})));
+}
 function releveEcheancesOptions(l){
   const liste = mine(state.depenses).filter(d=>d.modePaiement==='Echelonne' && (depenseResteAPayerReel(d)>0.005 || d.id===l.v.echeanceId));
   return [{value:'', label:'Nouvelle échéance'}].concat(liste.map(d=>({value:d.id, label:`${d.libelle} — reste ${fmtEUR(depenseResteAPayerReel(d))}`})));
@@ -6154,6 +6234,8 @@ function releveLigneHTML(l){
   const ign = l.v.type==='ignorer', dep = l.v.type==='depense';
   const plusieurs = dep && l.v.paiement==='Echelonne', abo = dep && l.v.paiement==='Recurrent', nb = releveNbMensualites(l.v);
   const ech = plusieurs && l.v.echeanceId ? releveEcheanceOuverte(l.v.echeanceId, true) : null;
+  const aboExistant = abo && l.v.abonnementId ? releveAbonnement(l.v.abonnementId) : null;
+  const aboAvant = aboExistant ? abonnementMontant(aboExistant, l.date.slice(0,7)) : 0;
   const nomLigne = attrEsc(l.v.libelle || l.brut);
   return `<li class="rl-row${ign?' is-ignored':''}${l.maj?' is-maj':''}" data-rl-row="${l.id}">
     <div class="rl-date">${fmtDate(l.date)}</div>
@@ -6170,7 +6252,9 @@ function releveLigneHTML(l){
       ${releveMenuHTML(l, 'paiement', RELEVE_PAIEMENTS, l.v.paiement || 'Unique', `Paiement de ${nomLigne}`)}
       ${plusieurs ? releveMenuHTML(l, 'echeanceId', releveEcheancesOptions(l), ech ? ech.id : '', `Échéance de ${nomLigne}`) : ''}
       ${ech ? `<span class="rl-nb-total">Versement sur cette échéance · reste ${fmtEUR(Math.max(depenseResteAPayerReel(ech) - Math.abs(l.montant), 0))} après</span>` : ''}
-      ${abo ? releveMenuHTML(l, 'frequence', RELEVE_FREQUENCES, l.v.frequence || 'Mensuel', `Fréquence de ${nomLigne}`) : ''}
+      ${abo ? releveMenuHTML(l, 'abonnementId', releveAbonnementsOptions(l), aboExistant ? aboExistant.id : '', `Abonnement de ${nomLigne}`) : ''}
+      ${abo && !aboExistant ? releveMenuHTML(l, 'frequence', RELEVE_FREQUENCES, l.v.frequence || 'Mensuel', `Fréquence de ${nomLigne}`) : ''}
+      ${aboExistant ? `<span class="rl-nb-total">${Math.abs(aboAvant - Math.abs(l.montant)) < 0.005 ? 'Même tarif — rien ne change' : `Nouveau tarif à partir du ${fmtDate(l.date)} · avant ${fmtEUR(aboAvant)}`}</span>` : ''}
       ${plusieurs && !ech ? `<label class="rl-nb"><input class="rl-ctl" type="number" min="2" max="120" step="1" inputmode="numeric" data-rl-id="${l.id}" data-rl-champ="nbMensualites" value="${nb}" aria-label="Nombre de mensualités"><span>mensualités</span></label>
         <span class="rl-nb-total">${fmtEUR(r2(Math.abs(l.montant)*nb))} au total</span>` : ''}
     </div>` : ''}
