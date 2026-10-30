@@ -531,6 +531,50 @@ try{
     await ctx.close();
   }
 
+  console.log('\n— Contrôle des soldes et ligne de régulation');
+  {
+    const {ctx, page, errors} = await openApp(browser, {width:1440, height:900});
+    const r = await page.evaluate(()=>{
+      const m = releveModele(false);
+      return {
+        csv: releveAnalyserTexte(['Solde au 30/09/2026;1 000,00;;', 'Date;Libellé;Débit;Crédit', '02/10/2026;CB CARREFOUR;50,00;', '05/10/2026;VIR SEPA RECU SALAIRE;;2 000,00', 'Solde au 31/10/2026;2 950,00;;'].join('\n'), m),
+        colonne: releveAnalyserTexte(['Date;Libellé;Montant;Solde', '05/10/2026;CB FNAC;-30,00;970,00', '02/10/2026;VIR SOLDE DE TOUT COMPTE;500,00;1 000,00'].join('\n'), m),
+        texte: releveAnalyserTexte([
+          'Date      Libellé                         Débit       Crédit',
+          '          ANCIEN SOLDE CREDITEUR AU 30/09/2026        120,00',
+          '03/10     CB CARREFOUR 02/10              45,30',
+          '08/10     PRLV FREE MOBILE                19,99',
+          '          NOUVEAU SOLDE DEBITEUR AU 31/10/2026  45,29',
+        ].join('\n'), m),
+        sansSoldes: releveAnalyserTexte(['Date;Libellé;Montant', '02/10/2026;CB FNAC;-30,00'].join('\n'), m).soldes,
+      };
+    });
+    ok(r.csv.soldes && r.csv.soldes.debut===1000 && r.csv.soldes.fin===2950 && r.csv.ops.length===2, `CSV : lignes « Solde au » lues, pas importées (${JSON.stringify(r.csv.soldes)}, ${r.csv.ops.length} op.)`);
+    ok(r.colonne.soldes && r.colonne.soldes.debut===500 && r.colonne.soldes.fin===970, `CSV : colonne Solde, ordre décroissant (${JSON.stringify(r.colonne.soldes)})`);
+    ok(r.colonne.ops.some(o=>/TOUT COMPTE/.test(o.libelle)), '« Solde de tout compte » reste une opération');
+    ok(r.texte.soldes && r.texte.soldes.debut===120 && r.texte.soldes.fin===-45.29 && r.texte.ops.length===2, `texte : ancien / nouveau solde débiteur (${JSON.stringify(r.texte.soldes)})`);
+    ok(r.sansSoldes===null, 'relevé sans soldes : pas de contrôle');
+
+    // Relevé incohérent : il manque 12,50 € de dépenses entre les deux soldes.
+    await importer(page, 'soldes.csv', ['Solde au 30/09/2026;1 000,00;;', 'Date;Libellé;Débit;Crédit',
+      '02/10/2026;CB LIBRAIRIE MOLIERE;50,00;', '05/10/2026;VIR SEPA RECU REMBOURSEMENT MUTUELLE;;200,00', 'Solde au 31/10/2026;1 137,50;;'].join('\n'));
+    ok(await page.locator('.rl-soldes').count()===0, 'pas de contrôle tant que des lignes attendent');
+    await page.click('[data-action="releve-valider-tout"]'); await page.waitForTimeout(300);
+    const alerte = await page.locator('.rl-soldes').innerText();
+    ok(/ne concordent pas/.test(alerte) && /12,50/.test(alerte), `écart signalé en fin d'import (${alerte})`);
+    await page.click('[data-action="releve-regul"]'); await page.waitForTimeout(300);
+    const [regul] = await lignes(page);
+    ok(regul && regul.lib==='Régularisation de solde' && regul.type==='depense' && regul.amt==='−12,50', `ligne de régulation proposée (${JSON.stringify(regul)})`);
+    await page.click(`[data-action="releve-valider"][data-id="${regul.id}"]`); await page.waitForTimeout(300);
+    ok(/Soldes cohérents/.test(await page.locator('.rl-soldes').innerText()), 'soldes cohérents après la régulation');
+    const dep = await page.evaluate(()=>mine(state.depenses).find(d=>d.libelle==='Régularisation de solde'));
+    ok(dep && dep.montant===12.5 && dep.date==='2026-10-31', `régulation enregistrée en dépense (${JSON.stringify(dep)})`);
+    const regle = await page.evaluate(()=>Object.keys(releveModele(false).regles).some(k=>/REGUL/.test(k)));
+    ok(!regle, 'la régulation n’est pas apprise comme un commerçant');
+    ok(errors.length===0, `erreurs console : ${errors.join(' | ')}`);
+    await ctx.close();
+  }
+
   console.log('\n— 390 px');
   {
     const {ctx, page, errors} = await openApp(browser, {width:390, height:844});
