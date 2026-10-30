@@ -1559,6 +1559,26 @@ function analyseMonthlyTotals(term, year){
   }
   return months;
 }
+/* Moyenne mensuelle sur l'année : on compte à partir du premier mois où le poste
+   apparaît (pas les mois d'avant, ni les mois à venir). Un trou de 3 mois ou plus
+   sans dépense ne compte pas (le poste avait cessé) ; un trou plus court, si. */
+function analyseMoisActifs(months){
+  const first = months.findIndex(m=>m.total>0);
+  if(first<0) return 0;
+  // Les mois à venir ne comptent que jusqu'à la dernière dépense déjà prévue.
+  let last = months.length-1;
+  while(last>first && isFutureMonth(months[last].key) && !(months[last].total>0)) last--;
+  let count = 0, gap = 0;
+  for(const m of months.slice(first, last+1)){
+    if(m.total>0){ count += 1 + (gap<3 ? gap : 0); gap = 0; }
+    else gap++;
+  }
+  return count + (gap<3 ? gap : 0);
+}
+function analyseMoyenneMensuelle(months){
+  const n = analyseMoisActifs(months);
+  return n ? sumR2(months, m=>m.total)/n : 0;
+}
 
 /* ============================== ABONNEMENTS ============================== */
 /* Une dépense marquée abonnement porte un identifiant de série (aboId). Chaque
@@ -4595,7 +4615,7 @@ function renderAnalyse(){
           <div class="big fig" style="color:${POSTE_BY_KEY[k].color}" data-tween="ana:${attrEsc(term)}:${year}" data-fmt="big" data-v="${yearTotal}">${bigFmt(yearTotal)}</div>
           <div class="hero-of">${evo}</div>
         </div>
-        <div class="ratio"><div class="pct fig">${fmtEUR0(yearTotal/12)}</div><small>en moyenne par mois</small></div>
+        <div class="ratio"><div class="pct fig">${fmtEUR0(analyseMoyenneMensuelle(months))}</div><small>en moyenne par mois</small></div>
       </div>
     </section>
 
