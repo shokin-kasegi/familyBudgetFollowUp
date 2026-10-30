@@ -774,12 +774,21 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
 .rl-file{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:32ch;}
 .section-head h2 > svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;flex-shrink:0;}
 .rl-list{list-style:none;margin:0;padding:0;}
-.rl-row{display:grid;grid-template-columns:96px minmax(0,1fr) 160px 150px 150px 110px;grid-template-areas:"date lib type cat compte amt" "date meta meta meta actions actions";gap:6px 10px;align-items:center;padding:12px 0;border-top:1px solid var(--line);}
+.rl-row{display:grid;grid-template-columns:96px minmax(0,1fr) 160px 150px 150px 110px;grid-template-areas:"date lib type cat compte amt" "date note paie paie paie paie" "date meta meta meta actions actions";gap:6px 10px;align-items:center;padding:12px 0;border-top:1px solid var(--line);}
 .rl-row:first-child{border-top:none;}
 .rl-date{grid-area:date;align-self:start;padding-top:9px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;}
 .rl-lib{grid-area:lib;min-width:0;display:flex;flex-direction:column;gap:3px;}
 .rl-brut{font-size:12px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.rl-type{grid-area:type;} .rl-cat{grid-area:cat;} .rl-compte{grid-area:compte;}
+.rl-type{grid-area:type;} .rl-cat{grid-area:cat;} .rl-compte{grid-area:compte;} .rl-menu{min-width:0;}
+.rl-note{grid-area:note;height:32px;font-size:13px;background:transparent;border-style:dashed;}
+.rl-note:not(:placeholder-shown){border-style:solid;}
+.rl-note::placeholder{color:var(--faint);}
+.rl-paie{grid-area:paie;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;min-width:0;}
+.rl-paie .rl-menu{width:160px;}
+.rl-paie .cat-select-btn.rl-ctl,.rl-nb .rl-ctl{height:32px;font-size:13px;}
+.rl-nb{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);}
+.rl-nb .rl-ctl{width:64px;padding:0 8px;}
+.rl-nb-total{font-size:13px;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap;}
 .rl-amt{grid-area:amt;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;}
 .rl-amt.pos{color:var(--c-reste);}
 .rl-meta{grid-area:meta;display:flex;align-items:center;gap:8px;min-width:0;}
@@ -790,18 +799,18 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
 .rl-ctl:focus-visible{box-shadow:0 0 0 3px rgba(255,255,255,0.18);}
 .rl-ctl:disabled{opacity:.55;}
 .cat-select-btn.rl-ctl{padding:0 10px;font-size:14px;}
+.rl-menu .cat-select-btn[aria-expanded="true"]{border-color:var(--text);}
 .rl-cat.cat-field{min-width:0;}
-select.rl-ctl option{background:var(--surface);color:var(--text);}
 .rl-row.is-ignored .rl-amt,.rl-row.is-ignored .rl-lib{opacity:.55;}
 .rl-rules{list-style:none;margin:0;padding:0;}
 .rl-rules li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) auto 32px;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:14px;}
 .rl-rule-key{font-size:12px;color:var(--muted);letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .rl-rule-val{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 @media(max-width:1100px){
-  .rl-row{grid-template-columns:88px minmax(0,1fr) minmax(0,1fr) 110px;grid-template-areas:"date lib lib amt" "date type cat compte" "date meta meta actions";}
+  .rl-row{grid-template-columns:88px minmax(0,1fr) minmax(0,1fr) 140px;grid-template-areas:"date lib lib amt" "date type cat compte" "date note paie paie" "date meta meta actions";}
 }
 @media(max-width:640px){
-  .rl-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"date amt" "lib lib" "type cat" "compte compte" "meta actions";}
+  .rl-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"date amt" "lib lib" "type cat" "compte compte" "paie paie" "note note" "meta actions";}
   .rl-date{padding-top:0;}
   .rl-compte:empty{display:none;}
   .rl-raison{white-space:normal;}
@@ -3139,7 +3148,7 @@ function renderRevenus(){
           <th><span class="sr-only">Actions</span></th>
         </tr></thead>
         <tbody>${re.map(r=>`<tr>
-          <td><span class="cell-main">${dash(r.libelle)}</span>${exclNote(r)}</td><td class="sub first-sub">${fmtDate(r.date)}</td><td class="sub">${dash(r.categorie)}</td>
+          <td><span class="cell-main">${dash(r.libelle)}</span>${noteSub(r)}${exclNote(r)}</td><td class="sub first-sub">${fmtDate(r.date)}</td><td class="sub">${dash(r.categorie)}</td>
           <td class="num key" data-v="${r2(r.montant)}">${fmtEUR(r.montant)}</td>
           <td class="row-actions"><button class="icon-btn" data-action="edit-revexc" data-id="${r.id}" aria-label="Modifier ${attrEsc(r.libelle)}">${icon('edit')}</button><button class="icon-btn del" data-action="del-revexc" data-id="${r.id}" aria-label="Supprimer ${attrEsc(r.libelle)}">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
@@ -3175,6 +3184,7 @@ function revexcFields(){
     {key:'libelle', label:'Libellé', placeholder:'Prime annuelle', required:true},
     {key:'categorie', label:'Catégorie', type:'category', categoryType:'revenus', required:true},
     {key:'montant', label:'Montant (€)', type:'number', step:'0.01', required:true},
+    {key:'notes', label:'Commentaire', placeholder:'Facultatif'},
   ];
   if(jointPartner()) fields.push({key:'excludeFromJoint', label:'Ne pas compter ce revenu dans le calcul du compte joint', type:'checkbox'});
   return fields;
@@ -3282,6 +3292,8 @@ const DEP_COLUMNS = {
   paiement:  { label:'Paiement',  type:'text',   get:d=>d.modePaiement==='Echelonne'?'Échelonné':(d.modePaiement==='Previsionnelle'?'Prévisionnelle':'En une fois') },
   montant:   { label:'Ce mois',   type:'number', get:d=>r2(depenseMensualiteDuMois(d, state.selectedMonth)) },
 };
+// Commentaire d'une saisie, sous son libellé.
+function noteSub(x){ return x.notes ? `<span class="cell-sub">${esc(x.notes)}</span>` : ''; }
 const FREQ_UNIT = {Annuel:'an', Trimestriel:'trimestre', Hebdomadaire:'semaine', Journalier:'jour'};
 function renderDepenses(){
   const key = state.selectedMonth;
@@ -3329,7 +3341,7 @@ function renderDepenses(){
           const paused = x.statut!=='Actif';
           const billed = x.frequence && x.frequence!=='Mensuel' ? `<span class="cell-sub">${fmtEUR(x.montant)} / ${FREQ_UNIT[x.frequence]||esc(x.frequence)}</span>` : '';
           return `<tr class="${paused?'is-paused':''}">
-          <td><span class="cell-main">${dash(x.libelle)}</span>${billed}${paused?'<span class="cell-sub">en pause</span>':''}</td>
+          <td><span class="cell-main">${dash(x.libelle)}</span>${noteSub(x)}${billed}${paused?'<span class="cell-sub">en pause</span>':''}</td>
           <td class="sub first-sub">${dash(x.categorie)}</td><td class="sub">${dash(x.compte)}</td>
           <td class="num key" data-v="${paused?0:r2(monthlyCost(x))}">${paused?'<span class="nil">en pause</span>':fmtEUR(monthlyCost(x))}</td>
           <td class="row-actions"><button class="btn btn-text btn-sm" data-action="toggle-depense-statut" data-id="${x.id}">${paused?'Reprendre':'Mettre en pause'}</button><button class="icon-btn" data-action="edit-depense" data-id="${x.id}" aria-label="Modifier ${attrEsc(x.libelle)}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${x.id}" aria-label="Supprimer ${attrEsc(x.libelle)}">${icon('trash')}</button></td>
@@ -3375,7 +3387,7 @@ function renderDepenses(){
             sub = `<span class="cell-sub">${fmtEUR(x.montant)} en ${nb} fois · ${n}/${nb}</span><span class="cell-bar"><span style="width:${Math.min(n/nb,1)*100}%;background:var(--c-echeances)"></span></span>`;
           }
           return `<tr>
-          <td><span class="cell-main">${dash(x.libelle)}</span>${sub}</td><td class="sub first-sub">${dash(x.categorie)}</td><td class="sub">${dash(x.compte||'Compte Perso')}</td>
+          <td><span class="cell-main">${dash(x.libelle)}</span>${noteSub(x)}${sub}</td><td class="sub first-sub">${dash(x.categorie)}</td><td class="sub">${dash(x.compte||'Compte Perso')}</td>
           <td class="num key" data-v="${mois}">${fmtEUR(mois)}</td>
           ${actionsFor(x)}
         </tr>`;}).join('')}</tbody>
@@ -3470,6 +3482,7 @@ function depense_fields(){
     {key:'priorite', label:'Priorité', type:'select', options:['Haute','Moyenne','Basse'], showIf:(v)=>v.modePaiement==='Previsionnelle'},
     {key:'frequence', label:'Fréquence', type:'select', options:['Mensuel','Hebdomadaire','Journalier','Trimestriel','Annuel'], showIf:(v)=>v.modePaiement==='Recurrent'},
     {key:'statut', label:'Statut', type:'select', options:['Actif','Inactif'], showIf:(v)=>v.modePaiement==='Recurrent'},
+    {key:'notes', label:'Commentaire', placeholder:'Facultatif'},
   ];
 }
 function depenseValidationErrors(data){
@@ -3496,7 +3509,7 @@ function openDepenseEditModal(depenseId, overrideValues){
     const dep = mine(state.depenses).find(x=>x.id===depenseId);
     const wasEchelonne = dep.modePaiement==='Echelonne', prevMoisRetires = dep.moisRetires;
     const wasPrevisionnelle = dep.modePaiement==='Previsionnelle';
-    dep.libelle=data.libelle; dep.categorie=data.categorie; dep.compte=data.compte; dep.montant=data.montant; dep.modePaiement=data.modePaiement;
+    dep.libelle=data.libelle; dep.categorie=data.categorie; dep.compte=data.compte; dep.montant=data.montant; dep.modePaiement=data.modePaiement; dep.notes=(data.notes||'').trim();
     delete dep.date; delete dep.dateDebut; delete dep.nbMensualites; delete dep.moisRetires; delete dep.priorite; delete dep.frequence; delete dep.statut;
     if(data.modePaiement==='Echelonne'){ dep.dateDebut=data.dateDebut; dep.nbMensualites=data.nbMensualites; dep.moisRetires = wasEchelonne ? (prevMoisRetires||[]) : []; }
     else if(data.modePaiement==='Previsionnelle'){ dep.priorite=data.priorite; }
@@ -4189,6 +4202,21 @@ document.addEventListener('click', async (e)=>{
     catToggle.setAttribute('aria-expanded', String(!wasOpen));
     return;
   }
+  const rlPick = e.target.closest('[data-rl-pick]');
+  if(rlPick){
+    const menu = rlPick.closest('.rl-menu');
+    const hidden = menu.querySelector('input[data-rl-champ]');
+    const wrap = menu.querySelector('.cat-select');
+    wrap.classList.remove('open'); resetCatDropdown(wrap);
+    if(hidden.value!==rlPick.dataset.rlPick){
+      hidden.value = rlPick.dataset.rlPick;
+      menu.querySelector('.cat-select-label').textContent = rlPick.textContent;
+      menu.querySelectorAll('[data-rl-pick]').forEach(b=>{ const on = b===rlPick; b.setAttribute('aria-selected', String(on)); b.parentElement.classList.toggle('is-selected', on); });
+      await releveChangerChamp(hidden);
+    }
+    document.getElementById(hidden.id)?.closest('.rl-menu').querySelector('[data-cat-toggle]').focus();
+    return;
+  }
   const catSelectEl = e.target.closest('[data-cat-select]');
   if(catSelectEl){
     const field = catSelectEl.closest('.cat-field');
@@ -4337,7 +4365,7 @@ async function handleAction(action, id, el){
     case 'add-depense': openModal('Ajouter une dépense', depense_fields(), {categorie:(myCategoriesDep()[0]||{}).nom||'', compte: jointPartner()?'Compte Perso':'Compte Perso', modePaiement:'Unique', date:defaultDateForSelectedMonth(), priorite:'Moyenne', frequence:'Mensuel', statut:'Actif', nbMensualites:3}, async (data)=>{
       const errors = depenseValidationErrors(data);
       if(errors.length){ errors.forEach(([key,msg])=>markFieldError(key,msg)); toast(errors[0][1]); return false; }
-      const dep = {id:uid(), ownerId:currentUser().id, libelle:data.libelle, categorie:data.categorie, compte:data.compte, montant:data.montant, modePaiement:data.modePaiement, notes:''};
+      const dep = {id:uid(), ownerId:currentUser().id, libelle:data.libelle, categorie:data.categorie, compte:data.compte, montant:data.montant, modePaiement:data.modePaiement, notes:(data.notes||'').trim()};
       if(data.modePaiement==='Echelonne'){ dep.dateDebut=data.dateDebut; dep.nbMensualites=data.nbMensualites; dep.moisRetires=[]; }
       else if(data.modePaiement==='Previsionnelle'){ dep.priorite=data.priorite; }
       else if(data.modePaiement==='Recurrent'){ dep.frequence=data.frequence; dep.statut=data.statut; }
@@ -5795,8 +5823,13 @@ function releveChangerChamp(el){
       l.v.categorie = regle && regle.type===el.value && regle.categorie ? regle.categorie : releveCategorieDefaut(el.value);
     }
   }
+  if(champ==='nbMensualites'){
+    // Pas de re-render ici : le clic sur « Valider » qui a fait perdre le focus doit aboutir.
+    const nb = releveNbMensualites(l.v), tot = el.closest('.rl-row')?.querySelector('.rl-nb-total');
+    if(tot) tot.textContent = `${fmtEUR(r2(Math.abs(l.montant)*nb))} au total`;
+  }
   releveSauverSession();
-  if(champ==='type') render();
+  if(champ==='type' || champ==='paiement') return render();
 }
 // Retient la décision de l'utilisateur : règle du commerçant, mots du libellé,
 // format du fichier, et si la suggestion était juste.
@@ -5820,12 +5853,20 @@ async function releveValider(ids){
   let ajoutees = 0, ignorees = 0;
   ids.forEach(id=>{
     const l = s.lignes.find(x=>x.id===id && x.etat==='attente'); if(!l) return;
-    const v = l.v, montant = r2(Math.abs(l.montant)), libelle = (v.libelle||'').trim() || releveJoli(l.cle);
+    const v = l.v, montant = r2(Math.abs(l.montant)), libelle = (v.libelle||'').trim() || releveJoli(l.cle), notes = (v.notes||'').trim();
     if(v.type==='depense'){
-      state.depenses.push({id:uid(), ownerId:me.id, libelle, categorie:v.categorie||'', compte:v.compte||'Compte Perso', montant, modePaiement:'Unique', date:l.date, notes:'', source:'releve'});
+      const dep = {id:uid(), ownerId:me.id, libelle, categorie:v.categorie||'', compte:v.compte||'Compte Perso', montant, modePaiement:'Unique', date:l.date, notes, source:'releve'};
+      // En plusieurs fois : la ligne du relevé est la première mensualité ; les
+      // suivantes seront reconnues comme « Mensualité déjà suivie ».
+      if(v.paiement==='Echelonne'){
+        const nb = releveNbMensualites(v);
+        delete dep.date;
+        Object.assign(dep, {modePaiement:'Echelonne', montant:r2(montant*nb), dateDebut:l.date, nbMensualites:nb, moisRetires:[]});
+      }
+      state.depenses.push(dep);
       ajoutees++;
     } else if(v.type==='revenu'){
-      state.revenusExceptionnels.push({id:uid(), ownerId:me.id, date:l.date, libelle, categorie:v.categorie||releveCategorieDefaut('revenu'), montant, source:'releve'});
+      state.revenusExceptionnels.push({id:uid(), ownerId:me.id, date:l.date, libelle, categorie:v.categorie||releveCategorieDefaut('revenu'), montant, notes, source:'releve'});
       ajoutees++;
     } else ignorees++;
     l.etat = v.type==='ignorer' ? 'ignoree' : 'validee';
@@ -5855,9 +5896,14 @@ function relevePrecision(historique, n){
 
 /* ---------- Vue ---------- */
 const RELEVE_BADGES = {sur:['pill-teal','Reconnue'], appris:['pill-amber','Apprise'], devine:['pill-dim','Devinée'], nouveau:['pill-dim','Nouvelle']};
-function releveLigneHTML(l, partner){
+const RELEVE_TYPES = [{value:'depense', label:'Dépense'}, {value:'revenu', label:'Rentrée'}, {value:'ignorer', label:'Ne pas importer'}];
+const RELEVE_COMPTES = [{value:'Compte Perso', label:'Compte perso'}, {value:'Compte Joint', label:'Compte joint'}];
+const RELEVE_PAIEMENTS = [{value:'Unique', label:'En une fois'}, {value:'Echelonne', label:'En plusieurs fois'}];
+function releveNbMensualites(v){ return Math.min(Math.max(Math.round(Number(v.nbMensualites)) || 3, 2), 120); }
+function releveLigneHTML(l){
   const [cls, lbl] = l.suivi ? ['pill-dim','Déjà suivie'] : RELEVE_BADGES[l.confiance] || RELEVE_BADGES.nouveau;
-  const ign = l.v.type==='ignorer';
+  const ign = l.v.type==='ignorer', dep = l.v.type==='depense';
+  const plusieurs = dep && l.v.paiement==='Echelonne', nb = releveNbMensualites(l.v);
   const nomLigne = attrEsc(l.v.libelle || l.brut);
   return `<li class="rl-row${ign?' is-ignored':''}" data-rl-row="${l.id}">
     <div class="rl-date">${fmtDate(l.date)}</div>
@@ -5865,20 +5911,37 @@ function releveLigneHTML(l, partner){
       <input class="rl-ctl" data-rl-id="${l.id}" data-rl-champ="libelle" value="${attrEsc(l.v.libelle)}" aria-label="Libellé" ${ign?'disabled':''}>
       <span class="rl-brut" title="${attrEsc(l.brut)}">${esc(l.brut)}</span>
     </div>
-    <select class="rl-ctl rl-type" data-rl-id="${l.id}" data-rl-champ="type" aria-label="Type de l’opération ${nomLigne}">
-      <option value="depense"${l.v.type==='depense'?' selected':''}>Dépense</option>
-      <option value="revenu"${l.v.type==='revenu'?' selected':''}>Rentrée</option>
-      <option value="ignorer"${ign?' selected':''}>Ne pas importer</option>
-    </select>
+    ${releveMenuHTML(l, 'type', RELEVE_TYPES, l.v.type, `Type de l’opération ${nomLigne}`)}
     ${ign ? '<span class="rl-cat"></span>' : releveCategorieHTML(l, nomLigne)}
-    ${partner && l.v.type==='depense' ? `<select class="rl-ctl rl-compte" data-rl-id="${l.id}" data-rl-champ="compte" aria-label="Compte">${COMPTES.map(c=>`<option${c===l.v.compte?' selected':''}>${c}</option>`).join('')}</select>` : '<span class="rl-compte"></span>'}
+    ${dep ? releveMenuHTML(l, 'compte', RELEVE_COMPTES, l.v.compte || 'Compte Perso', `Compte de ${nomLigne}`) : '<span class="rl-compte"></span>'}
     <div class="rl-amt num${l.montant>0?' pos':''}">${l.montant>0?'+':''}${fmtEUR(l.montant)}</div>
+    ${ign ? '' : `<input class="rl-ctl rl-note" data-rl-id="${l.id}" data-rl-champ="notes" value="${attrEsc(l.v.notes||'')}" placeholder="Ajouter un commentaire…" aria-label="Commentaire sur ${nomLigne}" maxlength="200">`}
+    ${dep ? `<div class="rl-paie">
+      ${releveMenuHTML(l, 'paiement', RELEVE_PAIEMENTS, l.v.paiement || 'Unique', `Paiement de ${nomLigne}`)}
+      ${plusieurs ? `<label class="rl-nb"><input class="rl-ctl" type="number" min="2" max="120" step="1" inputmode="numeric" data-rl-id="${l.id}" data-rl-champ="nbMensualites" value="${nb}" aria-label="Nombre de mensualités"><span>mensualités</span></label>
+        <span class="rl-nb-total">${fmtEUR(r2(Math.abs(l.montant)*nb))} au total</span>` : ''}
+    </div>` : ''}
     <div class="rl-meta"><span class="pill ${cls}">${lbl}</span>${l.confiance==='nouveau' && !l.suivi ? '' : `<span class="rl-raison">${esc(l.raison)}</span>`}</div>
     <div class="rl-actions">
       <button class="btn btn-ghost btn-sm" data-action="releve-valider" data-id="${l.id}">${icon('check')}${ign?'Confirmer':'Valider'}</button>
       ${ign ? '' : `<button class="icon-btn del" data-action="releve-ignorer" data-id="${l.id}" aria-label="Ne pas importer ${nomLigne}">${icon('x')}</button>`}
     </div>
   </li>`;
+}
+// Menus Type, Compte et Paiement d'une ligne : même liste déroulante que la
+// catégorie (la liste native du navigateur détonnait à côté).
+function releveMenuHTML(l, champ, options, val, label){
+  const cur = options.find(o=>o.value===val) || options[0];
+  return `<div class="rl-menu rl-${champ}">
+    <input type="hidden" id="rl_${champ}_${l.id}" value="${attrEsc(cur.value)}" data-rl-id="${l.id}" data-rl-champ="${champ}">
+    <div class="cat-select">
+      <button type="button" class="cat-select-btn rl-ctl" data-cat-toggle aria-haspopup="listbox" aria-expanded="false" aria-label="${label}">
+        <span class="cat-select-label">${esc(cur.label)}</span>
+        ${icon('chevD')}
+      </button>
+      <div class="cat-dropdown" role="listbox">${options.map(o=>`<div class="cat-option${o.value===cur.value?' is-selected':''}"><button type="button" class="cat-option-label" role="option" aria-selected="${o.value===cur.value}" data-rl-pick="${attrEsc(o.value)}">${esc(o.label)}</button></div>`).join('')}</div>
+    </div>
+  </div>`;
 }
 // Même menu de catégorie que dans les formulaires : on y choisit, ajoute
 // (« Autre… ») ou supprime une catégorie sans quitter la ligne du relevé.
@@ -5961,7 +6024,6 @@ function renderReleve(){
   const attente = s.lignes.filter(l=>l.etat==='attente');
   const validees = s.lignes.filter(l=>l.etat==='validee').length, ignorees = s.lignes.filter(l=>l.etat==='ignoree').length;
   const surs = attente.filter(l=>l.confiance==='sur');
-  const partner = jointPartner();
   const FORMATS = {csv:'CSV', ofx:'OFX', qif:'QIF', pdf:'PDF', texte:'texte collé'};
   const finding = attente.length
     ? `${fmtCount(attente.length, 'ligne à vérifier', 'lignes à vérifier')}${surs.length ? ` · <strong>${surs.length}</strong> reconnue${surs.length>1?'s':''} d’après tes saisies précédentes` : ''}.`
@@ -5979,7 +6041,7 @@ function renderReleve(){
       </div>
       ${validees+ignorees ? `<div class="field-note" style="margin:-4px 0 12px;">${fmtCount(validees, 'ajoutée', 'ajoutées')} · ${fmtCount(ignorees, 'ignorée', 'ignorées')}</div>` : ''}
       ${s.csv ? releveColonnesHTML(s) : ''}
-      ${attente.length ? `<ul class="rl-list">${attente.map(l=>releveLigneHTML(l, partner)).join('')}</ul>`
+      ${attente.length ? `<ul class="rl-list">${attente.map(l=>releveLigneHTML(l)).join('')}</ul>`
         : emptyRow('Toutes les lignes ont été traitées.', 'releve-fermer', 'Importer un autre relevé')}
     </div>
     ${releveApprentissageHTML(modele)}`;

@@ -149,7 +149,7 @@ try{
     // L'utilisateur corrige quelques lignes avant de tout valider.
     // Catégorie : même menu que dans les formulaires (bouton, liste, « Autre… »).
     const choisirCat = async (id, value) => {
-      await page.click(`.rl-row[data-rl-row="${id}"] [data-cat-toggle]`);
+      await page.click(`.rl-row[data-rl-row="${id}"] .rl-cat [data-cat-toggle]`);
       await page.click(`.rl-row[data-rl-row="${id}"] .cat-select.open [data-cat-select="${value}"]`);
       await page.waitForTimeout(120);
     };
@@ -166,7 +166,7 @@ try{
     await choisirCat(salaireId, 'Salaire');
     // La liste se modifie depuis la ligne : ajout d'une catégorie (« Autre… »), choisie aussitôt…
     const edfId = (await lignes(page)).find(l=>l.lib.toLowerCase().includes('edf')).id;
-    await page.click(`.rl-row[data-rl-row="${edfId}"] [data-cat-toggle]`);
+    await page.click(`.rl-row[data-rl-row="${edfId}"] .rl-cat [data-cat-toggle]`);
     await page.click(`.rl-row[data-rl-row="${edfId}"] [data-cat-add-toggle]`);
     await page.fill(`.rl-row[data-rl-row="${edfId}"] .cat-add-input`, 'Énergie');
     await page.keyboard.press('Enter');
@@ -175,7 +175,7 @@ try{
     ok(await page.evaluate(()=>myCategories('depenses').some(c=>c.nom==='Énergie')), 'relevé 1 : la catégorie ajoutée rejoint la liste des dépenses');
     // … puis suppression (croix) : la ligne repasse sans catégorie, le menu reste ouvert.
     const idEnergie = await page.evaluate(()=>myCategories('depenses').find(c=>c.nom==='Énergie').id);
-    await page.click(`.rl-row[data-rl-row="${edfId}"] [data-cat-toggle]`);
+    await page.click(`.rl-row[data-rl-row="${edfId}"] .rl-cat [data-cat-toggle]`);
     await page.click(`.rl-row[data-rl-row="${edfId}"] [data-cat-delete="${idEnergie}"]`);
     await page.waitForTimeout(250);
     ok(await page.evaluate(()=>!myCategories('depenses').some(c=>c.nom==='Énergie')), 'relevé 1 : catégorie supprimée depuis la ligne');
@@ -183,6 +183,26 @@ try{
     ok(await page.evaluate(id=>!!document.querySelector(`.rl-row[data-rl-row="${id}"] .cat-select.open`), edfId), 'relevé 1 : le menu reste ouvert après suppression');
     await page.keyboard.press('Escape');
     await choisirCat(edfId, 'Maison');
+    // Type, compte et paiement : même liste déroulante que la catégorie.
+    const choisir = async (id, champ, value) => {
+      await page.click(`.rl-row[data-rl-row="${id}"] .rl-${champ} [data-cat-toggle]`);
+      await page.click(`.rl-row[data-rl-row="${id}"] .rl-${champ} .cat-select.open [data-rl-pick="${value}"]`);
+      await page.waitForTimeout(150);
+    };
+    const boulId = (await lignes(page)).find(l=>l.lib.toLowerCase().includes('boulangerie')).id;
+    ok(await page.evaluate(()=>!document.querySelector('.rl-row select')), 'relevé 1 : plus de liste native dans les lignes');
+    await choisir(boulId, 'type', 'revenu');
+    ok((await lignes(page)).find(l=>l.id===boulId)?.type==='revenu' && !(await page.$(`.rl-row[data-rl-row="${boulId}"] .rl-paie`)), 'relevé 1 : type changé depuis le menu (rentrée, sans paiement)');
+    await choisir(boulId, 'type', 'depense');
+    await choisirCat(boulId, 'Alimentation');
+    // SNCF : compte joint, en 3 fois, avec un commentaire.
+    const sncfId = (await lignes(page)).find(l=>l.lib.toLowerCase().includes('sncf')).id;
+    await choisir(sncfId, 'compte', 'Compte Joint');
+    await choisir(sncfId, 'paiement', 'Echelonne');
+    await page.fill(`[data-rl-id="${sncfId}"][data-rl-champ="nbMensualites"]`, '3');
+    await page.fill(`[data-rl-id="${sncfId}"][data-rl-champ="notes"]`, 'Billets pour Lyon');
+    await page.click(`.rl-row[data-rl-row="${sncfId}"] .rl-date`);
+    ok(/au total/.test(await page.innerText(`.rl-row[data-rl-row="${sncfId}"] .rl-nb-total`)), 'relevé 1 : total des mensualités affiché');
     // Le retrait : ne pas importer (bouton ×).
     const retraitId = (await lignes(page)).find(l=>l.lib.toLowerCase().includes('retrait')).id;
     await page.click(`[data-action="releve-ignorer"][data-id="${retraitId}"]`);
@@ -195,10 +215,13 @@ try{
       const deps = state.depenses.filter(d=>d.ownerId===me && d.source==='releve');
       const revs = state.revenusExceptionnels.filter(r=>r.ownerId===me && r.source==='releve');
       const m = state.importApprentissage.find(x=>x.ownerId===me);
-      return {deps: deps.map(d=>[d.libelle,d.categorie,d.montant,d.date,d.modePaiement]), revs: revs.map(r=>[r.libelle,r.categorie,r.montant]), regles: m && m.regles, formats: m && Object.keys(m.formats).length, finding: document.querySelector('.finding').innerText};
+      const sncf = deps.find(d=>/sncf/i.test(d.libelle));
+      return {sncf, deps: deps.map(d=>[d.libelle,d.categorie,d.montant,d.date,d.modePaiement]), revs: revs.map(r=>[r.libelle,r.categorie,r.montant]), regles: m && m.regles, formats: m && Object.keys(m.formats).length, finding: document.querySelector('.finding').innerText};
     });
     ok(after1.deps.length===4, `relevé 1 : 4 dépenses ajoutées (doublon et retrait exclus), reçu ${JSON.stringify(after1.deps)}`);
     ok(after1.deps.some(d=>d[1]==='Alimentation' && d[2]===54.2 && d[3]==='2026-09-02' && d[4]==='Unique'), 'relevé 1 : dépense Carrefour Market du 02/09 enregistrée en Alimentation');
+    const sn = after1.sncf;
+    ok(sn && sn.compte==='Compte Joint' && sn.modePaiement==='Echelonne' && sn.nbMensualites===3 && sn.dateDebut && !sn.date && sn.notes==='Billets pour Lyon', `relevé 1 : SNCF en compte joint, en 3 fois, avec commentaire (${JSON.stringify(sn)})`);
     ok(after1.revs.length===1 && after1.revs[0][0]==='Salaire Acme' && after1.revs[0][1]==='Salaire' && after1.revs[0][2]===2300, `relevé 1 : rentrée Salaire Acme, reçu ${JSON.stringify(after1.revs)}`);
     ok(after1.regles && after1.regles['RETRAIT DAB']?.type==='ignorer' && after1.regles['CARREFOUR MARKET']?.categorie==='Alimentation' && !after1.regles['CARREFOUR'], `relevé 1 : règles apprises (doublon non appris) ${JSON.stringify(after1.regles)}`);
     ok(after1.formats===1, 'relevé 1 : format du fichier retenu');
