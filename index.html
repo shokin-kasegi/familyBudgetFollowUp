@@ -804,6 +804,7 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
 .rl-note::placeholder{color:var(--faint);}
 .rl-paie{grid-area:paie;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;min-width:0;}
 .rl-paie .rl-menu{width:160px;}
+.rl-paie .rl-menu.rl-echeanceId{width:240px;}
 .rl-paie .cat-select-btn.rl-ctl,.rl-nb .rl-ctl{height:32px;font-size:13px;}
 .rl-nb{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);}
 .rl-nb .rl-ctl{width:64px;padding:0 8px;}
@@ -5834,7 +5835,7 @@ function releveCategorieDefaut(type){
 // Ce qui est déjà suivi ailleurs dans Solde n'est pas à ressaisir : une dépense
 // déjà notée (même montant, à 3 jours près), un abonnement, une mensualité,
 // une charge ou un revenu récurrent du même montant.
-function releveDejaSuivi(op){
+function releveDejaSuivi(op, info){
   const abs = Math.abs(op.montant), key = op.date.slice(0,7);
   const egal = v => Math.abs((Number(v)||0) - abs) < 0.006;
   const proche = d => d && Math.abs(new Date(d+'T00:00:00') - new Date(op.date+'T00:00:00')) <= 3*86400000;
@@ -5845,7 +5846,7 @@ function releveDejaSuivi(op){
     const ab = deps.find(x=>x.modePaiement==='Recurrent' && x.statut==='Actif' && egal(x.montant));
     if(ab) return `Abonnement déjà suivi : ${ab.libelle}`;
     const ech = deps.find(x=>x.modePaiement==='Echelonne' && egal(depenseMensualiteDuMois(x, key)));
-    if(ech) return `Mensualité déjà suivie : ${ech.libelle}`;
+    if(ech){ if(info) info.echeanceId = ech.id; return `Mensualité déjà suivie : ${ech.libelle}`; }
     const ch = chargesActivesMois(key).find(c=>egal(c.budget));
     if(ch) return `Charge déjà suivie : ${ch.categorie}`;
   } else {
@@ -5875,7 +5876,8 @@ function releveSuggestion(op, modele){
     return {...base, type: sens, libelle: (sens==='revenu' ? 'Remboursement ' : '') + (regle.libelle || releveJoli(cle)), categorie: cat, compte: regle.compte || 'Compte Perso', confiance:'devine', raison:'Sens inhabituel pour ce commerçant'};
   }
   if(regle){
-    return {...base, type: regle.type, libelle: regle.libelle || releveJoli(cle), categorie: regle.categorie || '', compte: regle.compte || 'Compte Perso',
+    const ech = regle.echeanceId && releveEcheanceOuverte(regle.echeanceId) ? {paiement:'Echelonne', echeanceId:regle.echeanceId} : {};
+    return {...base, ...ech, type: regle.type, libelle: regle.libelle || releveJoli(cle), categorie: regle.categorie || '', compte: regle.compte || 'Compte Perso',
       confiance: regle.n>=2 ? 'sur' : 'appris', raison: regle.type==='ignorer' ? `Déjà ignorée ${regle.n>1?regle.n+' fois':'une fois'}` : `Reconnue (${regle.n>1?regle.n+' fois':'une fois'})`};
   }
   const premier = cle.split(' ')[0];
@@ -5905,8 +5907,10 @@ function releveCreerLignes(ops){
     .sort((a,b)=>a.date.localeCompare(b.date))
     .map(o=>{
       const s = releveSuggestion(o, modele);
-      const suivi = releveDejaSuivi(o);
+      const info = {}, suivi = releveDejaSuivi(o, info);
       if(suivi){ s.type = 'ignorer'; s.confiance = 'sur'; s.raison = suivi; }
+      // Mensualité reconnue : si on la passe en dépense « en plusieurs fois », l'échéance est déjà choisie.
+      if(info.echeanceId){ s.paiement = 'Echelonne'; s.echeanceId = info.echeanceId; }
       const {cle, confiance, raison, ...valeurs} = s;
       return {id: uid(), date: o.date, brut: o.libelle.trim(), montant: r2(o.montant), cle, suivi: !!suivi, incertain: !!o.signeIncertain, confiance, raison, etat:'attente', s:{...valeurs}, v:{...valeurs}};
     });
@@ -6020,7 +6024,7 @@ function releveChangerChamp(el){
     if(tot) tot.textContent = `${fmtEUR(r2(Math.abs(l.montant)*nb))} au total`;
   }
   releveSauverSession();
-  if(champ==='type' || champ==='paiement') return render();
+  if(champ==='type' || champ==='paiement' || champ==='echeanceId') return render();
 }
 // Retient la décision de l'utilisateur : règle du commerçant, mots du libellé,
 // format du fichier, et si la suggestion était juste.
@@ -6032,6 +6036,8 @@ function releveApprendre(modele, l){
   if(l.suivi && v.type==='ignorer') return; // ignorée parce que déjà suivie ailleurs : rien à retenir sur ce commerçant
   const prev = modele.regles[l.cle], maj = new Date().toISOString().slice(0,10);
   const decision = v.type==='ignorer' ? {type:'ignorer', maj} : {type:v.type, libelle:(v.libelle||'').trim(), categorie:v.categorie||'', compte:v.compte||'Compte Perso', maj};
+  // Paiement en plusieurs fois rattaché à une échéance : les prochaines lignes de ce commerçant y seront rattachées aussi.
+  if(v.type==='depense' && v.paiement==='Echelonne' && v.echeanceId) decision.echeanceId = v.echeanceId;
   const memeQue = r => r && r.type===v.type && (v.type==='ignorer' || r.categorie===v.categorie);
   if(prev && prev.type!=='ignorer' && v.type!=='ignorer' && prev.type!==v.type){
     // Sens opposé à l'habitude (un remboursement chez un commerçant en dépense,
@@ -6056,15 +6062,25 @@ async function releveValider(ids){
     const l = parId.get(id); if(!l || l.etat!=='attente') return;
     const v = l.v, montant = r2(Math.abs(l.montant)), libelle = (v.libelle||'').trim() || releveJoli(l.cle), notes = (v.notes||'').trim();
     if(v.type==='depense'){
-      const dep = {id:uid(), ownerId:me.id, libelle, categorie:v.categorie||'', compte:v.compte||'Compte Perso', montant, modePaiement:'Unique', date:l.date, notes, source:'releve'};
-      // En plusieurs fois : la ligne du relevé est la première mensualité ; les
-      // suivantes seront reconnues comme « Mensualité déjà suivie ».
-      if(v.paiement==='Echelonne'){
-        const nb = releveNbMensualites(v);
-        delete dep.date;
-        Object.assign(dep, {modePaiement:'Echelonne', montant:r2(montant*nb), dateDebut:l.date, nbMensualites:nb, moisRetires:[]});
+      const ech = v.paiement==='Echelonne' && v.echeanceId ? releveEcheanceOuverte(v.echeanceId, true) : null;
+      if(ech){
+        // Rattachée à une échéance existante : enregistrée comme un versement.
+        state.echVersements.push({id:uid(), ownerId:me.id, echeanceId:ech.id, date:l.date, montant, note:notes, source:'releve'});
+      } else {
+        const dep = {id:uid(), ownerId:me.id, libelle, categorie:v.categorie||'', compte:v.compte||'Compte Perso', montant, modePaiement:'Unique', date:l.date, notes, source:'releve'};
+        // Nouvelle échéance : la ligne du relevé est la première mensualité ; les
+        // suivantes seront reconnues comme « Mensualité déjà suivie ».
+        if(v.paiement==='Echelonne'){
+          const nb = releveNbMensualites(v);
+          delete dep.date;
+          Object.assign(dep, {modePaiement:'Echelonne', montant:r2(montant*nb), dateDebut:l.date, nbMensualites:nb, moisRetires:[]});
+          v.echeanceId = dep.id;
+        } else if(v.paiement==='Recurrent'){
+          delete dep.date;
+          Object.assign(dep, {modePaiement:'Recurrent', frequence:v.frequence||'Mensuel', statut:'Actif'});
+        }
+        state.depenses.push(dep);
       }
-      state.depenses.push(dep);
       ajoutees++;
     } else if(v.type==='revenu'){
       state.revenusExceptionnels.push({id:uid(), ownerId:me.id, date:l.date, libelle, categorie:v.categorie||releveCategorieDefaut('revenu'), montant, notes, source:'releve'});
@@ -6120,12 +6136,24 @@ function relevePrecision(historique, n){
 const RELEVE_BADGES = {sur:['pill-teal','Reconnue'], appris:['pill-amber','Apprise'], devine:['pill-dim','Devinée'], nouveau:['pill-dim','Nouvelle']};
 const RELEVE_TYPES = [{value:'depense', label:'Dépense'}, {value:'revenu', label:'Rentrée'}, {value:'ignorer', label:'Ne pas importer'}];
 const RELEVE_COMPTES = [{value:'Compte Perso', label:'Compte perso'}, {value:'Compte Joint', label:'Compte joint'}];
-const RELEVE_PAIEMENTS = [{value:'Unique', label:'En une fois'}, {value:'Echelonne', label:'En plusieurs fois'}];
+const RELEVE_PAIEMENTS = [{value:'Unique', label:'En une fois'}, {value:'Echelonne', label:'En plusieurs fois'}, {value:'Recurrent', label:'Abonnement'}];
+const RELEVE_FREQUENCES = ['Mensuel','Hebdomadaire','Journalier','Trimestriel','Annuel'].map(f=>({value:f, label:f}));
+// Échéance (dépense en plusieurs fois) encore à payer, à laquelle rattacher un versement.
+// « meme soldée » : à la validation, une échéance choisie reste valable même si elle vient d'être soldée.
+function releveEcheanceOuverte(id, memeSoldee){
+  const d = mine(state.depenses).find(x=>x.id===id && x.modePaiement==='Echelonne');
+  return d && (memeSoldee || depenseResteAPayerReel(d)>0.005) ? d : null;
+}
+function releveEcheancesOptions(l){
+  const liste = mine(state.depenses).filter(d=>d.modePaiement==='Echelonne' && (depenseResteAPayerReel(d)>0.005 || d.id===l.v.echeanceId));
+  return [{value:'', label:'Nouvelle échéance'}].concat(liste.map(d=>({value:d.id, label:`${d.libelle} — reste ${fmtEUR(depenseResteAPayerReel(d))}`})));
+}
 function releveNbMensualites(v){ return Math.min(Math.max(Math.round(Number(v.nbMensualites)) || 3, 2), 120); }
 function releveLigneHTML(l){
   const [cls, lbl] = l.suivi ? ['pill-dim','Déjà suivie'] : RELEVE_BADGES[l.confiance] || RELEVE_BADGES.nouveau;
   const ign = l.v.type==='ignorer', dep = l.v.type==='depense';
-  const plusieurs = dep && l.v.paiement==='Echelonne', nb = releveNbMensualites(l.v);
+  const plusieurs = dep && l.v.paiement==='Echelonne', abo = dep && l.v.paiement==='Recurrent', nb = releveNbMensualites(l.v);
+  const ech = plusieurs && l.v.echeanceId ? releveEcheanceOuverte(l.v.echeanceId, true) : null;
   const nomLigne = attrEsc(l.v.libelle || l.brut);
   return `<li class="rl-row${ign?' is-ignored':''}${l.maj?' is-maj':''}" data-rl-row="${l.id}">
     <div class="rl-date">${fmtDate(l.date)}</div>
@@ -6140,7 +6168,10 @@ function releveLigneHTML(l){
     ${ign ? '' : `<input class="rl-ctl rl-note" data-rl-id="${l.id}" data-rl-champ="notes" value="${attrEsc(l.v.notes||'')}" placeholder="Ajouter un commentaire…" aria-label="Commentaire sur ${nomLigne}" maxlength="200">`}
     ${dep ? `<div class="rl-paie">
       ${releveMenuHTML(l, 'paiement', RELEVE_PAIEMENTS, l.v.paiement || 'Unique', `Paiement de ${nomLigne}`)}
-      ${plusieurs ? `<label class="rl-nb"><input class="rl-ctl" type="number" min="2" max="120" step="1" inputmode="numeric" data-rl-id="${l.id}" data-rl-champ="nbMensualites" value="${nb}" aria-label="Nombre de mensualités"><span>mensualités</span></label>
+      ${plusieurs ? releveMenuHTML(l, 'echeanceId', releveEcheancesOptions(l), ech ? ech.id : '', `Échéance de ${nomLigne}`) : ''}
+      ${ech ? `<span class="rl-nb-total">Versement sur cette échéance · reste ${fmtEUR(Math.max(depenseResteAPayerReel(ech) - Math.abs(l.montant), 0))} après</span>` : ''}
+      ${abo ? releveMenuHTML(l, 'frequence', RELEVE_FREQUENCES, l.v.frequence || 'Mensuel', `Fréquence de ${nomLigne}`) : ''}
+      ${plusieurs && !ech ? `<label class="rl-nb"><input class="rl-ctl" type="number" min="2" max="120" step="1" inputmode="numeric" data-rl-id="${l.id}" data-rl-champ="nbMensualites" value="${nb}" aria-label="Nombre de mensualités"><span>mensualités</span></label>
         <span class="rl-nb-total">${fmtEUR(r2(Math.abs(l.montant)*nb))} au total</span>` : ''}
     </div>` : ''}
     <div class="rl-meta"><span class="pill ${cls}">${lbl}</span>${l.confiance==='nouveau' && !l.suivi ? '' : `<span class="rl-raison">${esc(l.raison)}</span>`}</div>

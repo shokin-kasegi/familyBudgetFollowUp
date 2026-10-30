@@ -341,6 +341,59 @@ try{
     await ctx.close();
   }
 
+  console.log('\n— Abonnement et rattachement à une échéance');
+  {
+    const {ctx, page, errors} = await openApp(browser, {width:1440, height:900});
+    await importer(page, 'releve-paiements.csv', [
+      'Date;Libellé;Débit euros;Crédit euros;',
+      '04/10/2026;"PRLV SEPA SPOTIFY AB";10,99;;',
+      '06/10/2026;"CB MAISON DU CANAPE";300,00;;',
+      '08/10/2026;"CB FNAC PARIS";450,00;;',
+    ].join('\r\n'));
+    const choisir = async (id, champ, value) => {
+      await page.click(`.rl-row[data-rl-row="${id}"] .rl-${champ} [data-cat-toggle]`);
+      await page.click(`.rl-row[data-rl-row="${id}"] .rl-${champ} .cat-select.open [data-rl-pick="${value}"]`);
+      await page.waitForTimeout(150);
+    };
+    const idDe = async s => (await lignes(page)).find(l=>l.lib.toLowerCase().includes(s)).id;
+    const spotify = await idDe('spotify'), canape = await idDe('canape'), fnac = await idDe('fnac');
+    await choisir(spotify, 'paiement', 'Recurrent');
+    ok(!!await page.$(`.rl-row[data-rl-row="${spotify}"] .rl-frequence`), 'paiements : un abonnement propose sa fréquence');
+    await choisir(spotify, 'frequence', 'Annuel');
+    await choisir(canape, 'paiement', 'Echelonne');
+    ok(await page.$$eval(`.rl-row[data-rl-row="${canape}"] .rl-echeanceId [data-rl-pick]`, b=>b.map(x=>x.dataset.rlPick)).then(v=>v[0]==='' && v.includes('dep-canape')), 'paiements : les échéances en cours sont proposées, après « Nouvelle échéance »');
+    await choisir(canape, 'echeanceId', 'dep-canape');
+    ok(!await page.$(`.rl-row[data-rl-row="${canape}"] .rl-nb`) && /Versement sur cette échéance/.test(await page.innerText(`.rl-row[data-rl-row="${canape}"] .rl-paie`)), 'paiements : échéance choisie → versement, sans nombre de mensualités');
+    await choisir(fnac, 'paiement', 'Echelonne');
+    await page.fill(`[data-rl-id="${fnac}"][data-rl-champ="nbMensualites"]`, '3');
+    await page.click(`.rl-row[data-rl-row="${fnac}"] .rl-date`);
+    await page.click('[data-action="releve-valider-tout"]');
+    await page.waitForTimeout(400);
+    const r = await page.evaluate(()=>{
+      const me = currentUser().id;
+      const deps = state.depenses.filter(d=>d.ownerId===me && d.source==='releve');
+      return {
+        spotify: deps.find(d=>/spotify/i.test(d.libelle)),
+        fnac: deps.find(d=>/fnac/i.test(d.libelle)),
+        canapeDep: deps.find(d=>/canape/i.test(d.libelle)),
+        vers: state.echVersements.filter(v=>v.echeanceId==='dep-canape' && v.source==='releve'),
+        regleFnac: state.importApprentissage.find(x=>x.ownerId===me).regles['FNAC PARIS'],
+      };
+    });
+    ok(r.spotify && r.spotify.modePaiement==='Recurrent' && r.spotify.frequence==='Annuel' && r.spotify.statut==='Actif' && r.spotify.montant===10.99 && !r.spotify.date, `paiements : abonnement Spotify créé (${JSON.stringify(r.spotify)})`);
+    ok(!r.canapeDep && r.vers.length===1 && r.vers[0].montant===300 && r.vers[0].date==='2026-10-06', `paiements : versement de 300 € sur l'échéance Canapé (${JSON.stringify(r.vers)})`);
+    ok(r.fnac && r.fnac.modePaiement==='Echelonne' && r.fnac.montant===1350 && r.fnac.nbMensualites===3, `paiements : nouvelle échéance Fnac (${JSON.stringify(r.fnac)})`);
+    ok(r.regleFnac && r.regleFnac.echeanceId===r.fnac?.id, 'paiements : le commerçant retient son échéance');
+    // Le mois suivant, un paiement Fnac d'un autre montant est proposé en versement sur cette échéance.
+    await page.click('[data-action="releve-fermer"]');
+    await page.waitForTimeout(250);
+    await importer(page, 'releve-paiements-2.csv', ['Date;Libellé;Débit euros;Crédit euros;', '08/11/2026;"CB FNAC PARIS";200,00;;'].join('\r\n'));
+    const l2 = (await lignes(page))[0];
+    ok(/Versement sur cette échéance/.test(await page.innerText(`.rl-row[data-rl-row="${l2.id}"] .rl-paie`)), 'paiements : le paiement suivant est rattaché à la même échéance');
+    ok(errors.length===0, `erreurs console : ${errors.join(' | ')}`);
+    await ctx.close();
+  }
+
   console.log('\n— 390 px');
   {
     const {ctx, page, errors} = await openApp(browser, {width:390, height:844});
