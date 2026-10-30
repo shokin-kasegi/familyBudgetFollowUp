@@ -812,7 +812,8 @@ button,a,[role="button"]{touch-action:manipulation;-webkit-tap-highlight-color:t
 .rl-meta{grid-area:meta;display:flex;align-items:center;gap:8px;min-width:0;}
 .rl-raison{font-size:12px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .rl-actions{grid-area:actions;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:4px;}
-.rl-actions .rl-aboSerie,.rl-actions .rl-ppfSerie{width:290px;max-width:100%;}
+.rl-actions .rl-aboSerie,.rl-actions .rl-ppfSerie,.rl-actions .rl-chgSerie{width:290px;max-width:100%;}
+.rl-actions .rl-chgPeriode{width:170px;max-width:100%;}
 .rl-ppf-total{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--muted);}
 .rl-ppf-total input{width:96px;height:32px;text-align:right;font-variant-numeric:tabular-nums;}
 .rl-erreur{color:var(--c-over);}
@@ -1887,10 +1888,11 @@ function aboAlerteTexte(a){
   if(a.type==='prix') return `${a.libelle} : ${fmtEUR(a.ancien)} → ${fmtEUR(a.nouveau)} par mois`;
   if(a.type==='ppf-termine') return `${a.libelle} : payé en entier (${fmtEUR(a.nouveau)})`;
   if(a.type==='ppf-retard') return `${a.libelle} : mensualité de ${monthLabel(a.mois)} non validée, reportée au mois suivant`;
+  if(a.type==='chg-retard') return `${a.libelle} : échéance de ${monthLabel(a.mois)} non validée, reportée au mois suivant`;
   return `${a.libelle} retiré : prélèvement de ${monthLabel(a.mois)} non validé`;
 }
 function aboAlerteTitre(a){
-  return {prix:'Changement de prix', 'ppf-termine':'Paiement terminé', 'ppf-retard':'Mensualité en retard'}[a.type] || 'Abonnement retiré';
+  return {prix:'Changement de prix', 'ppf-termine':'Paiement terminé', 'ppf-retard':'Mensualité en retard', 'chg-retard':'Charge en retard'}[a.type] || 'Abonnement retiré';
 }
 
 /* ======================== PAIEMENTS EN PLUSIEURS FOIS ======================== */
@@ -2024,6 +2026,128 @@ function ppfRattacher(dep, ppfId){
 function ppfArreter(ppfId){ ppfSerie(ppfId).forEach(d=>{ d.ppfArrete = true; }); ppfRecaler(ppfId); }
 // Texte court d'avancement : « 3 mensualités · 450,00 € sur 1 200,00 € ».
 function ppfAvancement(e){ return `${fmtCount(e.versees.length,'mensualité','mensualités')} · ${fmtEUR(e.paye)} sur ${fmtEUR(e.total)}`; }
+
+/* ================================ CHARGES ================================ */
+/* Même mécanique que les abonnements, pour les dépenses obligatoires du foyer
+   (loyer, énergie, assurance, impôts…) : une dépense marquée charge porte un
+   identifiant de série (chgId) et une périodicité en mois (chgPeriode : 1, 2, 3,
+   6 ou 12). Chaque échéance validée annonce la suivante (prevu:true), une période
+   plus tard, au même jour et au montant de la dernière validée. Une prévision ne
+   compte nulle part tant qu'elle n'est pas validée, à la main ou à l'import.
+   Comme pour un paiement en plusieurs fois, une échéance non validée à la fin de
+   son mois n'est pas retirée (la charge reste due) : elle passe au mois courant. */
+const CHG_PERIODES = [
+  {value:'1', label:'Tous les mois', par:'par mois', nom:'mensuelle'},
+  {value:'2', label:'Tous les 2 mois', par:'tous les 2 mois', nom:'bimestrielle'},
+  {value:'3', label:'Tous les 3 mois', par:'par trimestre', nom:'trimestrielle'},
+  {value:'6', label:'Tous les 6 mois', par:'par semestre', nom:'semestrielle'},
+  {value:'12', label:'Tous les ans', par:'par an', nom:'annuelle'},
+];
+function chgPeriode(x){ const n = Number(x && typeof x==='object' ? x.chgPeriode : x) || 1; return CHG_PERIODES.some(p=>Number(p.value)===n) ? n : 1; }
+function chgPeriodeInfo(x){ return CHG_PERIODES.find(p=>Number(p.value)===chgPeriode(x)); }
+function chgSerie(chgId){ return mine(state.depenses).filter(d=>d.chgId===chgId); }
+function chgPrevisions(){ return mine(state.depenses).filter(d=>d.prevu && d.chgId); }
+function chgPrevisionsDuMois(key){ return chgPrevisions().filter(d=>moisDe(d.date)===key).sort((a,b)=>a.date.localeCompare(b.date)); }
+// Coût ramené au mois (une charge annuelle de 600 € pèse 50 € par mois).
+function chgParMois(p){ return r2(r2(p.montant) / chgPeriode(p)); }
+// Annonce la prochaine échéance d'une série : une période après `dep` (jamais
+// un mois déjà passé : elle serait aussitôt en retard).
+function chgPlanifier(dep){
+  if(!dep.chgId || chgPrevisions().some(p=>p.chgId===dep.chgId)) return null;
+  const periode = chgPeriode(dep);
+  let key = addMonths(moisDe(dep.date), periode);
+  if(key < currentMonthKey()) key = currentMonthKey();
+  const prev = {id:uid(), ownerId:dep.ownerId, chgId:dep.chgId, chgPeriode:periode, libelle:dep.libelle, categorie:dep.categorie||'', montant:r2(dep.montant),
+    modePaiement:'Unique', date:dateDansMois(key, Number(String(dep.date).slice(8,10))), notes:'', prevu:true};
+  if(dep.cle) prev.cle = dep.cle;
+  state.depenses.push(prev);
+  return prev;
+}
+// Marque une dépense comme charge (nouvelle série) et annonce l'échéance suivante.
+function chgDemarrer(dep, periode){
+  delete dep.aboId; delete dep.ppfId; delete dep.ppfTotal;
+  dep.chgId = dep.chgId || uid();
+  dep.chgPeriode = chgPeriode(periode);
+  return chgPlanifier(dep);
+}
+// Charges en cours (une par série, via son échéance prévue), pour choisir à
+// laquelle rattacher une dépense : deux charges chez le même fournisseur se
+// distinguent par leur nom, leur montant et leur périodicité.
+function chgSeriesAuChoix(){
+  return chgPrevisions().sort((a,b)=>String(a.libelle||'').localeCompare(String(b.libelle||''),'fr') || a.montant-b.montant || a.date.localeCompare(b.date));
+}
+function chgSerieLabel(p){ return `${p.libelle||'Sans nom'} · ${fmtEUR(p.montant)} ${chgPeriodeInfo(p).par}`; }
+function chgSerieOptions(){
+  return [{value:'', label:'Nouvelle charge'}, ...chgSeriesAuChoix().map(p=>({value:p.chgId, label:chgSerieLabel(p)}))];
+}
+// Rattache une dépense à une charge existante. Si elle tombe le mois de l'échéance
+// prévue (ou après), elle la remplace et annonce la suivante ; un paiement plus
+// ancien rejoint simplement la série. Elle prend le nom et la périodicité de la charge.
+function chgRattacher(dep, chgId){
+  const prev = chgPrevisions().find(p=>p.chgId===chgId);
+  const ref = prev || chgSerie(chgId).find(d=>d!==dep) || {};
+  delete dep.aboId; delete dep.ppfId; delete dep.ppfTotal;
+  if(ref.libelle) dep.libelle = ref.libelle;
+  dep.chgId = chgId;
+  dep.chgPeriode = chgPeriode(ref.chgPeriode || dep.chgPeriode);
+  if(prev && moisDe(prev.date) <= moisDe(dep.date)){
+    if(!dep.cle && prev.cle) dep.cle = prev.cle;
+    state.depenses = state.depenses.filter(d=>d!==prev);
+  }
+  return chgPlanifier(dep);
+}
+// Valide une échéance : elle devient une dépense comme les autres, et annonce la suivante.
+function chgValider(prev, valeurs){
+  Object.assign(prev, valeurs);
+  prev.montant = r2(prev.montant);
+  delete prev.prevu;
+  chgPlanifier(prev);
+  return prev;
+}
+// Arrête une charge : son échéance prévue disparaît, les validées restent.
+function chgArreter(chgId){
+  const avant = state.depenses.length;
+  const me = currentUser();
+  state.depenses = state.depenses.filter(d=>!(d.prevu && d.chgId===chgId && me && d.ownerId===me.id));
+  return avant - state.depenses.length;
+}
+// Nouveau montant annoncé : l'échéance en attente (et donc les suivantes) le prend.
+function chgChangerMontant(prev, montant){ prev.montant = r2(montant); }
+// Nouvelle périodicité : toute la série la prend, et l'échéance prévue est
+// recalculée depuis la dernière validée.
+function chgChangerPeriode(chgId, periode){
+  const n = chgPeriode(periode);
+  const serie = chgSerie(chgId);
+  if(!serie.length || serie.every(d=>chgPeriode(d)===n)) return false;
+  serie.forEach(d=>{ d.chgPeriode = n; });
+  const versees = serie.filter(d=>!d.prevu).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const prev = serie.find(d=>d.prevu);
+  const derniere = versees[versees.length-1];
+  if(prev && derniere){
+    let key = addMonths(moisDe(derniere.date), n);
+    if(key < currentMonthKey()) key = currentMonthKey();
+    prev.date = dateDansMois(key, Number(String(prev.date).slice(8,10)));
+  }
+  return true;
+}
+// Une échéance non validée à la fin de son mois reste due : elle passe au mois
+// courant, et c'est signalé (une fois par échéance et par mois). Renvoie le nombre d'échéances reportées.
+function chgReporter(){
+  const cur = currentMonthKey();
+  const echues = chgPrevisions().filter(p=>moisDe(p.date) < cur);
+  echues.forEach(p=>{
+    aboAlerter({id:'chg-retard-'+p.id+'-'+moisDe(p.date), type:'chg-retard', chgId:p.chgId, libelle:p.libelle, ancien:r2(p.montant), mois:moisDe(p.date)});
+    p.date = dateDansMois(cur, Number(String(p.date).slice(8,10)));
+  });
+  return echues.length;
+}
+// Charges en cours, avec ce qui a déjà été payé, pour l'échéancier.
+function chgSeriesActives(){
+  return chgPrevisions().map(p=>{
+    const versees = chgSerie(p.chgId).filter(d=>!d.prevu).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    return {prevu:p, versees, paye:sumR2(versees, d=>d.montant)};
+  }).sort((a,b)=>a.prevu.date.localeCompare(b.prevu.date));
+}
 
 /* ============================== SIDEBAR / NAV ============================== */
 const SPACES = [
@@ -2746,7 +2870,7 @@ function bulkDelete(table){
 
 /* ============================== RENDER ROOT ============================== */
 async function render(){
-  if(currentUser() && (aboPurger() + ppfRecalerTout())) persist();
+  if(currentUser() && (aboPurger() + ppfRecalerTout() + chgReporter())) persist();
   renderSidebar();
   const view = document.getElementById('view');
   const renderers = {
@@ -2893,6 +3017,9 @@ function renderDashboard(){
   const prevusPpf = ppfPrevisionsDuMois(key);
   const notePpf = prevusPpf.length ? `<div class="hero-note">${icon('calendar').replace('<svg','<svg style="width:14px;height:14px;vertical-align:-2px;stroke:currentColor;fill:none;stroke-width:1.8;margin-right:6px"')}${fmtCount(prevusPpf.length,'mensualité prévue','mensualités prévues')} (${fmtEUR(sumR2(prevusPpf,x=>x.montant))}), compté${prevusPpf.length>1?'es':'e'} une fois validée${prevusPpf.length>1?'s':''}. <button class="link" data-nav="echeancier">Voir</button></div>` : '';
 
+  const prevusChg = chgPrevisionsDuMois(key);
+  const noteChg = prevusChg.length ? `<div class="hero-note">${icon('home').replace('<svg','<svg style="width:14px;height:14px;vertical-align:-2px;stroke:currentColor;fill:none;stroke-width:1.8;margin-right:6px"')}${fmtCount(prevusChg.length,'charge prévue','charges prévues')} (${fmtEUR(sumR2(prevusChg,x=>x.montant))}), compté${prevusChg.length>1?'es':'e'} une fois validée${prevusChg.length>1?'s':''}. <button class="link" data-nav="echeancier">Voir</button></div>` : '';
+
   return `
     <div class="dash">
       <div class="${enter.trim()}">${pageHeadHTML({
@@ -2916,7 +3043,7 @@ function renderDashboard(){
         <div class="flow${dashFocusPoste?' has-focus':''}" data-n="${n}" role="img" aria-label="${attrEsc(flowLabel)}">${segs}</div>
         <h2 class="sr-only">Dépenses par catégorie</h2>
         <div class="postes">${postes}</div>
-        ${noteAbos}${notePpf}
+        ${noteAbos}${notePpf}${noteChg}
       </section>
 
       <section class="card ychart${enter}${dashYearGrown||reduceMotion.matches?'':' first'}" aria-labelledby="year-h">
@@ -3112,8 +3239,8 @@ function chartFilterActiveBarHTML(chartKey){
 // Montant de cellule : au centime, et à l'euro sur téléphone (seule exception).
 function amtCell(v, extra, label){ return `<td class="num${extra?' '+extra:''}${v<-0.004 && /key/.test(extra||'')?' neg':''}" data-v="${r2(v)}"${label?` data-label="${label}"`:''}><span class="amt-full">${fmtEUR(v)}</span><span class="amt-short">${fmtEUR0(v)}</span></td>`; }
 /* ============================== ÉCHÉANCIER ============================== */
-/* Abonnements et paiements en plusieurs fois réunis : ce qui est en cours, la
-   prochaine échéance à valider, l'avancement, et ce qui est terminé. */
+/* Charges, abonnements et paiements en plusieurs fois réunis : ce qui est en
+   cours, la prochaine échéance à valider, l'avancement, et ce qui est terminé. */
 function aboSeriesActives(){
   return aboPrevisions().map(p=>{
     const versees = mine(state.depenses).filter(d=>d.aboId===p.aboId && !d.prevu).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
@@ -3122,16 +3249,21 @@ function aboSeriesActives(){
 }
 function renderEcheancier(){
   const abos = aboSeriesActives();
+  const chgs = chgSeriesActives();
+  const chgParMoisTotal = sumR2(chgs, c=>chgParMois(c.prevu));
   const ppfs = ppfIds().map(ppfEtat).filter(e=>e.versees.length);
   const enCours = ppfs.filter(e=>!e.termine && !e.arrete).sort((a,b)=>String(a.prevu?.date||'').localeCompare(String(b.prevu?.date||'')));
   const finis = ppfs.filter(e=>e.termine || e.arrete).sort((a,b)=>String(b.derniere.date).localeCompare(String(a.derniere.date)));
   const parMois = sumR2(abos, a=>a.prevu.montant);
   const resteDu = sumR2(enCours, e=>Math.max(0, e.reste));
   const enTete = [
+    chgs.length ? `${fmtCount(chgs.length,'charge','charges')} (<strong>${fmtEUR(chgParMoisTotal)}</strong> par mois)` : '',
     abos.length ? `${fmtCount(abos.length,'abonnement','abonnements')} (<strong>${fmtEUR(parMois)}</strong> par mois)` : '',
     enCours.length ? `${fmtCount(enCours.length,'paiement en plusieurs fois','paiements en plusieurs fois')} (reste <strong>${fmtEUR(resteDu)}</strong>)` : '',
   ].filter(Boolean);
-  const finding = enTete.length ? `En cours : ${enTete.join(' et ')}.` : 'Aucun abonnement ni paiement en plusieurs fois en cours.';
+  const finding = enTete.length ? `En cours : ${enTete.length>1 ? enTete.slice(0,-1).join(', ')+' et '+enTete[enTete.length-1] : enTete[0]}.` : 'Aucune charge, aucun abonnement ni paiement en plusieurs fois en cours.';
+  const chgHTML = chgs.length ? `<ul class="abo-list">${chgs.map(c=>chgLigneHTML(c.prevu, c)).join('')}</ul>`
+    : `<div class="empty-line">Aucune charge en cours. Coche « Charge » en ajoutant une dépense (loyer, énergie, assurance…), ou depuis l’import du relevé.</div>`;
   const aboHTML = abos.length ? `<ul class="abo-list">${abos.map(a=>{ const p = a.prevu; return `<li class="abo-row">
       <div><span class="cell-main">${esc(p.libelle)}</span><span class="cell-sub">Prochain prélèvement le ${fmtDate(p.date)}${p.categorie?` · ${esc(p.categorie)}`:''}${a.versees.length?` · depuis ${monthLabel(moisDe(a.versees[0].date))}, ${fmtEUR(a.paye)} payés`:''}</span></div>
       <span class="num">${fmtEUR(p.montant)}<span class="cell-sub">par mois</span></span>
@@ -3151,6 +3283,11 @@ function renderEcheancier(){
   return `
     ${pageHeadHTML({title:'Échéancier', finding,
       action:`<button class="btn btn-primary" data-action="add-depense">${icon('plus')}Ajouter une dépense</button>`})}
+    <section class="card mb16" aria-labelledby="ech-chg">
+      <div class="section-head"><h2 id="ech-chg">${icon('home')}Charges</h2>${chgs.length?`<span class="side-note num">${fmtEUR(chgParMoisTotal)} par mois</span>`:''}</div>
+      <p class="field-note" style="margin:-4px 0 8px;">Chaque échéance ne compte qu’une fois validée, à la main ou par l’import du relevé. La suivante est prévue une période plus tard, au montant de la dernière validée ; non validée, elle reste due et passe au mois suivant.</p>
+      ${chgHTML}
+    </section>
     <section class="card mb16" aria-labelledby="ech-abo">
       <div class="section-head"><h2 id="ech-abo">${icon('repeat')}Abonnements</h2>${abos.length?`<span class="side-note num">${fmtEUR(parMois)} par mois</span>`:''}</div>
       ${aboHTML}
@@ -3434,7 +3571,7 @@ function renderDepenses(){
   // Les dépenses portant le même libellé sont regroupées sur une ligne (total du mois) ;
   // un clic sur le libellé déplie le détail.
   const depenseRowHTML = (x, child=false) => `<tr${child?' class="grp-child"':''}>
-          <td><span class="cell-main">${dash(x.libelle)}</span>${x.aboId?'<span class="pill pill-dim pill-abo">Abonnement</span>':''}${x.ppfId?'<span class="pill pill-dim pill-abo">En plusieurs fois</span>':''}${noteSub(x)}${x.date?`<span class="cell-sub">${fmtDate(x.date)}</span>`:''}</td><td class="sub first-sub">${dash(x.categorie)}</td>
+          <td><span class="cell-main">${dash(x.libelle)}</span>${x.aboId?'<span class="pill pill-dim pill-abo">Abonnement</span>':''}${x.ppfId?'<span class="pill pill-dim pill-abo">En plusieurs fois</span>':''}${x.chgId?'<span class="pill pill-dim pill-abo">Charge</span>':''}${noteSub(x)}${x.date?`<span class="cell-sub">${fmtDate(x.date)}</span>`:''}</td><td class="sub first-sub">${dash(x.categorie)}</td>
           <td class="num key" data-v="${r2(x.montant)}">${fmtEUR(x.montant)}</td>
           ${actionsFor(x)}
         </tr>`;
@@ -3447,6 +3584,7 @@ function renderDepenses(){
       <div class="big fig" style="color:var(--text)" data-tween="dep:total" data-fmt="big" data-v="${total}">${bigFmt(total)}</div>
     </section>
 
+    ${chgPrevusHTML(key)}
     ${aboPrevusHTML(key)}
     ${ppfPrevusHTML(key)}
     <div class="card">
@@ -3523,22 +3661,25 @@ function deleteCategory(type, id){
   return item;
 }
 function depense_fields(){
-  const series = aboSerieOptions(), paiements = ppfSerieOptions();
+  const series = aboSerieOptions(), paiements = ppfSerieOptions(), charges = chgSerieOptions();
   return [
     {key:'date', label:'Date de la dépense', type:'date'},
     {key:'libelle', label:'Libellé', placeholder:'Courses, restaurant, réparation…'},
     {key:'categorie', label:'Catégorie', type:'category', categoryType:'depenses'},
     {key:'montant', label:'Montant (€)', type:'number', step:'0.01'},
     {key:'notes', label:'Commentaire', placeholder:'Facultatif'},
-    {key:'abonnement', label:'Abonnement : prévoir le même prélèvement le mois suivant', type:'checkbox', showIf:v=>!v.plusieursFois},
+    {key:'charge', label:'Charge (loyer, énergie, assurance…) : prévoir la prochaine échéance', type:'checkbox', showIf:v=>!v.abonnement && !v.plusieursFois},
+    ...(charges.length>1 ? [{key:'chgSerie', label:'Quelle charge ?', type:'select', options:charges, showIf:v=>!!v.charge}] : []),
+    {key:'chgPeriode', label:'Périodicité', type:'select', options:CHG_PERIODES, default:'1', showIf:v=>!!v.charge && !v.chgSerie},
+    {key:'abonnement', label:'Abonnement : prévoir le même prélèvement le mois suivant', type:'checkbox', showIf:v=>!v.plusieursFois && !v.charge},
     ...(series.length>1 ? [{key:'aboSerie', label:'Quel abonnement ?', type:'select', options:series, showIf:v=>!!v.abonnement && !v.plusieursFois}] : []),
-    {key:'plusieursFois', label:'Paiement en plusieurs fois : cette dépense est une mensualité', type:'checkbox', showIf:v=>!v.abonnement},
+    {key:'plusieursFois', label:'Paiement en plusieurs fois : cette dépense est une mensualité', type:'checkbox', showIf:v=>!v.abonnement && !v.charge},
     ...(paiements.length>1 ? [{key:'ppfSerie', label:'Quel paiement ?', type:'select', options:paiements, showIf:v=>!!v.plusieursFois}] : []),
     {key:'montantTotal', label:'Montant total à payer (€)', type:'number', step:'0.01', showIf:v=>!!v.plusieursFois && !v.ppfSerie},
   ];
 }
 // Une case masquée (l'autre mode est coché) ne compte pas.
-function depenseMode(data){ return data.plusieursFois ? 'ppf' : data.abonnement ? 'abo' : 'unique'; }
+function depenseMode(data){ return data.charge ? 'chg' : data.plusieursFois ? 'ppf' : data.abonnement ? 'abo' : 'unique'; }
 function depenseValidationErrors(data, dep){
   const errors = [];
   if(!data.date) errors.push(['date','Renseigne une date']);
@@ -3564,8 +3705,8 @@ function depenseValidationErrors(data, dep){
 function openDepenseEditModal(depenseId){
   const dep = mine(state.depenses).find(x=>x.id===depenseId);
   // Déjà abonnement : la série ne change pas ici, le choix n'est proposé qu'en le devenant.
-  const champs = depense_fields().filter(f=>!(f.key==='aboSerie' && dep.aboId) && !(f.key==='ppfSerie' && dep.ppfId));
-  openModal('Modifier la dépense', champs, {...dep, abonnement:!!dep.aboId, plusieursFois:!!dep.ppfId, montantTotal:dep.ppfId ? ppfEtat(dep.ppfId).total : ''}, async (data)=>{
+  const champs = depense_fields().filter(f=>!(f.key==='aboSerie' && dep.aboId) && !(f.key==='ppfSerie' && dep.ppfId) && !(f.key==='chgSerie' && dep.chgId));
+  openModal('Modifier la dépense', champs, {...dep, abonnement:!!dep.aboId, plusieursFois:!!dep.ppfId, montantTotal:dep.ppfId ? ppfEtat(dep.ppfId).total : '', charge:!!dep.chgId, chgPeriode:String(chgPeriode(dep))}, async (data)=>{
     const errors = depenseValidationErrors(data, dep);
     if(errors.length){ errors.forEach(([key,msg])=>markFieldError(key,msg)); toast(errors[0][1]); return false; }
     Object.assign(dep, {libelle:data.libelle, categorie:data.categorie, montant:data.montant, date:data.date, modePaiement:'Unique', notes:(data.notes||'').trim()});
@@ -3573,6 +3714,14 @@ function openDepenseEditModal(depenseId){
     let msg = 'Dépense mise à jour';
     if(mode!=='abo' && dep.aboId){ aboArreter(dep.aboId); delete dep.aboId; delete dep.cle; msg = 'Ce n’est plus un abonnement'; }
     if(mode!=='ppf' && dep.ppfId){ ppfDetacher(dep); msg = 'Retirée du paiement en plusieurs fois'; }
+    if(mode!=='chg' && dep.chgId){ chgArreter(dep.chgId); delete dep.chgId; delete dep.chgPeriode; delete dep.cle; msg = 'Ce n’est plus une charge'; }
+    if(mode==='chg' && !dep.chgId){
+      const prev = data.chgSerie ? chgRattacher(dep, data.chgSerie) : chgDemarrer(dep, data.chgPeriode);
+      msg = prev ? chgToast(prev, 'Charge') : data.chgSerie ? 'Rattachée à la charge' : msg;
+    } else if(mode==='chg' && chgChangerPeriode(dep.chgId, data.chgPeriode)){
+      const prev = chgPrevisions().find(p=>p.chgId===dep.chgId);
+      msg = prev ? chgToast(prev, 'Périodicité mise à jour') : 'Périodicité mise à jour';
+    }
     if(mode==='abo' && !dep.aboId){
       const prev = data.aboSerie ? aboRattacher(dep, data.aboSerie) : aboDemarrer(dep);
       msg = prev ? `Abonnement : prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}` : data.aboSerie ? 'Rattachée à l’abonnement' : msg;
@@ -3600,11 +3749,14 @@ function openBasculerEnRevenu(dep){
     if(reportFieldErrors(fieldRequiredErrors(revexcFields(), data))) return false;
     if(dep.aboId) aboArreter(dep.aboId);
     if(dep.ppfId) ppfDetacher(dep);
+    if(dep.chgId) chgArreter(dep.chgId);
     state.depenses = state.depenses.filter(x=>x.id!==dep.id);
     state.revenusExceptionnels.push({id:uid(), ownerId:currentUser().id, ...data, notes:(data.notes||'').trim()});
     await persist(); await render(); toast(`Basculée en revenu · ${fmtEUR(data.montant)} en ${monthLabel(moisDe(data.date))}`);
   }, `<p class="field-note">La dépense « ${esc(dep.libelle||'')} » sera retirée des dépenses et comptée en revenu, en positif.</p>`);
 }
+// Message après une échéance de charge : la suivante annoncée.
+function chgToast(prev, debut){ return `${debut} · prochaine échéance (${fmtEUR(prev.montant)}) prévue en ${monthLabel(moisDe(prev.date))}`; }
 // Message après une mensualité : clôture, ou prochaine mensualité annoncée.
 function ppfToast(e, debut){
   if(e.termine) return `${e.libelle} : payé en entier, paiement clôturé`;
@@ -3631,6 +3783,29 @@ function ppfPrevuLigneHTML(p){
         <button class="icon-btn del" data-action="ppf-arreter" data-id="${p.ppfId}" aria-label="Arrêter le paiement en plusieurs fois ${attrEsc(p.libelle)}">${icon('x')}</button>
       </div>
     </li>`;
+}
+// Une échéance de charge à valider ; `a` (échéancier) ajoute ce qui a déjà été payé.
+function chgLigneHTML(p, a){
+  const per = chgPeriodeInfo(p);
+  return `<li class="abo-row" data-chg="${p.chgId}">
+      <div><span class="cell-main">${esc(p.libelle)}</span><span class="cell-sub">${a ? 'Prochaine échéance le ' : ''}${fmtDate(p.date)} · ${ucfirst(per.nom)}${p.categorie?` · ${esc(p.categorie)}`:''}${a && a.versees.length?` · depuis ${monthLabel(moisDe(a.versees[0].date))}, ${fmtEUR(a.paye)} payés`:''}</span></div>
+      <span class="num">${fmtEUR(p.montant)}<span class="cell-sub">${per.par}${chgPeriode(p)>1 ? ` · ${fmtEUR(chgParMois(p))} par mois` : ''}</span></span>
+      <div class="row-actions">
+        <button class="btn btn-ghost btn-sm" data-action="chg-valider" data-id="${p.id}">${icon('check')}Valider</button>
+        <button class="btn btn-text btn-sm" data-action="chg-montant" data-id="${p.id}">Nouveau montant</button>
+        <button class="icon-btn del" data-action="chg-arreter" data-id="${p.id}" aria-label="Arrêter la charge ${attrEsc(p.libelle)}">${icon('x')}</button>
+      </div>
+    </li>`;
+}
+// Échéances de charges attendues ce mois-ci : affichées à part, hors des totaux.
+function chgPrevusHTML(key){
+  const prevus = chgPrevisionsDuMois(key);
+  if(!prevus.length) return '';
+  return `<div class="card mb16">
+    <div class="section-head"><h2>${icon('home')}Charges prévues</h2><span class="side-note num">${fmtEUR(sumR2(prevus,x=>x.montant))}</span></div>
+    <p class="field-note" style="margin:-4px 0 8px;">Pas encore comptées : valide chaque échéance quand elle passe, ou importe ton relevé. Sans validation, elle reste due et passe au mois suivant. <button class="link" data-nav="echeancier">Voir l’échéancier</button></p>
+    <ul class="abo-list">${prevus.map(p=>chgLigneHTML(p)).join('')}</ul>
+  </div>`;
 }
 // Prélèvements d'abonnement attendus ce mois-ci : affichés à part, hors des totaux.
 function aboPrevusHTML(key){
@@ -4029,8 +4204,9 @@ async function handleAction(action, id, el){
       const mode = depenseMode(data);
       const prev = mode==='abo' ? (data.aboSerie ? aboRattacher(dep, data.aboSerie) : aboDemarrer(dep)) : null;
       const ppf = mode==='ppf' ? (data.ppfSerie ? ppfRattacher(dep, data.ppfSerie) : ppfDemarrer(dep, data.montantTotal)) : null;
+      const chg = mode==='chg' ? (data.chgSerie ? chgRattacher(dep, data.chgSerie) : chgDemarrer(dep, data.chgPeriode)) : null;
       await persist(); await render();
-      toast(ppf ? ppfToast(ppf, data.ppfSerie ? 'Mensualité ajoutée' : 'Paiement en plusieurs fois ajouté') : prev ? `${data.aboSerie ? 'Prélèvement validé' : 'Abonnement ajouté'} · prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}` : mode==='abo' && data.aboSerie ? 'Rattachée à l’abonnement' : 'Dépense ajoutée'); }); break;
+      toast(chg ? chgToast(chg, data.chgSerie ? 'Échéance validée' : 'Charge ajoutée') : mode==='chg' && data.chgSerie ? 'Rattachée à la charge' : ppf ? ppfToast(ppf, data.ppfSerie ? 'Mensualité ajoutée' : 'Paiement en plusieurs fois ajouté') : prev ? `${data.aboSerie ? 'Prélèvement validé' : 'Abonnement ajouté'} · prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}` : mode==='abo' && data.aboSerie ? 'Rattachée à l’abonnement' : 'Dépense ajoutée'); }); break;
     case 'edit-depense': openDepenseEditModal(id); break;
     case 'del-depense': { const item=find(mine(state.depenses)); confirmDelete(item.libelle, async ()=>{
       state.depenses = state.depenses.filter(x=>x.id!==id);
@@ -4064,6 +4240,32 @@ async function handleAction(action, id, el){
       const prev = aboPrevisions().find(x=>x.id===id); if(!prev) break;
       confirmDelete('', async ()=>{ aboArreter(prev.aboId); await persist(); await render(); toast('Abonnement arrêté'); },
         {title:`Arrêter « ${esc(prev.libelle)} » ?`, consequence:'Le prélèvement prévu est retiré et plus aucun ne sera annoncé. Ceux déjà validés restent dans tes dépenses.', confirmLabel:'Arrêter'});
+      break; }
+    /* Charges */
+    case 'chg-valider': {
+      const prev = chgPrevisions().find(x=>x.id===id); if(!prev) break;
+      const champs = [{key:'date', label:'Date du paiement', type:'date'}, {key:'montant', label:'Montant payé (€)', type:'number', step:'0.01'}];
+      openModal(`Valider « ${esc(prev.libelle)} »`, champs, {date:prev.date, montant:prev.montant}, async (data)=>{
+        if(!data.date){ markFieldError('date','Renseigne une date'); return false; }
+        if(!(Number(data.montant)>0)){ markFieldError('montant','Renseigne un montant supérieur à 0'); return false; }
+        chgValider(prev, {date:data.date, montant:Number(data.montant)});
+        const suivant = chgPrevisions().find(x=>x.chgId===prev.chgId);
+        await persist(); await render();
+        toast(suivant ? chgToast(suivant, 'Échéance validée') : 'Échéance validée');
+      }, `<p class="field-note">Une fois validée, elle compte dans tes dépenses du mois du paiement.</p>`);
+      break; }
+    case 'chg-montant': {
+      const prev = chgPrevisions().find(x=>x.id===id); if(!prev) break;
+      openModal(`Nouveau montant : ${esc(prev.libelle)}`, [{key:'montant', label:`Nouveau montant ${chgPeriodeInfo(prev).par} (€)`, type:'number', step:'0.01'}], {montant:prev.montant}, async (data)=>{
+        if(!(Number(data.montant)>0)){ markFieldError('montant','Renseigne un montant supérieur à 0'); return false; }
+        chgChangerMontant(prev, Number(data.montant));
+        await persist(); await render(); toast('Nouveau montant noté');
+      }, `<p class="field-note">Montant actuel : ${fmtEUR(prev.montant)}. L’échéance prévue et les suivantes prennent le nouveau montant.</p>`);
+      break; }
+    case 'chg-arreter': {
+      const prev = chgPrevisions().find(x=>x.id===id); if(!prev) break;
+      confirmDelete('', async ()=>{ chgArreter(prev.chgId); await persist(); await render(); toast('Charge arrêtée'); },
+        {title:`Arrêter « ${esc(prev.libelle)} » ?`, consequence:'L’échéance prévue est retirée et plus aucune ne sera annoncée. Celles déjà validées restent dans tes dépenses.', confirmLabel:'Arrêter'});
       break; }
     /* Paiements en plusieurs fois */
     case 'ppf-valider': {
@@ -4241,7 +4443,7 @@ async function handleAction(action, id, el){
       if(l && l.v.type==='depense'){
         l.v.abo = !l.v.abo;
         if(l.v.abo){
-          l.v.ppf = false;
+          l.v.ppf = false; l.v.chg = false;
           // Un prélèvement attendu chez ce commerçant est proposé d'office ; le menu permet d'en choisir un autre.
           if(!l.aboSerieId && !l.aboChoisi){
             const pris = new Set(releveSession.lignes.filter(x=>x!==l && x.etat==='attente' && x.aboPrevId).map(x=>x.aboPrevId));
@@ -4253,11 +4455,28 @@ async function handleAction(action, id, el){
       }
       break;
     }
+    case 'releve-chg': {
+      const l = releveSession && releveSession.lignes.find(x=>x.id===id);
+      if(l && l.v.type==='depense'){
+        l.v.chg = !l.v.chg;
+        if(l.v.chg){
+          l.v.abo = false; l.v.ppf = false; delete l.erreur;
+          // Une échéance attendue chez ce fournisseur est proposée d'office ; le menu permet d'en choisir une autre.
+          if(!l.chgSerieId && !l.chgChoisi){
+            const pris = new Set(releveSession.lignes.filter(x=>x!==l && x.etat==='attente' && x.chgPrevId).map(x=>x.chgPrevId));
+            const attendue = releveChgAttendu({montant:-Math.abs(l.montant), date:l.date}, l.cle, l.v.libelle, pris);
+            if(attendue) releveChoisirChg(l, attendue.chgId);
+          }
+        }
+        releveSauverSession(); await render(); document.querySelector(`[data-action="releve-chg"][data-id="${id}"]`)?.focus();
+      }
+      break;
+    }
     case 'releve-ppf': {
       // « En plusieurs fois » : le montant total est demandé aussitôt.
       const l = releveSession && releveSession.lignes.find(x=>x.id===id);
       if(l && l.v.type==='depense'){
-        l.v.ppf = !l.v.ppf; if(l.v.ppf) l.v.abo = false; delete l.erreur;
+        l.v.ppf = !l.v.ppf; if(l.v.ppf){ l.v.abo = false; l.v.chg = false; } delete l.erreur;
         // Une mensualité attendue chez ce commerçant est proposée d'office ; le menu permet d'en choisir une autre.
         if(l.v.ppf && !l.ppfSerieId && !l.ppfChoisi){
           const pris = new Set(releveSession.lignes.filter(x=>x!==l && x.etat==='attente' && x.ppfPrevId).map(x=>x.ppfPrevId));
@@ -5396,7 +5615,7 @@ function releveDejaSuivi(op){
 function releveSuggestion(op, modele){
   const cle = releveCle(op.libelle);
   const sens = op.montant<0 ? 'depense' : 'revenu';
-  const base = {cle, abo:false, ppf:false};
+  const base = {cle, abo:false, ppf:false, chg:false};
   const regle = modele.regles[cle];
   // Un commerçant habituellement en dépense qui crédite le compte : c'est un remboursement.
   if(regle && regle.type!=='ignorer' && regle.type!==sens && !op.signeIncertain){
@@ -5410,6 +5629,7 @@ function releveSuggestion(op, modele){
   }
   if(regle){
     return {...base, type: regle.type, libelle: regle.libelle || releveJoli(cle), categorie: regle.categorie || '', abo: regle.type==='depense' && !!regle.abo,
+      ...(regle.type==='depense' && regle.chg ? {chg:true, chgPeriode:String(chgPeriode(regle.chgPeriode))} : {}),
       confiance: regle.n>=2 ? 'sur' : 'appris', raison: regle.type==='ignorer' ? `Déjà ignorée ${regle.n>1?regle.n+' fois':'une fois'}` : `Reconnue (${regle.n>1?regle.n+' fois':'une fois'})`};
   }
   const premier = cle.split(' ')[0];
@@ -5459,6 +5679,20 @@ function relevePpfAttendu(op, cle, libelle, pris){
     .filter(p=>!pris.has(p.id) && (memeCommercant(p) || String(p.libelle||'').trim().toLowerCase()===nom))
     .sort((a,b)=>ecartMois(a)-ecartMois(b) || Math.abs(a.montant-abs)-Math.abs(b.montant-abs))[0] || null;
 }
+// Une échéance attendue d'une charge (même fournisseur ou même nom), à une période
+// près : la ligne la validera au lieu de créer une dépense. Le montant peut
+// différer (régularisation, hausse) ; à défaut, la plus proche l'emporte.
+function releveChgAttendu(op, cle, libelle, pris){
+  if(op.montant>=0) return null;
+  const nom = String(libelle||'').trim().toLowerCase();
+  const premier = cle.split(' ')[0];
+  const abs = Math.abs(op.montant), mois = moisDe(op.date);
+  const ecartMois = p => { const [a,b] = [moisDe(p.date), mois].map(k=>{ const [y,m] = k.split('-').map(Number); return y*12+m; }); return Math.abs(a-b); };
+  const memeFournisseur = p => { const c = p.cle || releveCle(p.libelle); return c===cle || (premier.length>=4 && c.split(' ')[0]===premier); };
+  return chgPrevisions()
+    .filter(p=>!pris.has(p.id) && ecartMois(p) <= Math.max(1, chgPeriode(p)-1) && (memeFournisseur(p) || String(p.libelle||'').trim().toLowerCase()===nom))
+    .sort((a,b)=>ecartMois(a)-ecartMois(b) || Math.abs(a.montant-abs)-Math.abs(b.montant-abs))[0] || null;
+}
 // Un prélèvement d'abonnement ou une mensualité déjà validé à la main (pas par un
 // import) pour ce commerçant, dans le même mois ou à quelques jours : la ligne du
 // relevé est le même paiement, elle est mise en « Ne pas importer ». Le montant peut
@@ -5470,11 +5704,11 @@ function releveSerieDejaValidee(op, cle, libelle, pris){
   const jours = d => Math.abs(new Date(d+'T00:00:00') - new Date(op.date+'T00:00:00')) / 86400000;
   const memeCommercant = d => { const c = d.cle || releveCle(d.libelle); return c===cle || (premier.length>=4 && c.split(' ')[0]===premier) || String(d.libelle||'').trim().toLowerCase()===nom; };
   const d = mesSorties()
-    .filter(d=>(d.aboId || d.ppfId) && d.source!=='releve' && d.date && !pris.has(d.id) && memeCommercant(d) && (moisDe(d.date)===moisDe(op.date) || jours(d.date)<=5))
+    .filter(d=>(d.aboId || d.ppfId || d.chgId) && d.source!=='releve' && d.date && !pris.has(d.id) && memeCommercant(d) && (moisDe(d.date)===moisDe(op.date) || jours(d.date)<=5))
     .sort((a,b)=>jours(a.date)-jours(b.date))[0];
   if(!d) return '';
   pris.add(d.id);
-  return `Déjà validé${d.ppfId ? 'e' : ''} à la main : ${d.libelle} (${d.ppfId ? 'mensualité' : 'abonnement'} du ${fmtDate(d.date)})`;
+  return `Déjà validé${d.ppfId || d.chgId ? 'e' : ''} à la main : ${d.libelle} (${d.ppfId ? 'mensualité' : d.chgId ? 'charge' : 'abonnement'} du ${fmtDate(d.date)})`;
 }
 function releveCreerLignes(ops){
   const modele = releveModele(false);
@@ -5486,22 +5720,29 @@ function releveCreerLignes(ops){
       const suivi = releveSerieDejaValidee(o, s.cle, s.libelle, pris) || releveDejaSuivi(o);
       const attendu = suivi ? null : releveAboAttendu(o, s.cle, s.libelle, pris);
       const mensualite = suivi || attendu ? null : relevePpfAttendu(o, s.cle, s.libelle, pris);
-      if(suivi){ s.type = 'ignorer'; s.abo = false; s.confiance = 'sur'; s.raison = suivi; }
+      const echeance = suivi || attendu || mensualite ? null : releveChgAttendu(o, s.cle, s.libelle, pris);
+      if(suivi){ s.type = 'ignorer'; s.abo = false; s.chg = false; s.confiance = 'sur'; s.raison = suivi; }
+      else if(echeance){
+        pris.add(echeance.id);
+        const ecart = Math.abs(Math.abs(o.montant) - echeance.montant) >= 0.005;
+        Object.assign(s, {type:'depense', libelle:echeance.libelle, categorie:echeance.categorie||s.categorie, abo:false, ppf:false, chg:true, chgPeriode:String(chgPeriode(echeance)), confiance:'sur',
+          raison: ecart ? `Charge attendue : ${echeance.libelle} · nouveau montant (avant ${fmtEUR(echeance.montant)})` : `Charge attendue : ${echeance.libelle}`});
+      }
       else if(mensualite){
         pris.add(mensualite.id);
         const e = ppfEtat(mensualite.ppfId), dep = ppfDepassement(mensualite.ppfId, Math.abs(o.montant));
         // Une mensualité qui ferait dépasser le total n'est pas « sûre » : elle attend une vérification.
-        Object.assign(s, {type:'depense', libelle:mensualite.libelle, categorie:mensualite.categorie||s.categorie, abo:false, ppf:true, ppfTotal:releveMontantSaisie(e.total), confiance: dep ? 'devine' : 'sur',
+        Object.assign(s, {type:'depense', libelle:mensualite.libelle, categorie:mensualite.categorie||s.categorie, abo:false, chg:false, ppf:true, ppfTotal:releveMontantSaisie(e.total), confiance: dep ? 'devine' : 'sur',
           raison: dep ? `Mensualité attendue : ${mensualite.libelle} · dépasse le total de ${fmtEUR(dep)}, vérifie les montants` : `Mensualité attendue : ${mensualite.libelle} · reste ${fmtEUR(e.reste)}`});
       }
       else if(attendu){
         pris.add(attendu.id);
         const ecart = Math.abs(Math.abs(o.montant) - attendu.montant) >= 0.005;
-        Object.assign(s, {type:'depense', libelle:attendu.libelle, categorie:attendu.categorie||s.categorie, abo:true, confiance:'sur',
+        Object.assign(s, {type:'depense', libelle:attendu.libelle, categorie:attendu.categorie||s.categorie, abo:true, chg:false, confiance:'sur',
           raison: ecart ? `Abonnement attendu : ${attendu.libelle} · nouveau prix (avant ${fmtEUR(attendu.montant)})` : `Abonnement attendu : ${attendu.libelle}`});
       }
       const {cle, confiance, raison, ...valeurs} = s;
-      return {id: uid(), date: o.date, brut: o.libelle.trim(), montant: r2(o.montant), cle, suivi: !!suivi, incertain: !!o.signeIncertain, ...(o.pos ? {pos: o.pos} : {}), confiance, raison, etat:'attente', ...(attendu ? {aboPrevId: attendu.id, aboSerieId: attendu.aboId} : {}), ...(mensualite ? {ppfPrevId: mensualite.id, ppfSerieId: mensualite.ppfId} : {}), s:{...valeurs}, v:{...valeurs}};
+      return {id: uid(), date: o.date, brut: o.libelle.trim(), montant: r2(o.montant), cle, suivi: !!suivi, incertain: !!o.signeIncertain, ...(o.pos ? {pos: o.pos} : {}), confiance, raison, etat:'attente', ...(attendu ? {aboPrevId: attendu.id, aboSerieId: attendu.aboId} : {}), ...(mensualite ? {ppfPrevId: mensualite.id, ppfSerieId: mensualite.ppfId} : {}), ...(echeance ? {chgPrevId: echeance.id, chgSerieId: echeance.chgId} : {}), s:{...valeurs}, v:{...valeurs}};
     });
 }
 
@@ -5590,7 +5831,7 @@ async function releveChangerColonne(el){
 // banque se trompe parfois de sens), et la catégorie doit exister pour ce type.
 function releveAppliquerType(l, type){
   l.v.type = type;
-  if(type!=='depense'){ l.v.abo = false; l.v.ppf = false; }
+  if(type!=='depense'){ l.v.abo = false; l.v.ppf = false; l.v.chg = false; }
   if(type==='ignorer') return;
   if((type==='depense') !== (l.montant<0)) l.montant = -l.montant;
   const cats = myCategories(type==='revenu' ? 'revenus' : 'depenses').map(c=>c.nom);
@@ -5664,6 +5905,7 @@ function releveChangerChamp(el){
   }
   if(champ==='aboSerie'){ releveChoisirAbo(l, el.value); l.aboChoisi = true; releveSauverSession(); return render(); }
   if(champ==='ppfSerie'){ releveChoisirPpf(l, el.value); l.ppfChoisi = true; delete l.erreur; releveSauverSession(); return render(); }
+  if(champ==='chgSerie'){ releveChoisirChg(l, el.value); l.chgChoisi = true; releveSauverSession(); return render(); }
   if(champ==='type') releveAppliquerType(l, el.value);
   else l.v[champ] = el.value;
   releveSauverSession();
@@ -5682,6 +5924,18 @@ function releveChoisirPpf(l, ppfId){
   l.v.libelle = e.libelle || l.v.libelle;
   if(e.categorie) l.v.categorie = e.categorie;
   l.v.ppfTotal = releveMontantSaisie(e.total);
+}
+// Charge à laquelle la ligne correspond (chgId d'une série, ou vide : nouvelle
+// charge). La ligne prend le nom, la catégorie et la périodicité de la série.
+function releveChoisirChg(l, chgId){
+  const prev = chgId ? chgPrevisions().find(p=>p.chgId===chgId) : null;
+  const ref = prev || (chgId ? chgSerie(chgId)[0] : null);
+  if(!ref){ delete l.chgSerieId; delete l.chgPrevId; return; }
+  l.chgSerieId = chgId;
+  if(prev) l.chgPrevId = prev.id; else delete l.chgPrevId;
+  l.v.libelle = ref.libelle || l.v.libelle;
+  if(ref.categorie) l.v.categorie = ref.categorie;
+  l.v.chgPeriode = String(chgPeriode(ref));
 }
 // Abonnement auquel la ligne correspond (aboId d'une série, ou vide : nouvel
 // abonnement). La ligne prend le nom et la catégorie de la série, pour que deux
@@ -5705,7 +5959,7 @@ function releveApprendre(modele, l){
   if(l.suivi && v.type==='ignorer') return; // ignorée parce que déjà suivie ailleurs : rien à retenir sur ce commerçant
   if(l.regul) return; // régularisation de solde : pas un commerçant
   const prev = modele.regles[l.cle], maj = new Date().toISOString().slice(0,10);
-  const decision = v.type==='ignorer' ? {type:'ignorer', maj} : {type:v.type, libelle:(v.libelle||'').trim(), categorie:v.categorie||'', ...(v.type==='depense' && v.abo ? {abo:true} : {}), maj};
+  const decision = v.type==='ignorer' ? {type:'ignorer', maj} : {type:v.type, libelle:(v.libelle||'').trim(), categorie:v.categorie||'', ...(v.type==='depense' && v.abo ? {abo:true} : {}), ...(v.type==='depense' && v.chg ? {chg:true, chgPeriode:chgPeriode(v.chgPeriode)} : {}), maj};
   const memeQue = r => r && r.type===v.type && (v.type==='ignorer' || r.categorie===v.categorie);
   if(prev && prev.type!=='ignorer' && v.type!=='ignorer' && prev.type!==v.type){
     // Sens opposé à l'habitude (un remboursement chez un commerçant en dépense,
@@ -5724,7 +5978,7 @@ function releveApprendre(modele, l){
 async function releveValider(ids){
   const s = releveSession; if(!s) return;
   const me = currentUser(), modele = releveModele(true);
-  let ajoutees = 0, ignorees = 0, abos = 0, ppfs = 0;
+  let ajoutees = 0, ignorees = 0, abos = 0, ppfs = 0, chgs = 0;
   const bloquees = [];
   const parId = new Map(s.lignes.map(l=>[l.id, l]));
   ids.forEach(id=>{
@@ -5732,7 +5986,18 @@ async function releveValider(ids){
     const v = l.v, montant = r2(Math.abs(l.montant)), libelle = (v.libelle||'').trim() || releveJoli(l.cle), notes = (v.notes||'').trim();
     delete l.erreur;
     const attendu = v.type==='depense' && v.abo && l.aboPrevId ? aboPrevisions().find(p=>p.id===l.aboPrevId) : null;
-    if(v.type==='depense' && v.ppf){
+    if(v.type==='depense' && v.chg){
+      // L'échéance attendue est validée avec ce que dit le relevé ; sinon la dépense
+      // rejoint la charge choisie, ou en démarre une nouvelle.
+      const prev = l.chgPrevId ? chgPrevisions().find(p=>p.id===l.chgPrevId) : null;
+      if(prev) chgValider(prev, {libelle, categorie:v.categorie||'', montant, date:l.date, notes, source:'releve', cle:prev.cle||l.cle});
+      else {
+        const d = {id:uid(), ownerId:me.id, libelle, categorie:v.categorie||'', montant, modePaiement:'Unique', date:l.date, notes, source:'releve', cle:l.cle};
+        state.depenses.push(d);
+        if(l.chgSerieId && chgSerie(l.chgSerieId).some(x=>x!==d)) chgRattacher(d, l.chgSerieId); else chgDemarrer(d, v.chgPeriode);
+      }
+      ajoutees++; chgs++;
+    } else if(v.type==='depense' && v.ppf){
       // Paiement en plusieurs fois : il faut le montant total, et la mensualité ne doit pas le faire dépasser.
       const total = r2(Math.abs(releveMontant(v.ppfTotal)) || 0);
       const prev = l.ppfPrevId ? ppfPrevisions().find(p=>p.id===l.ppfPrevId) : null;
@@ -5799,7 +6064,7 @@ async function releveValider(ids){
   releveSauverSession();
   await persist(); await render();
   const msg = ajoutees && ignorees ? `${ajoutees} ajoutée${ajoutees>1?'s':''}, ${ignorees} ignorée${ignorees>1?'s':''}` : ajoutees ? (ajoutees>1 ? `${ajoutees} opérations ajoutées` : 'Opération ajoutée') : (ignorees>1 ? `${ignorees} lignes ignorées` : 'Ligne ignorée');
-  const msgAbo = (abos ? ` · ${fmtCount(abos, 'abonnement', 'abonnements')}` : '') + (ppfs ? ` · ${fmtCount(ppfs, 'mensualité', 'mensualités')}` : '')
+  const msgAbo = (chgs ? ` · ${fmtCount(chgs, 'charge', 'charges')}` : '') + (abos ? ` · ${fmtCount(abos, 'abonnement', 'abonnements')}` : '') + (ppfs ? ` · ${fmtCount(ppfs, 'mensualité', 'mensualités')}` : '')
     + (bloquees.length ? ` · ${fmtCount(bloquees.length, 'mensualité à vérifier', 'mensualités à vérifier')}` : '');
   toast(majs ? `${msg}${msgAbo} · ${fmtCount(majs, 'autre ligne mise à jour', 'autres lignes mises à jour')}` : msg + msgAbo);
 }
@@ -5807,13 +6072,13 @@ async function releveValider(ids){
 // vient d'être appris (« CARREFOUR » validé en Courses → les autres CARREFOUR
 // du relevé passent en Courses). Une ligne que l'utilisateur a déjà modifiée
 // garde ses choix, et une ligne déjà suivie ailleurs reste ignorée.
-const RELEVE_CHAMPS_SUGGERES = ['type','libelle','categorie','abo','ppf'];
+const RELEVE_CHAMPS_SUGGERES = ['type','libelle','categorie','abo','ppf','chg'];
 function releveRafraichirAttente(s){
   const modele = releveModele(false);
   let n = 0;
   s.lignes.forEach(l=>{
     l.maj = false;
-    if(l.etat!=='attente' || l.suivi || l.regul || l.aboPrevId || l.aboChoisi || l.ppfPrevId || l.ppfChoisi) return;
+    if(l.etat!=='attente' || l.suivi || l.regul || l.aboPrevId || l.aboChoisi || l.ppfPrevId || l.ppfChoisi || l.chgPrevId || l.chgChoisi) return;
     if(RELEVE_CHAMPS_SUGGERES.some(k=>(l.v[k]||'')!==(l.s[k]||''))) return;
     const {cle, confiance, raison, ...valeurs} = releveSuggestion({libelle:l.brut, montant:l.montant, signeIncertain:l.incertain}, modele);
     const change = RELEVE_CHAMPS_SUGGERES.some(k=>(valeurs[k]||'')!==(l.s[k]||''));
@@ -5835,7 +6100,7 @@ function releveControleSoldes(s){
 function releveAjouterRegul(s){
   const c = releveControleSoldes(s); if(!c || c.ok) return null;
   const type = c.ecart<0 ? 'depense' : 'revenu';
-  const valeurs = {type, libelle:'Régularisation de solde', categorie: releveCategorieDefaut(type), abo:false, ppf:false,
+  const valeurs = {type, libelle:'Régularisation de solde', categorie: releveCategorieDefaut(type), abo:false, ppf:false, chg:false,
     notes:`Écart entre les soldes du relevé (${fmtEUR(s.soldes.debut)} → ${fmtEUR(s.soldes.fin)}) et ses opérations`};
   const l = {id: uid(), date: s.soldes.dateFin || s.lignes.map(x=>x.date).sort().pop(), brut:'Régularisation de solde', montant: c.ecart, cle:'', suivi:false, incertain:false,
     regul:true, confiance:'sur', raison:'Proposée pour que les soldes du relevé concordent', etat:'attente', s:{...valeurs}, v:{...valeurs}};
@@ -5889,11 +6154,24 @@ function releveLigneHTML(l){
       ${l.v.abo ? releveAboMenuHTML(l, nomLigne) : ''}
       <button type="button" class="rl-abo rl-ppf" data-action="releve-ppf" data-id="${l.id}" aria-pressed="${!!l.v.ppf}" title="${l.ppfPrevId ? 'Valide la mensualité prévue' : 'Mensualité d’un paiement en plusieurs fois'}">${icon('calendar')}En plusieurs fois</button>
       ${l.v.ppf ? relevePpfMenuHTML(l, nomLigne) : ''}
-      ${l.v.ppf ? `<span class="rl-ppf-total"><input class="rl-ctl" data-rl-id="${l.id}" data-rl-champ="ppfTotal" value="${attrEsc(l.v.ppfTotal||'')}" inputmode="decimal" autocomplete="off" placeholder="Total" aria-label="Montant total à payer pour ${nomLigne}, en euros"><span aria-hidden="true">€</span></span>` : ''}` : ''}
+      ${l.v.ppf ? `<span class="rl-ppf-total"><input class="rl-ctl" data-rl-id="${l.id}" data-rl-champ="ppfTotal" value="${attrEsc(l.v.ppfTotal||'')}" inputmode="decimal" autocomplete="off" placeholder="Total" aria-label="Montant total à payer pour ${nomLigne}, en euros"><span aria-hidden="true">€</span></span>` : ''}
+      <button type="button" class="rl-abo rl-chg" data-action="releve-chg" data-id="${l.id}" aria-pressed="${!!l.v.chg}" title="${l.chgPrevId ? 'Valide l’échéance prévue' : 'Charge : prévoit la prochaine échéance'}">${icon('home')}Charge</button>
+      ${l.v.chg ? releveChgMenuHTML(l, nomLigne) : ''}` : ''}
       <button class="btn btn-ghost btn-sm" data-action="releve-valider" data-id="${l.id}">${icon('check')}${ign?'Confirmer':'Valider'}</button>
       ${ign ? '' : `<button class="icon-btn del" data-action="releve-ignorer" data-id="${l.id}" aria-label="Ne pas importer ${nomLigne}">${icon('x')}</button>`}
     </div>
   </li>`;
+}
+// Choix de la charge d'une ligne marquée charge : nouvelle (avec sa périodicité), ou une en cours.
+function releveChgMenuHTML(l, nomLigne){
+  const options = chgSerieOptions();
+  if(l.chgSerieId && !options.some(o=>o.value===l.chgSerieId)){
+    const ref = chgSerie(l.chgSerieId)[0];
+    if(ref) options.push({value:l.chgSerieId, label:ref.libelle||'Sans nom'});
+  }
+  const serie = options.length>1 ? releveMenuHTML(l, 'chgSerie', options, l.chgSerieId||'', `Charge à laquelle correspond ${nomLigne}`) : '';
+  const periode = l.chgSerieId ? '' : releveMenuHTML(l, 'chgPeriode', CHG_PERIODES, String(chgPeriode(l.v.chgPeriode)), `Périodicité de la charge ${nomLigne}`);
+  return serie + periode;
 }
 // Choix de l'abonnement d'une ligne marquée abonnement : nouveau, ou un en cours.
 function releveAboMenuHTML(l, nomLigne){
@@ -6807,7 +7085,7 @@ function renderNotifPanel(){
   });
   aboAlertesNonVues().forEach(a=>{
     items.push(`<div class="notif-item">
-      <div class="avatar" style="background:var(--raised);color:var(--text);width:32px;height:32px;" aria-hidden="true">${icon({prix:'repeat','ppf-termine':'check','ppf-retard':'clock'}[a.type] || 'x')}</div>
+      <div class="avatar" style="background:var(--raised);color:var(--text);width:32px;height:32px;" aria-hidden="true">${icon({prix:'repeat','ppf-termine':'check','ppf-retard':'clock','chg-retard':'clock'}[a.type] || 'x')}</div>
       <div class="info"><div class="name">${aboAlerteTitre(a)}</div><div class="meta">${esc(aboAlerteTexte(a))}</div></div>
       <button class="icon-btn" data-action="abo-alerte-vue" data-id="${a.id}" aria-label="Marquer comme lu">${icon('check')}</button>
     </div>`);
@@ -6890,7 +7168,7 @@ function budgetContextSummary(){
   const key = state.selectedMonth;
   const d = dashboardData(key);
   return `Contexte budget (${monthLabel(key)}) : revenus ${fmtEUR(d.revenu)}, dépenses ${fmtEUR(d.totalDepenses)}, solde ${fmtEUR(d.solde)}. `+
-    `Le site gère des entrées et des sorties datées ; les abonnements prévus (${fmtEUR(sumR2(aboPrevisionsDuMois(key),x=>x.montant))} ce mois) ne comptent qu'une fois validés.`;
+    `Le site gère des entrées et des sorties datées ; les abonnements prévus (${fmtEUR(sumR2(aboPrevisionsDuMois(key),x=>x.montant))} ce mois) et les charges prévues (${fmtEUR(sumR2(chgPrevisionsDuMois(key),x=>x.montant))} ce mois) ne comptent qu'une fois validés.`;
 }
 async function sendChatMessage(){
   const input = document.getElementById('cp-input');
