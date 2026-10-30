@@ -789,6 +789,8 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
 .rl-ctl:focus{outline:none;border-color:var(--text);}
 .rl-ctl:focus-visible{box-shadow:0 0 0 3px rgba(255,255,255,0.18);}
 .rl-ctl:disabled{opacity:.55;}
+.cat-select-btn.rl-ctl{padding:0 10px;font-size:14px;}
+.rl-cat.cat-field{min-width:0;}
 select.rl-ctl option{background:var(--surface);color:var(--text);}
 .rl-row.is-ignored .rl-amt,.rl-row.is-ignored .rl-lib{opacity:.55;}
 .rl-rules{list-style:none;margin:0;padding:0;}
@@ -2444,6 +2446,11 @@ function categoryDropdownListHTML(type, currentValue){
       <button type="button" class="cat-add-confirm" data-cat-add-confirm title="Ajouter" aria-label="Ajouter">${icon('check')}</button>
       <button type="button" class="cat-add-cancel" data-cat-add-cancel title="Annuler" aria-label="Annuler">${icon('x')}</button>
     </div>`;
+}
+// Champ catégorie tel qu'il est à l'écran après un render() : une ligne du relevé
+// est reconstruite, un champ de modale reste le même élément.
+function catFieldVivant(field){
+  return field.isConnected ? field : (document.querySelector(`.cat-field[data-cat-key="${field.dataset.catKey}"]`) || field);
 }
 function resetCatDropdown(wrap){
   const addRow = wrap.querySelector('.cat-add-row');
@@ -4186,7 +4193,9 @@ document.addEventListener('click', async (e)=>{
   if(catSelectEl){
     const field = catSelectEl.closest('.cat-field');
     const nom = catSelectEl.dataset.catSelect;
-    document.getElementById('f_'+field.dataset.catKey).value = nom;
+    const hidden = document.getElementById('f_'+field.dataset.catKey);
+    hidden.value = nom;
+    if(hidden.dataset.rlChamp) releveChangerChamp(hidden);
     const label = field.querySelector('.cat-select-label');
     label.textContent = nom; label.classList.remove('is-placeholder');
     const catWrap = field.querySelector('.cat-select');
@@ -4200,14 +4209,18 @@ document.addEventListener('click', async (e)=>{
     const type = field.dataset.catType;
     const deleted = deleteCategory(type, catDelBtn.dataset.catDelete);
     if(deleted){
+      releveRetirerCategorie(type, deleted.nom);
       await persist(); await render();
-      const hidden = document.getElementById('f_'+field.dataset.catKey);
+      // Une ligne du relevé est re-rendue : on reprend son menu, laissé ouvert.
+      const live = catFieldVivant(field);
+      const hidden = document.getElementById('f_'+live.dataset.catKey);
       if(hidden.value===deleted.nom){
         hidden.value = '';
-        const label = field.querySelector('.cat-select-label');
-        label.textContent = 'Choisir une catégorie'; label.classList.add('is-placeholder');
+        const label = live.querySelector('.cat-select-label');
+        label.textContent = hidden.dataset.rlChamp ? 'Sans catégorie' : 'Choisir une catégorie'; label.classList.add('is-placeholder');
       }
-      field.querySelector('.cat-dropdown').innerHTML = categoryDropdownListHTML(type, hidden.value);
+      live.querySelector('.cat-dropdown').innerHTML = categoryDropdownListHTML(type, hidden.value);
+      live.querySelector('.cat-select').classList.add('open');
       toast('Catégorie supprimée — les lignes concernées repassent sans catégorie');
     }
     return;
@@ -4234,13 +4247,16 @@ document.addEventListener('click', async (e)=>{
     const inp = catAddConfirm.closest('.cat-add-input-row').querySelector('.cat-add-input');
     const result = addCategory(type, inp.value);
     if(!result.ok){ toast(result.msg); return; }
+    const rlHidden = document.getElementById('f_'+field.dataset.catKey);
+    if(rlHidden.dataset.rlChamp){ rlHidden.value = result.cat.nom; releveChangerChamp(rlHidden); }
     await persist(); await render();
-    const hidden = document.getElementById('f_'+field.dataset.catKey);
+    const live = catFieldVivant(field);
+    const hidden = document.getElementById('f_'+live.dataset.catKey);
     hidden.value = result.cat.nom;
-    const label = field.querySelector('.cat-select-label');
+    const label = live.querySelector('.cat-select-label');
     label.textContent = result.cat.nom; label.classList.remove('is-placeholder');
-    field.querySelector('.cat-dropdown').innerHTML = categoryDropdownListHTML(type, hidden.value);
-    const catWrap = field.querySelector('.cat-select');
+    live.querySelector('.cat-dropdown').innerHTML = categoryDropdownListHTML(type, hidden.value);
+    const catWrap = live.querySelector('.cat-select');
     catWrap.classList.remove('open'); resetCatDropdown(catWrap);
     clearFieldError(field.dataset.catKey);
     toast('Catégorie ajoutée');
@@ -5826,6 +5842,12 @@ async function releveValider(ids){
   await persist(); await render();
   toast(ajoutees && ignorees ? `${ajoutees} ajoutée${ajoutees>1?'s':''}, ${ignorees} ignorée${ignorees>1?'s':''}` : ajoutees ? (ajoutees>1 ? `${ajoutees} opérations ajoutées` : 'Opération ajoutée') : (ignorees>1 ? `${ignorees} lignes ignorées` : 'Ligne ignorée'));
 }
+function releveRetirerCategorie(type, nom){
+  if(!releveSession) return;
+  const t = type==='revenus' ? 'revenu' : type==='depenses' ? 'depense' : null;
+  releveSession.lignes.forEach(l=>{ if(l.etat==='attente' && l.v.type===t && l.v.categorie===nom) l.v.categorie = ''; });
+  releveSauverSession();
+}
 function relevePrecision(historique, n){
   const h = historique.slice(-n);
   return h.length ? h.reduce((a,b)=>a+b,0)/h.length : null;
@@ -5834,8 +5856,6 @@ function relevePrecision(historique, n){
 /* ---------- Vue ---------- */
 const RELEVE_BADGES = {sur:['pill-teal','Reconnue'], appris:['pill-amber','Apprise'], devine:['pill-dim','Devinée'], nouveau:['pill-dim','Nouvelle']};
 function releveLigneHTML(l, partner){
-  const cats = l.v.type==='ignorer' ? [] : myCategories(l.v.type==='revenu' ? 'revenus' : 'depenses').map(c=>c.nom);
-  if(l.v.categorie && l.v.type!=='ignorer' && !cats.includes(l.v.categorie)) cats.unshift(l.v.categorie);
   const [cls, lbl] = l.suivi ? ['pill-dim','Déjà suivie'] : RELEVE_BADGES[l.confiance] || RELEVE_BADGES.nouveau;
   const ign = l.v.type==='ignorer';
   const nomLigne = attrEsc(l.v.libelle || l.brut);
@@ -5850,9 +5870,7 @@ function releveLigneHTML(l, partner){
       <option value="revenu"${l.v.type==='revenu'?' selected':''}>Rentrée</option>
       <option value="ignorer"${ign?' selected':''}>Ne pas importer</option>
     </select>
-    ${ign ? '<span class="rl-cat"></span>' : `<select class="rl-ctl rl-cat" data-rl-id="${l.id}" data-rl-champ="categorie" aria-label="Catégorie">
-      ${cats.length ? '' : '<option value="">Sans catégorie</option>'}${cats.map(c=>`<option value="${attrEsc(c)}"${c===l.v.categorie?' selected':''}>${esc(c)}</option>`).join('')}
-    </select>`}
+    ${ign ? '<span class="rl-cat"></span>' : releveCategorieHTML(l, nomLigne)}
     ${partner && l.v.type==='depense' ? `<select class="rl-ctl rl-compte" data-rl-id="${l.id}" data-rl-champ="compte" aria-label="Compte">${COMPTES.map(c=>`<option${c===l.v.compte?' selected':''}>${c}</option>`).join('')}</select>` : '<span class="rl-compte"></span>'}
     <div class="rl-amt num${l.montant>0?' pos':''}">${l.montant>0?'+':''}${fmtEUR(l.montant)}</div>
     <div class="rl-meta"><span class="pill ${cls}">${lbl}</span>${l.confiance==='nouveau' && !l.suivi ? '' : `<span class="rl-raison">${esc(l.raison)}</span>`}</div>
@@ -5861,6 +5879,21 @@ function releveLigneHTML(l, partner){
       ${ign ? '' : `<button class="icon-btn del" data-action="releve-ignorer" data-id="${l.id}" aria-label="Ne pas importer ${nomLigne}">${icon('x')}</button>`}
     </div>
   </li>`;
+}
+// Même menu de catégorie que dans les formulaires : on y choisit, ajoute
+// (« Autre… ») ou supprime une catégorie sans quitter la ligne du relevé.
+function releveCategorieHTML(l, nomLigne){
+  const key = 'rlcat_'+l.id, val = l.v.categorie || '';
+  return `<div class="cat-field rl-cat" data-cat-type="${l.v.type==='revenu' ? 'revenus' : 'depenses'}" data-cat-key="${key}">
+    <input type="hidden" id="f_${key}" value="${attrEsc(val)}" data-rl-id="${l.id}" data-rl-champ="categorie">
+    <div class="cat-select">
+      <button type="button" class="cat-select-btn rl-ctl" data-cat-toggle aria-expanded="false" aria-label="Catégorie de ${nomLigne}">
+        <span class="cat-select-label ${val?'':'is-placeholder'}">${val?esc(val):'Sans catégorie'}</span>
+        ${icon('chevD')}
+      </button>
+      <div class="cat-dropdown">${categoryDropdownListHTML(l.v.type==='revenu' ? 'revenus' : 'depenses', val)}</div>
+    </div>
+  </div>`;
 }
 function releveColonnesHTML(s){
   const {entete, nbCol, rows, col} = s.csv;

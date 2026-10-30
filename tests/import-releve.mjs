@@ -147,10 +147,15 @@ try{
     ok(doublon && doublon.type==='ignorer' && /Déjà saisie/.test(doublon.raison), `relevé 1 : courses du 07/09 (déjà saisies) reconnues comme doublon (${JSON.stringify(doublon)})`);
     ok(await page.evaluate(()=>!!document.querySelector('.rl-cols:not([open])')===false), 'relevé 1 : nouveau format — le choix des colonnes est ouvert');
     // L'utilisateur corrige quelques lignes avant de tout valider.
+    // Catégorie : même menu que dans les formulaires (bouton, liste, « Autre… »).
+    const choisirCat = async (id, value) => {
+      await page.click(`.rl-row[data-rl-row="${id}"] [data-cat-toggle]`);
+      await page.click(`.rl-row[data-rl-row="${id}"] .cat-select.open [data-cat-select="${value}"]`);
+      await page.waitForTimeout(120);
+    };
     const setRow = async (needle, champ, value) => {
       const id = (await lignes(page)).find(l=>l.lib.toLowerCase().includes(needle)).id;
-      await page.selectOption(`[data-rl-id="${id}"][data-rl-champ="${champ}"]`, value);
-      await page.waitForTimeout(120);
+      await choisirCat(id, value);
     };
     await setRow('carrefour market', 'categorie', 'Alimentation');
     await setRow('boulangerie', 'categorie', 'Alimentation');
@@ -158,7 +163,26 @@ try{
     await setRow('edf', 'categorie', 'Maison');
     const salaireId = (await lignes(page)).find(l=>l.type==='revenu').id;
     await page.fill(`[data-rl-id="${salaireId}"][data-rl-champ="libelle"]`, 'Salaire Acme');
-    await page.selectOption(`[data-rl-id="${salaireId}"][data-rl-champ="categorie"]`, 'Salaire');
+    await choisirCat(salaireId, 'Salaire');
+    // La liste se modifie depuis la ligne : ajout d'une catégorie (« Autre… »), choisie aussitôt…
+    const edfId = (await lignes(page)).find(l=>l.lib.toLowerCase().includes('edf')).id;
+    await page.click(`.rl-row[data-rl-row="${edfId}"] [data-cat-toggle]`);
+    await page.click(`.rl-row[data-rl-row="${edfId}"] [data-cat-add-toggle]`);
+    await page.fill(`.rl-row[data-rl-row="${edfId}"] .cat-add-input`, 'Énergie');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(250);
+    ok((await lignes(page)).find(l=>l.id===edfId)?.cat==='Énergie', 'relevé 1 : catégorie ajoutée depuis la ligne et choisie');
+    ok(await page.evaluate(()=>myCategories('depenses').some(c=>c.nom==='Énergie')), 'relevé 1 : la catégorie ajoutée rejoint la liste des dépenses');
+    // … puis suppression (croix) : la ligne repasse sans catégorie, le menu reste ouvert.
+    const idEnergie = await page.evaluate(()=>myCategories('depenses').find(c=>c.nom==='Énergie').id);
+    await page.click(`.rl-row[data-rl-row="${edfId}"] [data-cat-toggle]`);
+    await page.click(`.rl-row[data-rl-row="${edfId}"] [data-cat-delete="${idEnergie}"]`);
+    await page.waitForTimeout(250);
+    ok(await page.evaluate(()=>!myCategories('depenses').some(c=>c.nom==='Énergie')), 'relevé 1 : catégorie supprimée depuis la ligne');
+    ok((await lignes(page)).find(l=>l.id===edfId)?.cat==='', 'relevé 1 : la ligne repasse sans catégorie');
+    ok(await page.evaluate(id=>!!document.querySelector(`.rl-row[data-rl-row="${id}"] .cat-select.open`), edfId), 'relevé 1 : le menu reste ouvert après suppression');
+    await page.keyboard.press('Escape');
+    await choisirCat(edfId, 'Maison');
     // Le retrait : ne pas importer (bouton ×).
     const retraitId = (await lignes(page)).find(l=>l.lib.toLowerCase().includes('retrait')).id;
     await page.click(`[data-action="releve-ignorer"][data-id="${retraitId}"]`);
