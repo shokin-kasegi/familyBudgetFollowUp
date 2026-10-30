@@ -193,7 +193,19 @@ try{
     ok(await page.evaluate(()=>!document.querySelector('.rl-row select')), 'relevé 1 : plus de liste native dans les lignes');
     await choisir(boulId, 'type', 'revenu');
     ok((await lignes(page)).find(l=>l.id===boulId)?.type==='revenu' && !(await page.$(`.rl-row[data-rl-row="${boulId}"] .rl-paie`)), 'relevé 1 : type changé depuis le menu (rentrée, sans paiement)');
+    ok(/^\+/.test((await lignes(page)).find(l=>l.id===boulId)?.amt.trim()), 'relevé 1 : passée en rentrée, le montant devient positif');
     await choisir(boulId, 'type', 'depense');
+    ok(!/^\+/.test((await lignes(page)).find(l=>l.id===boulId)?.amt.trim()), 'relevé 1 : repassée en dépense, le montant redevient négatif');
+    // Sens mal reconnu : un clic sur le montant inverse + / − (et le type suit).
+    await page.click(`[data-action="releve-signe"][data-id="${boulId}"]`);
+    await page.waitForTimeout(150);
+    let boul = (await lignes(page)).find(l=>l.id===boulId);
+    ok(boul?.type==='revenu' && /^\+/.test(boul.amt.trim()), `relevé 1 : clic sur le montant → rentrée positive (${JSON.stringify(boul)})`);
+    ok(await page.evaluate(id=>document.activeElement?.matches(`[data-action="releve-signe"][data-id="${id}"]`), boulId), 'relevé 1 : le focus reste sur le montant après inversion');
+    await page.click(`[data-action="releve-signe"][data-id="${boulId}"]`);
+    await page.waitForTimeout(150);
+    boul = (await lignes(page)).find(l=>l.id===boulId);
+    ok(boul?.type==='depense' && !/^\+/.test(boul.amt.trim()), `relevé 1 : second clic → dépense (${JSON.stringify(boul)})`);
     await choisirCat(boulId, 'Alimentation');
     // SNCF : compte joint, en 3 fois, avec un commentaire.
     const sncfId = (await lignes(page)).find(l=>l.lib.toLowerCase().includes('sncf')).id;

@@ -810,6 +810,11 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
 .rl-nb-total{font-size:13px;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap;}
 .rl-amt{grid-area:amt;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;}
 .rl-amt.pos{color:var(--c-reste);}
+button.rl-amt{justify-self:end;display:inline-flex;align-items:center;gap:6px;padding:4px 8px;margin-right:-8px;border:1px solid transparent;border-radius:8px;background:none;font:inherit;font-weight:600;color:inherit;cursor:pointer;}
+button.rl-amt.pos{color:var(--c-reste);}
+button.rl-amt svg{width:12px;height:12px;stroke:var(--faint);fill:none;stroke-width:2;opacity:.6;}
+@media (hover:hover){ button.rl-amt:hover{border-color:var(--line-strong);} button.rl-amt:hover svg{opacity:1;} }
+button.rl-amt:focus-visible{outline:none;border-color:var(--text);}
 .rl-meta{grid-area:meta;display:flex;align-items:center;gap:8px;min-width:0;}
 .rl-raison{font-size:12px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .rl-actions{grid-area:actions;display:flex;justify-content:flex-end;align-items:center;gap:4px;}
@@ -4730,6 +4735,7 @@ async function handleAction(action, id, el){
       if(l){ l.v.type = 'ignorer'; releveFocusApres = releveIndexLigne(id); await releveValider([id]); }
       break;
     }
+    case 'releve-signe': if(releveInverserSigne(id)){ releveFocusApres = null; await render(); document.querySelector(`[data-action="releve-signe"][data-id="${id}"]`)?.focus(); } break;
     case 'releve-valider-surs': await releveValider((releveSession?.lignes||[]).filter(l=>l.etat==='attente' && l.confiance==='sur').map(l=>l.id)); break;
     case 'releve-valider-tout': await releveValider((releveSession?.lignes||[]).filter(l=>l.etat==='attente').map(l=>l.id)); break;
     case 'releve-plus': {
@@ -4841,7 +4847,9 @@ async function handleAction(action, id, el){
 
     /* Comptes : export ciblé et purge de données par l'admin */
     case 'export-user-data': exportUserData(id); toast('Export téléchargé'); break;
-    case 'wipe-user-data': { const u=find(authState.users); confirmDelete(`les données de ${u.displayName}`, async ()=>{
+    case 'wipe-user-data': { const u=find(authState.users); const soi = u.id===currentUser().id;
+      if(!soi && !isAdmin()) break;
+      confirmDelete(soi ? 'mes données' : `les données de ${u.displayName}`, async ()=>{
         wipeUserData(id);
         // Vider les données doit aussi faire quitter le compte joint (les lignes
         // taguées "Compte Joint" de cette personne disparaissent, la relation n'a
@@ -4855,7 +4863,9 @@ async function handleAction(action, id, el){
         }
         socialState.expenseDeleteRequests = socialState.expenseDeleteRequests.filter(r=>r.fromId!==id && r.toId!==id);
         await persistSocial();
-        await persist(); await render(); toast(hadPartner ? 'Données vidées et compte joint quitté' : 'Données vidées'); }); break; }
+        if(soi){ releveSession = null; releveSauverSession(); }
+        await persist(); await render(); toast(hadPartner ? 'Données vidées et compte joint quitté' : 'Données vidées'); },
+        soi ? {title:'Vider mes données ?', consequence:'Tes revenus, dépenses, charges, échéances et objectifs seront effacés, et un compte joint éventuel sera quitté. Ton compte et tes identifiants sont conservés. Cette action est définitive.', confirmLabel:'Vider mes données'} : undefined); break; }
 
     /* Comptes : demandes des membres (export / suppression) */
     case 'request-export': {
@@ -5974,18 +5984,32 @@ async function releveChangerColonne(el){
   s.formatConnu = true;
   releveSauverSession(); await persist(); await render();
 }
+// Passe une ligne en dépense ou en rentrée : le signe du montant suit (la
+// banque se trompe parfois de sens), et la catégorie doit exister pour ce type.
+function releveAppliquerType(l, type){
+  l.v.type = type;
+  if(type==='ignorer') return;
+  if((type==='depense') !== (l.montant<0)) l.montant = -l.montant;
+  const cats = myCategories(type==='revenu' ? 'revenus' : 'depenses').map(c=>c.nom);
+  if(!cats.includes(l.v.categorie)){
+    const regle = releveModele(false).regles[l.cle];
+    l.v.categorie = regle && regle.type===type && regle.categorie ? regle.categorie : releveCategorieDefaut(type);
+  }
+}
+// Inverse le sens d'une ligne mal reconnue (+ ↔ −).
+function releveInverserSigne(id){
+  const l = releveSession && releveSession.lignes.find(x=>x.id===id); if(!l) return false;
+  if(l.v.type==='ignorer') l.montant = -l.montant;
+  else releveAppliquerType(l, l.montant<0 ? 'revenu' : 'depense');
+  releveSauverSession();
+  return true;
+}
 function releveChangerChamp(el){
   const s = releveSession; if(!s) return;
   const l = s.lignes.find(x=>x.id===el.dataset.rlId); if(!l) return;
   const champ = el.dataset.rlChamp;
-  l.v[champ] = el.value;
-  if(champ==='type' && el.value!=='ignorer'){
-    const cats = myCategories(el.value==='revenu' ? 'revenus' : 'depenses').map(c=>c.nom);
-    if(!cats.includes(l.v.categorie)){
-      const regle = releveModele(false).regles[l.cle];
-      l.v.categorie = regle && regle.type===el.value && regle.categorie ? regle.categorie : releveCategorieDefaut(el.value);
-    }
-  }
+  if(champ==='type') releveAppliquerType(l, el.value);
+  else l.v[champ] = el.value;
   if(champ==='nbMensualites'){
     // Pas de re-render ici : le clic sur « Valider » qui a fait perdre le focus doit aboutir.
     const nb = releveNbMensualites(l.v), tot = el.closest('.rl-row')?.querySelector('.rl-nb-total');
@@ -6099,7 +6123,7 @@ function releveLigneHTML(l){
     ${releveMenuHTML(l, 'type', RELEVE_TYPES, l.v.type, `Type de l’opération ${nomLigne}`)}
     ${ign ? '<span class="rl-cat"></span>' : releveCategorieHTML(l, nomLigne)}
     ${dep ? releveMenuHTML(l, 'compte', RELEVE_COMPTES, l.v.compte || 'Compte Perso', `Compte de ${nomLigne}`) : '<span class="rl-compte"></span>'}
-    <div class="rl-amt num${l.montant>0?' pos':''}">${l.montant>0?'+':''}${fmtEUR(l.montant)}</div>
+    <button type="button" class="rl-amt num${l.montant>0?' pos':''}" data-action="releve-signe" data-id="${l.id}" title="Inverser le sens (+ / −)" aria-label="${l.montant>0?'Rentrée':'Dépense'} de ${attrEsc(fmtEUR(Math.abs(l.montant)))} — inverser le sens">${icon('refresh')}${l.montant>0?'+':''}${fmtEUR(l.montant)}</button>
     ${ign ? '' : `<input class="rl-ctl rl-note" data-rl-id="${l.id}" data-rl-champ="notes" value="${attrEsc(l.v.notes||'')}" placeholder="Ajouter un commentaire…" aria-label="Commentaire sur ${nomLigne}" maxlength="200">`}
     ${dep ? `<div class="rl-paie">
       ${releveMenuHTML(l, 'paiement', RELEVE_PAIEMENTS, l.v.paiement || 'Unique', `Paiement de ${nomLigne}`)}
@@ -6335,7 +6359,9 @@ function userRowActionsHTML(u, me){
   if(isAdmin() || u.id===me.id) items.push(`<button class="menu-item" data-action="edit-user" data-id="${u.id}">${icon('edit')}Modifier le compte</button>`);
   if(isAdmin() && u.role!=='admin') items.push(`<button class="menu-item" data-action="export-user-data" data-id="${u.id}">${icon('arrowDown')}Exporter ses données</button>`);
   const danger = [];
-  if(isAdmin() && u.role!=='admin') danger.push(`<button class="menu-item danger" data-action="wipe-user-data" data-id="${u.id}">${icon('refresh')}Vider ses données</button>`);
+  // Chacun peut vider ses propres données sans passer par un administrateur.
+  if(u.id===me.id) danger.push(`<button class="menu-item danger" data-action="wipe-user-data" data-id="${u.id}">${icon('refresh')}Vider mes données</button>`);
+  else if(isAdmin() && u.role!=='admin') danger.push(`<button class="menu-item danger" data-action="wipe-user-data" data-id="${u.id}">${icon('refresh')}Vider ses données</button>`);
   if(isAdmin() && u.id!==me.id) danger.push(`<button class="menu-item danger" data-action="del-user" data-id="${u.id}">${icon('trash')}Supprimer le compte</button>`);
   if(!items.length && !danger.length) return '';
   return `<button class="icon-btn user-more" data-action="toggle-user-actions" aria-label="Actions pour ${attrEsc(u.displayName)}" aria-haspopup="menu" aria-expanded="false">${icon('more')}</button>
@@ -6427,7 +6453,7 @@ function renderMemberAccountRequests(me){
   const deleteReq = myPendingAccountRequest('delete');
   return `
     <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:16px;">
-      <div class="sub" style="margin-bottom:10px;">Par défaut, seul un administrateur peut exporter, réinitialiser ou supprimer un compte. Tu peux lui en faire la demande :</div>
+      <div class="sub" style="margin-bottom:10px;">Pour vider tes données, utilise le menu « ⋯ » de ton compte ci-dessus. L’export et la suppression du compte passent par un administrateur — tu peux lui en faire la demande :</div>
       ${approvedExport ? `<div class="status-row" style="margin-bottom:12px;"><span class="status-dot" style="background:var(--c-reste);"></span>Ta demande d'export a été approuvée</div>
         <button class="btn btn-primary btn-sm" data-action="download-my-export" style="margin-bottom:14px;">${icon('arrowDown')}Télécharger mes données</button>
         <div class="field-note" style="margin-bottom:14px;">Ce bouton ne fonctionne qu'une fois — il disparaîtra après le téléchargement. Il faudra refaire une demande si tu en as besoin à nouveau.</div>` : ''}
@@ -6435,14 +6461,12 @@ function renderMemberAccountRequests(me){
         ${approvedExport ? '' : exportReq
           ? `<span class="pill pill-amber">Export demandé — en attente</span>`
           : `<button class="btn btn-ghost btn-sm" data-action="request-export">${icon('arrowDown')}Demander l\u2019export de mes données</button>`}
-        ${resetReq
-          ? `<span class="pill pill-amber">Reset demandé — en attente</span>`
-          : `<button class="btn btn-ghost btn-sm" data-action="request-reset-data">${icon('refresh')}Demander à vider mes données</button>`}
+        ${resetReq ? `<span class="pill pill-amber">Reset demandé — en attente</span>` : ''}
         ${deleteReq
           ? `<span class="pill pill-amber">Suppression demandée — en attente</span>`
           : `<button class="btn btn-ghost btn-sm" data-action="request-delete-account" style="color:var(--coral);">${icon('trash')}Demander la suppression de mon compte</button>`}
       </div>
-      <div class="field-note" style="margin-top:10px;">« Vider mes données » garde ton compte et tes identifiants — seules tes saisies (revenus, dépenses…) sont remises à zéro. "Supprimer mon compte" retire aussi tes identifiants, définitivement.</div>
+      <div class="field-note" style="margin-top:10px;">« Vider mes données » (menu « ⋯ ») garde ton compte et tes identifiants — seules tes saisies (revenus, dépenses…) sont remises à zéro. "Supprimer mon compte" retire aussi tes identifiants, définitivement.</div>
     </div>`;
 }
 function accountRequestLabel(type){
