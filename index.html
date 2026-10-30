@@ -37,6 +37,10 @@
   --c-epargne:#c97f9f;   /* vieux rose — épargne */
   --c-reste:#d6b77c;     /* or — reste à vivre, revenus */
   --c-over:#d9735f;      /* terre cuite — dépassement */
+  /* Catégories de dépenses dans les graphiques : six teintes dans un ordre fixe
+     (contrôlé : lisible en vision normale comme pour les daltoniens), puis « Autres ». */
+  --cat-1:#3987e5; --cat-2:#d95926; --cat-3:#199e70; --cat-4:#c98500; --cat-5:#d55181; --cat-6:#9085e9;
+  --cat-autre:#5c5c63;
   --font:"Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --ease-out:cubic-bezier(.23,1,.32,1);
   --ease-io:cubic-bezier(.77,0,.175,1);
@@ -194,14 +198,13 @@ main{flex:1;min-width:0;padding-block:32px 64px;padding-left:max(40px, env(safe-
 
 .flow{position:relative;height:28px;margin:28px 0 22px;display:flex;gap:3px;border-radius:10px;overflow:hidden;}
 .seg{height:100%;flex:0 0 auto;width:0;transition:width .7s var(--ease-out),filter .15s ease;position:relative;}
-.seg[data-k="achats"]{background:var(--c-achats);}
 .seg[data-k="reste"]{background:color-mix(in srgb, var(--c-reste) 22%, var(--surface));flex:1 1 auto;width:auto;}
 /* Dépassement : hachures (un motif qui porte un sens, pas un effet). */
 .seg[data-k="reste"].over,.hatch-over{background:repeating-linear-gradient(135deg,var(--c-over) 0 6px,color-mix(in srgb,var(--c-over) 55%,var(--surface)) 6px 12px);}
 .flow.has-focus .seg:not(.hl):not([data-k="reste"]){filter:brightness(.55);}
 .seg.hl{filter:brightness(1.15);}
 
-.postes{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;}
+.postes{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px;}
 .poste{display:flex;flex-direction:column;justify-content:flex-start;padding:12px 12px 10px;border-radius:var(--r-inner);text-align:left;transition:background-color .15s ease,transform .16s var(--ease-out);min-width:0;}
 .poste:active{transform:scale(.97);}
 @media (hover:hover){ .poste:hover{background:var(--raised);} }
@@ -209,6 +212,20 @@ main{flex:1;min-width:0;padding-block:32px 64px;padding-left:max(40px, env(safe-
 .poste .lbl{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;font-weight:500;}
 .poste .val{font-size:22px;font-weight:650;margin-top:4px;letter-spacing:-.01em;font-variant-numeric:tabular-nums;white-space:nowrap;}
 .poste .sub{font-size:12.5px;color:var(--faint);margin-top:2px;}
+.poste .lbl > span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.hero-note{margin-top:14px;font-size:13px;color:var(--muted);}
+/* Abonnements : prévus (pas encore comptés) puis validés. */
+.pill-abo{margin-left:6px;vertical-align:1px;}
+.abo-list{list-style:none;margin:0;padding:0;}
+.abo-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px 14px;align-items:center;padding:10px 0;border-top:1px solid var(--line);}
+.abo-row:first-child{border-top:none;}
+.abo-row .num{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--muted);}
+.abo-row .row-actions{display:flex;gap:4px;justify-content:flex-end;}
+@media(max-width:640px){ .abo-row{grid-template-columns:minmax(0,1fr) auto;} .abo-row .row-actions{grid-column:1/-1;} }
+.rl-abo{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:10px;border:1px dashed var(--line-strong);background:none;font:inherit;font-size:13px;color:var(--muted);cursor:pointer;}
+.rl-abo svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;}
+.rl-abo[aria-pressed="true"]{border-style:solid;border-color:var(--text);color:var(--text);}
+.rl-abo:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(255,255,255,0.18);}
 
 .cats-card{display:flex;flex-direction:column;}
 .cats{display:grid;gap:12px;list-style:none;}
@@ -769,6 +786,8 @@ button,a,[role="button"]{touch-action:manipulation;-webkit-tap-highlight-color:t
   --text:#0c0e12; --muted:#454b57; --faint:#5f6676;
   --c-fixe:#1d3f8f; --c-achats:#127a76; --c-echeances:#8a55c0; --c-joint:#6f88b4;
   --c-epargne:#a24a6e; --c-reste:#86661f; --c-over:#b23f2c;
+  --cat-1:#2a78d6; --cat-2:#eb6834; --cat-3:#1baf7a; --cat-4:#eda100; --cat-5:#e87ba4; --cat-6:#6250d6;
+  --cat-autre:#9aa1ad;
   --r-card:30px; --r-inner:18px;
   --shadow-soft:0 24px 60px rgba(30,40,70,0.18);
   --glass:rgba(255,255,255,0.52); --glass-strong:rgba(255,255,255,0.74);
@@ -788,6 +807,7 @@ button,a,[role="button"]{touch-action:manipulation;-webkit-tap-highlight-color:t
   --blur:22px; --sat:150%;
   --c-fixe:#5f93f5; --c-achats:#6fd0c8; --c-echeances:#cdb2f2; --c-joint:#dce6f2;
   --c-epargne:#e895b4; --c-reste:#e0c285; --c-over:#ec7e6a;
+  --cat-autre:#4d6f75;
   --field-a:color-mix(in srgb, #3f8fa8 26%, transparent);
   --field-b:color-mix(in srgb, #6f9fc8 18%, transparent);
   --field-c:color-mix(in srgb, #e0c285 10%, transparent);
@@ -1095,7 +1115,8 @@ function defaultState(){
     depenses: [],
     categoriesDepenses: [],
     categoriesRevenus: [],
-    importApprentissage: []
+    importApprentissage: [],
+    abonnementsAlertes: []
   };
 }
 
@@ -1208,13 +1229,19 @@ async function loadState(){
     needsPersist = true;
   }
 
+  // Alertes des abonnements (changement de prix, abonnement retiré) : vide au départ.
+  if(!Array.isArray(state.abonnementsAlertes)){
+    state.abonnementsAlertes = [];
+    needsPersist = true;
+  }
+
   if(needsPersist) await persist();
   if(needsPersistAuth) await persistAuth();
   if(needsPersistSocial) await persistSocial();
 }
 // Les anciennes données (revenus récurrents, échéances, objectifs, charges…) restent
 // dans le stockage, intactes mais ignorées, en attendant la refonte du modèle.
-const OWNED_ARRAYS = ['revenusExceptionnels','depenses','categoriesDepenses','categoriesRevenus','importApprentissage'];
+const OWNED_ARRAYS = ['revenusExceptionnels','depenses','categoriesDepenses','categoriesRevenus','importApprentissage','abonnementsAlertes'];
 function mine(arr){
   const me = currentUser();
   return me ? (arr||[]).filter(e=>e.ownerId===me.id) : [];
@@ -1425,11 +1452,12 @@ function ucfirst(t){ return t ? t.charAt(0).toUpperCase()+t.slice(1) : t; }
 function shortMonthLabel(key){ const [y,m]=key.split('-').map(Number); return new Date(y,m-1,1).toLocaleDateString('fr-FR',{month:'short',year:'numeric'}); }
 
 /* ============================== COMPUTATIONS ============================== */
-/* Pour l'instant, le budget ne connaît que des entrées (revenus) et des sorties
-   (dépenses), chacune datée et payée en une fois. Les dépenses d'un autre type
-   (abonnements, échéanciers, prévisionnelles) héritées de l'ancien modèle restent
-   stockées mais ne sont plus prises en compte. */
-function estSortie(d){ return !d.modePaiement || d.modePaiement==='Unique'; }
+/* Le budget connaît des entrées (revenus) et des sorties (dépenses), chacune datée
+   et payée en une fois. Une sortie marquée abonnement (aboId) annonce la suivante :
+   une dépense prévue (prevu) le mois d'après, qui ne compte nulle part tant qu'elle
+   n'est pas validée. Les dépenses d'un autre type héritées de l'ancien modèle
+   (abonnements, échéanciers, prévisionnelles) restent stockées mais ignorées. */
+function estSortie(d){ return (!d.modePaiement || d.modePaiement==='Unique') && !d.prevu; }
 function dansLeMois(x, key){ return !!x.date && x.date.slice(0,7)===key; }
 function forOwner(arr, ownerId){ return (arr||[]).filter(e=>e.ownerId===ownerId); }
 function mesSorties(){ return mine(state.depenses).filter(estSortie); }
@@ -1442,12 +1470,40 @@ function depenseMontantDuMois(dep, key){ return estSortie(dep) && dansLeMois(dep
    le solde correspondent toujours aux montants affichés. */
 function dashboardData(key){
   const revenu = revenusDuMois(key);
-  const achats = sumR2(depensesDuMois(key), d=>d.montant);
+  const liste = depensesDuMois(key);
+  const achats = sumR2(liste, d=>d.montant);
   const parts = { achats };
   const totalDepenses = achats;
   const solde = r2(revenu - totalDepenses);
-  return {key, revenu, parts, totalDepenses, solde};
+  const parCat = new Map();
+  liste.forEach(d=>{ const c = catLabel(d); parCat.set(c, r2((parCat.get(c)||0) + r2(d.montant))); });
+  return {key, revenu, parts, totalDepenses, solde, parCat};
 }
+
+/* ---------- Catégories dans les graphiques ---------- */
+/* Une couleur suit une catégorie, jamais son rang du mois : les six catégories
+   qui pèsent le plus sur l'année affichée gardent leur teinte d'un mois à
+   l'autre, les autres sont réunies sous « Autres ». */
+const CAT_AUTRES = 'Autres';
+const CAT_COULEURS = 6;
+function catLabel(d){ return String(d.categorie||'').trim() || 'Sans catégorie'; }
+function catPalette(year){
+  const totaux = new Map();
+  mesSorties().forEach(d=>{ if(d.date && d.date.slice(0,4)===String(year)){ const c = catLabel(d); totaux.set(c, (totaux.get(c)||0) + (Number(d.montant)||0)); } });
+  const ordre = [...totaux.entries()].filter(([,v])=>v>0.004).sort((a,b)=>b[1]-a[1] || a[0].localeCompare(b[0],'fr')).map(([c])=>c);
+  const tetes = ordre.length>CAT_COULEURS+1 ? ordre.slice(0, CAT_COULEURS) : ordre.slice(0, CAT_COULEURS+1);
+  const couleurs = new Map(tetes.map((c,i)=>[c, i<CAT_COULEURS ? `var(--cat-${i+1})` : 'var(--cat-autre)']));
+  const groupes = tetes.length<ordre.length ? [...tetes, CAT_AUTRES] : tetes;
+  const groupeDe = c => couleurs.has(c) ? c : CAT_AUTRES;
+  return {groupes, groupeDe, couleur: g => couleurs.get(g) || 'var(--cat-autre)'};
+}
+// Montants d'un mois regroupés comme dans la palette : [{label, value, nb}], dans l'ordre de la palette.
+function catGroupesDuMois(parCat, pal){
+  const m = new Map();
+  parCat.forEach((v,c)=>{ const g = pal.groupeDe(c); const e = m.get(g) || {label:g, value:0, cats:0}; e.value = r2(e.value + v); e.cats++; m.set(g, e); });
+  return pal.groupes.filter(g=>m.has(g) && m.get(g).value>0.004).map(g=>m.get(g));
+}
+function catDot(color){ return `<span class="dot" style="background:${color}" aria-hidden="true"></span>`; }
 function anneeData(year){
   const months = [];
   for(let m=1;m<=12;m++){
@@ -1478,6 +1534,91 @@ function analyseMonthlyTotals(term, year){
     months.push({key, total: sumR2(matches, d=>depenseMontantDuMois(d, key))});
   }
   return months;
+}
+
+/* ============================== ABONNEMENTS ============================== */
+/* Une dépense marquée abonnement porte un identifiant de série (aboId). Chaque
+   prélèvement validé annonce le suivant : une dépense prévue (prevu:true) le mois
+   d'après, au même jour. Elle n'entre dans aucun calcul (graphiques, reste à vivre)
+   tant qu'elle n'est pas validée, à la main ou par un relevé importé. Le premier
+   jour du mois suivant, une prévision restée sans validation est retirée, avec
+   toutes celles de la série : l'abonnement est considéré comme arrêté. */
+function moisDe(date){ return String(date||'').slice(0,7); }
+function dateDansMois(key, jour){
+  const [y,m] = key.split('-').map(Number);
+  const dernier = new Date(y, m, 0).getDate();
+  return `${key}-${String(Math.min(Math.max(1, Number(jour)||1), dernier)).padStart(2,'0')}`;
+}
+function aboPrevisions(){ return mine(state.depenses).filter(d=>d.prevu && d.aboId); }
+function aboPrevisionsDuMois(key){ return aboPrevisions().filter(d=>moisDe(d.date)===key).sort((a,b)=>a.date.localeCompare(b.date)); }
+// Annonce le prochain prélèvement d'une série : le mois qui suit celui de `dep`
+// (jamais un mois déjà passé, où elle serait aussitôt retirée).
+function aboPlanifier(dep){
+  if(!dep.aboId || aboPrevisions().some(p=>p.aboId===dep.aboId)) return null;
+  let key = addMonths(moisDe(dep.date), 1);
+  if(key < currentMonthKey()) key = currentMonthKey();
+  const prev = {id:uid(), ownerId:dep.ownerId, aboId:dep.aboId, libelle:dep.libelle, categorie:dep.categorie||'', montant:r2(dep.montant),
+    modePaiement:'Unique', date:dateDansMois(key, Number(String(dep.date).slice(8,10))), notes:'', prevu:true};
+  if(dep.cle) prev.cle = dep.cle;
+  state.depenses.push(prev);
+  return prev;
+}
+// Marque une dépense comme abonnement (nouvelle série) et annonce le mois suivant.
+function aboDemarrer(dep){
+  dep.aboId = dep.aboId || uid();
+  return aboPlanifier(dep);
+}
+// Valide une prévision : elle devient une dépense comme les autres, et annonce la suivante.
+// Un montant différent de celui attendu est un changement de prix : il est signalé.
+function aboValider(prev, valeurs){
+  const ancien = r2(prev.montant);
+  Object.assign(prev, valeurs);
+  prev.montant = r2(prev.montant);
+  delete prev.prevu;
+  if(Math.abs(prev.montant - ancien) >= 0.005) aboAlerter({type:'prix', aboId:prev.aboId, libelle:prev.libelle, ancien, nouveau:prev.montant, mois:moisDe(prev.date)});
+  aboPlanifier(prev);
+  return prev;
+}
+// Arrête une série : ses prélèvements prévus disparaissent, les validés restent.
+function aboArreter(aboId){
+  const avant = state.depenses.length;
+  const me = currentUser();
+  state.depenses = state.depenses.filter(d=>!(d.prevu && d.aboId===aboId && me && d.ownerId===me.id));
+  return avant - state.depenses.length;
+}
+// Le premier jour d'un mois, les prévisions des mois passés non validées sont
+// retirées avec toute leur série. Renvoie le nombre d'abonnements retirés.
+function aboPurger(){
+  const cur = currentMonthKey();
+  const echues = aboPrevisions().filter(p=>moisDe(p.date) < cur);
+  if(!echues.length) return 0;
+  const series = new Map();
+  echues.forEach(p=>{ if(!series.has(p.aboId)) series.set(p.aboId, p); });
+  series.forEach((p, aboId)=>{
+    aboArreter(aboId);
+    aboAlerter({id:'retire-'+p.id, type:'retire', aboId, libelle:p.libelle, ancien:r2(p.montant), mois:moisDe(p.date)});
+  });
+  return series.size;
+}
+// Nouveau prix annoncé : la prévision en attente (et donc les suivantes) prend ce montant.
+function aboChangerPrix(prev, montant){
+  const ancien = r2(prev.montant);
+  prev.montant = r2(montant);
+  if(Math.abs(prev.montant - ancien) >= 0.005) aboAlerter({type:'prix', aboId:prev.aboId, libelle:prev.libelle, ancien, nouveau:prev.montant, mois:moisDe(prev.date)});
+}
+function aboAlerter(a){
+  const me = currentUser(); if(!me) return;
+  if(!Array.isArray(state.abonnementsAlertes)) state.abonnementsAlertes = [];
+  const id = a.id || uid();
+  if(state.abonnementsAlertes.some(x=>x.id===id)) return;
+  state.abonnementsAlertes.push({...a, id, ownerId:me.id, le:new Date().toISOString().slice(0,10), vue:false});
+  if(state.abonnementsAlertes.length>200) state.abonnementsAlertes = state.abonnementsAlertes.slice(-200);
+  notifyBrowser(1, aboAlerteTexte(a));
+}
+function aboAlertesNonVues(){ return mine(state.abonnementsAlertes).filter(a=>!a.vue).sort((a,b)=>(b.le||'').localeCompare(a.le||'')); }
+function aboAlerteTexte(a){
+  if(a.type==='prix') return `${a.libelle} : ${fmtEUR(a.ancien)} → ${fmtEUR(a.nouveau)} par mois`;
+  return `${a.libelle} retiré : prélèvement de ${monthLabel(a.mois)} non validé`;
 }
 
 /* ============================== SIDEBAR / NAV ============================== */
@@ -2198,6 +2339,7 @@ function bulkDelete(table){
 
 /* ============================== RENDER ROOT ============================== */
 async function render(){
+  if(currentUser() && aboPurger()) persist();
   renderSidebar();
   const view = document.getElementById('view');
   const renderers = {
@@ -2308,24 +2450,35 @@ function renderDashboard(){
   const key = state.selectedMonth;
   const d = dashboardData(key);
   const enter = dashEntered || reduceMotion.matches ? '' : ' enter';
-  // Contrôle : les postes plus le reste redonnent exactement le revenu.
-  console.assert(Math.abs(POSTES.reduce((s,p)=>s+d.parts[p.k],0) + d.solde - d.revenu) < 0.005, 'Tableau de bord : postes + reste ≠ revenu', key, d);
+  const pal = catPalette(dashYear());
+  // Du plus gros poste du mois au plus petit, « Autres » en dernier ; chaque catégorie garde sa couleur de l'année.
+  const groupes = catGroupesDuMois(d.parCat, pal).sort((a,b)=>(a.label===CAT_AUTRES)-(b.label===CAT_AUTRES) || b.value-a.value);
+  // Contrôle : les catégories plus le reste redonnent exactement le revenu.
+  console.assert(Math.abs(sumR2(groupes, g=>g.value) + d.solde - d.revenu) < 0.005, 'Tableau de bord : catégories + reste ≠ revenu', key, d);
 
   const noRev = d.revenu<=0.01;
   const base = Math.max(d.revenu, d.totalDepenses) || 1;
-  const subs = dashPosteSubs(key, d);
   const mois = monthName(key);
-  const widthOf = k => motionOff() || !dashPrevWidths.has(k) ? (k==='reste' ? null : d.parts[k]/base) : dashPrevWidths.get(k);
-  const segs = POSTES.map((p,i)=>`<div class="seg${dashFocusPoste===p.k?' hl':''}" data-k="${p.k}" data-w="${d.parts[p.k]/base}" style="width:calc((100% - ${POSTES.length*3}px) * ${widthOf(p.k)||0});transition-delay:${motionOff()?0:i*45}ms" title="${attrEsc(p.label)} : ${fmtEUR(d.parts[p.k])}"></div>`).join('')
+  const nbDe = g => depensesDuMois(key).filter(x=>pal.groupeDe(catLabel(x))===g.label).length;
+  const kOf = g => 'cat:'+g.label;
+  const widthOf = g => motionOff() || !dashPrevWidths.has(kOf(g)) ? g.value/base : dashPrevWidths.get(kOf(g));
+  const n = groupes.length;
+  const segs = groupes.map((g,i)=>`<div class="seg${dashFocusPoste===kOf(g)?' hl':''}" data-k="${attrEsc(kOf(g))}" data-w="${g.value/base}" style="background:${pal.couleur(g.label)};width:calc((100% - ${n*3}px) * ${widthOf(g)||0});transition-delay:${motionOff()?0:i*45}ms" title="${attrEsc(g.label)} : ${fmtEUR(g.value)}"></div>`).join('')
     + `<div class="seg${d.solde<0?' over':''}" data-k="reste" title="${d.solde<0?'Dépassement':'Reste à vivre'} : ${fmtEUR(Math.abs(d.solde))}"></div>`;
-  const flowLabel = `Répartition du revenu de ${mois} : ${POSTES.map(p=>`${p.label} ${fmtEUR(d.parts[p.k])}`).join(', ')}, ${d.solde<0?'dépassement':'reste'} ${fmtEUR(Math.abs(d.solde))}`;
+  const flowLabel = `Répartition du revenu de ${mois} : ${groupes.length ? groupes.map(g=>`${g.label} ${fmtEUR(g.value)}`).join(', ') : 'aucune dépense'}, ${d.solde<0?'dépassement':'reste'} ${fmtEUR(Math.abs(d.solde))}`;
 
-  const postes = POSTES.map(p=>`
-    <button class="poste" data-action="focus-poste" data-k="${p.k}" aria-pressed="${dashFocusPoste===p.k}">
-      <span class="lbl">${posteDot(p.k)}${p.label}</span>
-      <span class="val" data-tween="poste:${p.k}" data-v="${d.parts[p.k]}">${fmtEUR(motionOff()||!tweenValues.has('poste:'+p.k) ? d.parts[p.k] : tweenValues.get('poste:'+p.k))}</span>
-      <span class="sub">${subs[p.k]}</span>
-    </button>`).join('');
+  const postes = groupes.length ? groupes.map(g=>{
+    const nb = nbDe(g);
+    const sub = `${pctFmt(d.totalDepenses>0 ? g.value/d.totalDepenses : 0)} · ${g.label===CAT_AUTRES ? fmtCount(g.cats,'catégorie','catégories') : fmtCount(nb,'dépense','dépenses')}`;
+    return `
+    <button class="poste" data-action="focus-poste" data-k="${attrEsc(kOf(g))}" aria-pressed="${dashFocusPoste===kOf(g)}">
+      <span class="lbl">${catDot(pal.couleur(g.label))}<span>${esc(g.label)}</span></span>
+      <span class="val" data-tween="${attrEsc('poste:'+kOf(g))}" data-v="${g.value}">${fmtEUR(motionOff()||!tweenValues.has('poste:'+kOf(g)) ? g.value : tweenValues.get('poste:'+kOf(g)))}</span>
+      <span class="sub">${sub}</span>
+    </button>`; }).join('') : `<div class="empty-line">Aucune dépense en ${monthLabel(key)}. <button class="link" data-action="add-depense">Ajouter une dépense</button></div>`;
+
+  const prevus = aboPrevisionsDuMois(key);
+  const noteAbos = prevus.length ? `<div class="hero-note">${icon('repeat').replace('<svg','<svg style="width:14px;height:14px;vertical-align:-2px;stroke:currentColor;fill:none;stroke-width:1.8;margin-right:6px"')}${fmtCount(prevus.length,'abonnement prévu','abonnements prévus')} (${fmtEUR(sumR2(prevus,x=>x.montant))}), compté${prevus.length>1?'s':''} une fois validé${prevus.length>1?'s':''}. <button class="link" data-nav="depenses">Voir</button></div>` : '';
 
   return `
     <div class="dash">
@@ -2335,7 +2488,7 @@ function renderDashboard(){
         action: `<button class="btn btn-primary" data-action="add-depense">${icon('plus')}Ajouter une dépense</button>`,
       })}</div>
 
-      <section class="card hero${enter}" aria-labelledby="hero-l">
+      <section class="card hero mb16${enter}" aria-labelledby="hero-l">
         <div class="hero-top">
           <div>
             <div class="hero-label" id="hero-l">${d.solde<0 && !noRev ? 'Reste à vivre · dépassé' : 'Reste à vivre'}</div>
@@ -2347,23 +2500,28 @@ function renderDashboard(){
           </div>
           ${noRev ? '' : `<div class="ratio"><div class="pct fig" data-tween="pct" data-v="${d.totalDepenses/d.revenu}">${pctFmt(motionOff()||!tweenValues.has('pct') ? d.totalDepenses/d.revenu : tweenValues.get('pct'))}</div><small>${d.solde<0?'du revenu, dépassé':'du revenu engagé'}</small></div>`}
         </div>
-        <div class="flow${dashFocusPoste?' has-focus':''}" role="img" aria-label="${attrEsc(flowLabel)}">${segs}</div>
+        <div class="flow${dashFocusPoste?' has-focus':''}" data-n="${n}" role="img" aria-label="${attrEsc(flowLabel)}">${segs}</div>
+        <h2 class="sr-only">Dépenses par catégorie</h2>
         <div class="postes">${postes}</div>
+        ${noteAbos}
       </section>
-
-      <section class="card cats-card mb16${enter}" aria-labelledby="cat-h">${dashCatsHTML(key)}</section>
 
       <section class="card ychart${enter}${dashYearGrown||reduceMotion.matches?'':' first'}" aria-labelledby="year-h">
         <div class="chart-head">
-          <h2 id="year-h">Dépenses mois par mois, ${dashYear()}</h2>
+          <h2 id="year-h">Dépenses par catégorie, ${dashYear()}</h2>
           <div class="chart-head-right"><span class="side-note">Touchez un mois pour l’afficher</span>${chartFilterButtonHTML('revAnnuel', 'Nom du revenu')}</div>
         </div>
         ${chartFilterActive('revAnnuel') ? chartFilterActiveBarHTML('revAnnuel') : ''}
-        <div class="legend">${POSTES.map(p=>`<span>${posteDot(p.k)}${p.label}</span>`).join('')}<span><i class="ln" aria-hidden="true"></i>Revenu${chartFilterActive('revAnnuel')?' (filtré)':''}</span></div>
+        ${yearLegendHTML(dashYear(), chartFilterActive('revAnnuel'))}
         <div class="ychart-host" data-year="${dashYear()}" data-sel="${key}"></div>
         <div class="note-ex">${yearForecastNote(dashYear())}</div>
       </section>
     </div>`;
+}
+// Légende du graphique annuel : les catégories de l'année, puis le repère du revenu.
+function yearLegendHTML(year, revFiltre){
+  const pal = catPalette(year);
+  return `<div class="legend">${pal.groupes.map(g=>`<span>${catDot(pal.couleur(g))}${esc(g)}</span>`).join('')}<span><i class="ln" aria-hidden="true"></i>Revenu${revFiltre?' (filtré)':''}</span></div>`;
 }
 function yearForecastNote(year){
   const fut = []; for(let m=1;m<=12;m++){ const k = monthKey(year,m); if(isFutureMonth(k)) fut.push(MONTH_NAMES[m-1]); }
@@ -2372,41 +2530,19 @@ function yearForecastNote(year){
   return fut.length===1 ? `${ucfirst(fut[0])} : prévision` : `${ucfirst(fut[0])} à ${fut[fut.length-1]} : prévision`;
 }
 
-/* « Où part l'argent » : catégories du mois triées. */
-function dashCatsHTML(key){
-  const parts = chartFilteredGrouped('depRepartition');
-  const total = sumR2(parts, p=>p.value);
-  const head = `<div class="chart-head"><h2 id="cat-h">Où part l’argent</h2><div class="chart-head-right"><span class="side-note num">${fmtEUR(total)}</span>${chartFilterButtonHTML('depRepartition', 'Nom de la dépense')}</div></div>
-    ${chartFilterActive('depRepartition') ? chartFilterActiveBarHTML('depRepartition') : ''}`;
-  if(!parts.length) return `${head}<div class="empty-line">${chartFilterActive('depRepartition') ? 'Aucune dépense ne correspond au filtre.' : 'Aucune dépense ce mois-ci.'}</div>`;
-  const shown = parts.slice(0,8), max = shown[0].value;
-  const rows = shown.map(c=>{
-    const ks = Object.entries(c.postes).sort((a,b)=>b[1]-a[1]).map(([k])=>k);
-    const k = ks[0], fk = 'cat:'+c.label;
-    const w = motionOff() || !dashPrevWidths.has(fk) ? c.value/max : dashPrevWidths.get(fk);
-    return `<li class="cat">
-      <span class="name" title="${attrEsc(c.label)}">${esc(c.label)}</span><span class="amt">${fmtEUR(c.value)}</span>
-      <span class="track"><span class="fill" data-fk="${attrEsc(fk)}" data-w="${c.value/max}" style="background:${POSTE_BY_KEY[k].color};transform:scaleX(${w})"></span></span>
-      <span class="meta">${pctFmt(total>0?c.value/total:0)}</span>
-    </li>`;
-  }).join('');
-  return `${head}<ol class="cats">${rows}</ol>
-    ${parts.length>shown.length ? `<div class="field-note" style="margin-top:10px;">+ ${fmtCount(parts.length-shown.length,'autre catégorie','autres catégories')}</div>` : ''}
-    <div class="card-foot"><button class="link" data-nav="depenses">Voir toutes les dépenses →</button></div>`;
-}
-
 /* Après insertion : les barres et chiffres partent de leur valeur
    précédente et vont vers la nouvelle (transitions CSS + tween). */
 function dashAfterRender(){
   const view = document.getElementById('view');
   const apply = ()=>{
-    view.querySelectorAll('.seg[data-w]').forEach(sg=>{ const w = Number(sg.dataset.w); sg.style.width = `calc((100% - ${POSTES.length*3}px) * ${w})`; dashPrevWidths.set(sg.dataset.k, w); });
-    view.querySelectorAll('.fill[data-fk]').forEach((f,i)=>{ const w = Number(f.dataset.w); f.style.transitionDelay = motionOff()?'0ms':`${i*40}ms`; f.style.transform = `scaleX(${w})`; dashPrevWidths.set(f.dataset.fk, w); });
+    const n = Number(view.querySelector('.flow')?.dataset.n)||0;
+    view.querySelectorAll('.seg[data-w]').forEach(sg=>{ const w = Number(sg.dataset.w); sg.style.width = `calc((100% - ${n*3}px) * ${w})`; dashPrevWidths.set(sg.dataset.k, w); });
   };
   if(motionOff()) apply(); else requestAnimationFrame(()=>requestAnimationFrame(apply));
   view.querySelectorAll('[data-tween]').forEach(el=>{
     const k = el.dataset.tween, v = Number(el.dataset.v);
     const fmt = k==='reste' ? bigFmt : k==='pct' ? pctFmt : fmtEUR;
+    if(!isFinite(v)) return;
     tween(el, k, v, fmt, k==='reste' ? 700 : 600);
   });
   const finding = view.querySelector('[data-swap]');
@@ -2430,6 +2566,7 @@ function niceCeil(v){ if(v<=0) return 1000; const p = Math.pow(10, Math.floor(Ma
 function yearChartSVG(host){
   const year = Number(host.dataset.year), sel = host.dataset.sel, tall = host.dataset.tall==='1';
   const {months} = anneeData(year);
+  const pal = catPalette(year);
   const revOf = m => host.dataset.revfilter==='0' ? m.revenu : revAnnuelFilteredTotalForMonth(m.key);
   const narrow = host.clientWidth < 560;
   const W = narrow ? Math.max(300, host.clientWidth) : 1100, H = narrow ? (tall?300:230) : (tall?400:300);
@@ -2438,13 +2575,13 @@ function yearChartSVG(host){
   const step = plotW/12, bw = Math.min(46, step*(narrow?0.62:0.56));
   const y = v => padT + plotH*(1-Math.min(v,max)/max);
   const tick = v => v===0 ? '0' : v>=1000 ? `${sp(String(v/1000).replace('.',','))} k` : String(v);
-  let svg = `<svg viewBox="0 0 ${W} ${H}" role="group" aria-label="Dépenses de chaque mois de ${year}, par poste, avec le revenu en repère"><defs><pattern id="hatch-${year}" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#050506" stroke-width="2.4" stroke-opacity=".55"/></pattern></defs><g class="axis">`;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="group" aria-label="Dépenses de chaque mois de ${year}, par catégorie, avec le revenu en repère"><defs><pattern id="hatch-${year}" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#050506" stroke-width="2.4" stroke-opacity=".55"/></pattern></defs><g class="axis">`;
   for(let i=0;i<=4;i++){ const v = step4*i; svg += `<line x1="${padL}" x2="${W}" y1="${y(v)}" y2="${y(v)}"/><text x="${padL-10}" y="${y(v)+4}" text-anchor="end">${tick(v)}</text>`; }
   svg += `</g>`;
   months.forEach((mm,i)=>{
     const cx = padL + step*i + step/2, x = cx-bw/2, future = isFutureMonth(mm.key), selected = mm.key===sel;
     let acc = 0, rects = '';
-    POSTES.forEach(p=>{ const v = mm.parts[p.k]; if(v<=0) return; const y0 = y(acc+v), h = y(acc)-y(acc+v); rects += `<rect class="b" x="${x.toFixed(1)}" y="${y0.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,h-1.5).toFixed(1)}" rx="3" fill="${p.color}" style="animation-delay:${i*35}ms"/>`; acc += v; });
+    catGroupesDuMois(mm.parCat, pal).forEach(g=>{ const v = g.value; const y0 = y(acc+v), h = y(acc)-y(acc+v); rects += `<rect class="b" x="${x.toFixed(1)}" y="${y0.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0,h-1.5).toFixed(1)}" rx="3" fill="${pal.couleur(g.label)}" style="animation-delay:${i*35}ms"><title>${esc(g.label)} : ${fmtEUR(v)}</title></rect>`; acc += v; });
     const hatch = future && acc>0 ? `<rect x="${x.toFixed(1)}" y="${y(acc).toFixed(1)}" width="${bw.toFixed(1)}" height="${(y(0)-y(acc)).toFixed(1)}" fill="url(#hatch-${year})" pointer-events="none"/>` : '';
     const rev = revOf(mm);
     const label = narrow ? 'JFMAMJJASOND'[i] : MONTH_SHORT[i];
@@ -2483,7 +2620,7 @@ function yearStepperHTML(year, target){
    chaque graphique. Même mécanique "Excel" (panneau à cases à cocher,
    validé par OK) que le filtre des tableaux, mais l'état confirmé vit
    dans state.chartFilters plutôt que state.tableFilters. */
-let chartFilterOpen = null;          // clé du graphique dont le panneau est ouvert ('depRepartition' | 'revAnnuel')
+let chartFilterOpen = null;          // clé du graphique dont le panneau est ouvert ('revAnnuel')
 let chartFilterPendingDim = null;    // dimension en cours d'édition dans le panneau ouvert
 let chartFilterPendingChecked = null; // Set des valeurs cochées (= incluses) pour cette dimension, en cours d'édition
 
@@ -2502,11 +2639,6 @@ function chartValueLabel(item, dim){
   if(v) return v;
   return dim==='categorie' ? 'Sans catégorie' : (item.libelle || 'Sans nom');
 }
-function depRepartitionItems(key){
-  return depensesDuMois(key)
-    .map(d=>({ libelle:d.libelle, categorie:d.categorie, montant:r2(d.montant), poste:'achats' }))
-    .filter(it=>it.montant>0.01);
-}
 function revAnnuelItemsForMonth(key){
   return revenusDuMoisListe(key).map(r=>({libelle:r.libelle, categorie:r.categorie, montant:Number(r.montant)||0}));
 }
@@ -2516,27 +2648,12 @@ function revAnnuelItemsForYear(year){
   return items;
 }
 function chartItemsFor(chartKey){
-  if(chartKey==='depRepartition') return depRepartitionItems(state.selectedMonth);
   if(chartKey==='revAnnuel') return revAnnuelItemsForYear(Number(state.selectedMonth.slice(0,4)));
   return [];
 }
 function chartDistinctValuesForDim(items, dim){
   const set = new Set(items.map(it=>chartValueLabel(it, dim)));
   return Array.from(set).sort((a,b)=>a.localeCompare(b,'fr',{numeric:true}));
-}
-function chartFilteredGrouped(chartKey){
-  const f = chartFilterState(chartKey);
-  const excluded = new Set(f.excluded[f.dim]||[]);
-  const map = new Map();
-  chartItemsFor(chartKey).forEach(it=>{
-    const label = chartValueLabel(it, f.dim);
-    if(excluded.has(label)) return;
-    const e = map.get(label) || {label, value:0, postes:{}};
-    e.value = r2(e.value + it.montant);
-    if(it.poste) e.postes[it.poste] = r2((e.postes[it.poste]||0) + it.montant);
-    map.set(label, e);
-  });
-  return Array.from(map.values()).filter(p=>p.value>0.004).sort((a,b)=>b.value-a.value);
 }
 function revAnnuelFilteredTotalForMonth(key){
   const f = chartFilterState('revAnnuel');
@@ -2609,8 +2726,8 @@ function renderAnnuelle(){
       </div>
     </section>
     <section class="card ychart mb16" aria-labelledby="an-h">
-      <div class="chart-head"><h2 id="an-h">Dépenses mois par mois, ${year}</h2><span class="side-note">Touchez un mois pour l’ouvrir</span></div>
-      <div class="legend">${POSTES.map(p=>`<span>${posteDot(p.k)}${p.label}</span>`).join('')}<span><i class="ln" aria-hidden="true"></i>Revenu</span></div>
+      <div class="chart-head"><h2 id="an-h">Dépenses par catégorie, ${year}</h2><span class="side-note">Touchez un mois pour l’ouvrir</span></div>
+      ${yearLegendHTML(year, false)}
       <div class="ychart-host" data-year="${year}" data-sel="" data-tall="1" data-revfilter="0"></div>
       <div class="note-ex">${yearForecastNote(year)}</div>
     </section>
@@ -2816,7 +2933,7 @@ function renderDepenses(){
   // Les dépenses portant le même libellé sont regroupées sur une ligne (total du mois) ;
   // un clic sur le libellé déplie le détail.
   const depenseRowHTML = (x, child=false) => `<tr${child?' class="grp-child"':''}>
-          <td><span class="cell-main">${dash(x.libelle)}</span>${noteSub(x)}${x.date?`<span class="cell-sub">${fmtDate(x.date)}</span>`:''}</td><td class="sub first-sub">${dash(x.categorie)}</td>
+          <td><span class="cell-main">${dash(x.libelle)}</span>${x.aboId?'<span class="pill pill-dim pill-abo">Abonnement</span>':''}${noteSub(x)}${x.date?`<span class="cell-sub">${fmtDate(x.date)}</span>`:''}</td><td class="sub first-sub">${dash(x.categorie)}</td>
           <td class="num key" data-v="${r2(x.montant)}">${fmtEUR(x.montant)}</td>
           ${actionsFor(x)}
         </tr>`;
@@ -2829,6 +2946,7 @@ function renderDepenses(){
       <div class="big fig" style="color:var(--text)" data-tween="dep:total" data-fmt="big" data-v="${total}">${bigFmt(total)}</div>
     </section>
 
+    ${aboPrevusHTML(key)}
     <div class="card">
       <div class="section-head"><h2>${posteDot('achats')}Sorties</h2></div>
       ${tableFilterActive('depenses') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="depenses">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
@@ -2909,6 +3027,7 @@ function depense_fields(){
     {key:'categorie', label:'Catégorie', type:'category', categoryType:'depenses'},
     {key:'montant', label:'Montant (€)', type:'number', step:'0.01'},
     {key:'notes', label:'Commentaire', placeholder:'Facultatif'},
+    {key:'abonnement', label:'Abonnement : prévoir le même prélèvement le mois suivant', type:'checkbox'},
   ];
 }
 function depenseValidationErrors(data){
@@ -2920,11 +3039,32 @@ function depenseValidationErrors(data){
 }
 function openDepenseEditModal(depenseId){
   const dep = mine(state.depenses).find(x=>x.id===depenseId);
-  openModal('Modifier la dépense', depense_fields(), dep, async (data)=>{
+  openModal('Modifier la dépense', depense_fields(), {...dep, abonnement:!!dep.aboId}, async (data)=>{
     const errors = depenseValidationErrors(data);
     if(errors.length){ errors.forEach(([key,msg])=>markFieldError(key,msg)); toast(errors[0][1]); return false; }
     Object.assign(dep, {libelle:data.libelle, categorie:data.categorie, montant:data.montant, date:data.date, modePaiement:'Unique', notes:(data.notes||'').trim()});
-    await persist(); await render(); toast('Dépense mise à jour'); });
+    let msg = 'Dépense mise à jour';
+    if(data.abonnement && !dep.aboId){ const prev = aboDemarrer(dep); if(prev) msg = `Abonnement : prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}`; }
+    else if(!data.abonnement && dep.aboId){ aboArreter(dep.aboId); delete dep.aboId; delete dep.cle; msg = 'Ce n’est plus un abonnement'; }
+    await persist(); await render(); toast(msg); });
+}
+// Prélèvements d'abonnement attendus ce mois-ci : affichés à part, hors des totaux.
+function aboPrevusHTML(key){
+  const prevus = aboPrevisionsDuMois(key);
+  if(!prevus.length) return '';
+  return `<div class="card mb16">
+    <div class="section-head"><h2>${icon('repeat')}Abonnements prévus</h2><span class="side-note num">${fmtEUR(sumR2(prevus,x=>x.montant))}</span></div>
+    <p class="field-note" style="margin:-4px 0 8px;">Pas encore comptés : valide chaque prélèvement quand il passe, ou importe ton relevé. Sans validation, il est retiré le 1<sup>er</sup> ${monthLabel(addMonths(key,1))}.</p>
+    <ul class="abo-list">${prevus.map(p=>`<li class="abo-row">
+      <div><span class="cell-main">${esc(p.libelle)}</span><span class="cell-sub">${fmtDate(p.date)}${p.categorie?` · ${esc(p.categorie)}`:''}</span></div>
+      <span class="num">${fmtEUR(p.montant)}</span>
+      <div class="row-actions">
+        <button class="btn btn-ghost btn-sm" data-action="abo-valider" data-id="${p.id}">${icon('check')}Valider</button>
+        <button class="btn btn-text btn-sm" data-action="abo-prix" data-id="${p.id}">Nouveau prix</button>
+        <button class="icon-btn del" data-action="abo-arreter" data-id="${p.id}" aria-label="Arrêter l’abonnement ${attrEsc(p.libelle)}">${icon('x')}</button>
+      </div>
+    </li>`).join('')}</ul>
+  </div>`;
 }
 
 /* ============================== EVENT HANDLING ============================== */
@@ -3269,14 +3409,48 @@ async function handleAction(action, id, el){
     case 'add-depense': openModal('Ajouter une dépense', depense_fields(), {categorie:(myCategoriesDep()[0]||{}).nom||'', date:defaultDateForSelectedMonth()}, async (data)=>{
       const errors = depenseValidationErrors(data);
       if(errors.length){ errors.forEach(([key,msg])=>markFieldError(key,msg)); toast(errors[0][1]); return false; }
-      state.depenses.push({id:uid(), ownerId:currentUser().id, libelle:data.libelle, categorie:data.categorie, montant:data.montant, modePaiement:'Unique', date:data.date, notes:(data.notes||'').trim()});
-      await persist(); await render(); toast('Dépense ajoutée'); }); break;
+      const dep = {id:uid(), ownerId:currentUser().id, libelle:data.libelle, categorie:data.categorie, montant:data.montant, modePaiement:'Unique', date:data.date, notes:(data.notes||'').trim()};
+      state.depenses.push(dep);
+      const prev = data.abonnement ? aboDemarrer(dep) : null;
+      await persist(); await render(); toast(prev ? `Abonnement ajouté · prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}` : 'Dépense ajoutée'); }); break;
     case 'edit-depense': openDepenseEditModal(id); break;
     case 'del-depense': { const item=find(mine(state.depenses)); confirmDelete(item.libelle, async ()=>{
       state.depenses = state.depenses.filter(x=>x.id!==id);
       await persist(); await render(); toast('Dépense supprimée'); }); break; }
     case 'toggle-dep-group': { const g = el.dataset.group; if(depGroupsOpen.has(g)) depGroupsOpen.delete(g); else depGroupsOpen.add(g); await render(); break; }
     case 'goto-depenses': currentView = 'depenses'; await render(); break;
+
+    /* Abonnements */
+    case 'abo-valider': {
+      const prev = aboPrevisions().find(x=>x.id===id); if(!prev) break;
+      const champs = [{key:'date', label:'Date du prélèvement', type:'date'}, {key:'montant', label:'Montant prélevé (€)', type:'number', step:'0.01'}];
+      openModal(`Valider « ${esc(prev.libelle)} »`, champs, {date:prev.date, montant:prev.montant}, async (data)=>{
+        if(!data.date){ markFieldError('date','Renseigne une date'); return false; }
+        if(!(Number(data.montant)>0)){ markFieldError('montant','Renseigne un montant supérieur à 0'); return false; }
+        const ancien = r2(prev.montant);
+        aboValider(prev, {date:data.date, montant:Number(data.montant)});
+        const suivant = aboPrevisions().find(x=>x.aboId===prev.aboId);
+        await persist(); await render();
+        toast(`${Math.abs(r2(data.montant)-ancien)>=0.005 ? 'Validé avec le nouveau prix' : 'Prélèvement validé'}${suivant ? ` · suivant prévu en ${monthLabel(moisDe(suivant.date))}` : ''}`);
+      }, `<p class="field-note">Une fois validé, il compte dans tes dépenses de ${monthName(moisDe(prev.date))}.</p>`);
+      break; }
+    case 'abo-prix': {
+      const prev = aboPrevisions().find(x=>x.id===id); if(!prev) break;
+      openModal(`Nouveau prix : ${esc(prev.libelle)}`, [{key:'montant', label:'Nouveau montant mensuel (€)', type:'number', step:'0.01'}], {montant:prev.montant}, async (data)=>{
+        if(!(Number(data.montant)>0)){ markFieldError('montant','Renseigne un montant supérieur à 0'); return false; }
+        aboChangerPrix(prev, Number(data.montant));
+        await persist(); await render(); toast('Nouveau prix noté');
+      }, `<p class="field-note">Prix actuel : ${fmtEUR(prev.montant)}. Le prélèvement prévu et les suivants prennent le nouveau montant.</p>`);
+      break; }
+    case 'abo-arreter': {
+      const prev = aboPrevisions().find(x=>x.id===id); if(!prev) break;
+      confirmDelete('', async ()=>{ aboArreter(prev.aboId); await persist(); await render(); toast('Abonnement arrêté'); },
+        {title:`Arrêter « ${esc(prev.libelle)} » ?`, consequence:'Le prélèvement prévu est retiré et plus aucun ne sera annoncé. Ceux déjà validés restent dans tes dépenses.', confirmLabel:'Arrêter'});
+      break; }
+    case 'abo-alerte-vue': {
+      const a = mine(state.abonnementsAlertes).find(x=>x.id===id);
+      if(a){ a.vue = true; await persist(); renderSidebar(); renderNotifPanel(); }
+      break; }
     case 'switch-space': currentSpace = el.dataset.space; currentView = defaultViewForSpace(currentSpace); await render(); break;
     case 'bulk-delete': bulkDelete(el.dataset.bulk); break;
     case 'bulk-clear': bulkSet(el.dataset.bulk).clear(); syncBulkUI(); break;
@@ -3402,6 +3576,11 @@ async function handleAction(action, id, el){
     case 'releve-ignorer': {
       const l = releveSession && releveSession.lignes.find(x=>x.id===id);
       if(l){ l.v.type = 'ignorer'; releveFocusApres = releveIndexLigne(id); await releveValider([id]); }
+      break;
+    }
+    case 'releve-abo': {
+      const l = releveSession && releveSession.lignes.find(x=>x.id===id);
+      if(l && l.v.type==='depense'){ l.v.abo = !l.v.abo; releveSauverSession(); await render(); document.querySelector(`[data-action="releve-abo"][data-id="${id}"]`)?.focus(); }
       break;
     }
     case 'releve-signe': if(releveInverserSigne(id)){ releveFocusApres = null; await render(); document.querySelector(`[data-action="releve-signe"][data-id="${id}"]`)?.focus(); } break;
@@ -4387,7 +4566,7 @@ function releveDejaSuivi(op){
 function releveSuggestion(op, modele){
   const cle = releveCle(op.libelle);
   const sens = op.montant<0 ? 'depense' : 'revenu';
-  const base = {cle};
+  const base = {cle, abo:false};
   const regle = modele.regles[cle];
   // Un commerçant habituellement en dépense qui crédite le compte : c'est un remboursement.
   if(regle && regle.type!=='ignorer' && regle.type!==sens && !op.signeIncertain){
@@ -4400,7 +4579,7 @@ function releveSuggestion(op, modele){
     return {...base, type: sens, libelle: (sens==='revenu' ? 'Remboursement ' : '') + (regle.libelle || releveJoli(cle)), categorie: cat, confiance:'devine', raison:'Sens inhabituel pour ce commerçant'};
   }
   if(regle){
-    return {...base, type: regle.type, libelle: regle.libelle || releveJoli(cle), categorie: regle.categorie || '',
+    return {...base, type: regle.type, libelle: regle.libelle || releveJoli(cle), categorie: regle.categorie || '', abo: regle.type==='depense' && !!regle.abo,
       confiance: regle.n>=2 ? 'sur' : 'appris', raison: regle.type==='ignorer' ? `Déjà ignorée ${regle.n>1?regle.n+' fois':'une fois'}` : `Reconnue (${regle.n>1?regle.n+' fois':'une fois'})`};
   }
   const premier = cle.split(' ')[0];
@@ -4424,16 +4603,37 @@ function releveSuggestion(op, modele){
   }
   return {...base, type: sens, libelle: releveJoli(cle), categorie: releveCategorieDefaut(sens), confiance:'nouveau', raison:'Nouvelle opération'};
 }
+// Un prélèvement d'abonnement attendu ce mois-là (même commerçant ou même nom) :
+// la ligne le validera au lieu de créer une nouvelle dépense. Le montant peut
+// différer (changement de prix) ; à défaut, le plus proche l'emporte.
+function releveAboAttendu(op, cle, libelle, pris){
+  if(op.montant>=0) return null;
+  const nom = String(libelle||'').trim().toLowerCase();
+  const premier = cle.split(' ')[0];
+  const abs = Math.abs(op.montant);
+  const memeCommercant = p => { const c = p.cle || releveCle(p.libelle); return c===cle || (premier.length>=4 && c.split(' ')[0]===premier); };
+  return aboPrevisionsDuMois(moisDe(op.date))
+    .filter(p=>!pris.has(p.id) && (memeCommercant(p) || String(p.libelle||'').trim().toLowerCase()===nom))
+    .sort((a,b)=>Math.abs(a.montant-abs)-Math.abs(b.montant-abs))[0] || null;
+}
 function releveCreerLignes(ops){
   const modele = releveModele(false);
+  const pris = new Set();
   return ops.filter(o=>o.date && isFinite(o.montant) && Math.abs(o.montant)>=0.005 && (o.libelle||'').trim())
     .sort((a,b)=>a.date.localeCompare(b.date))
     .map(o=>{
       const s = releveSuggestion(o, modele);
       const suivi = releveDejaSuivi(o);
-      if(suivi){ s.type = 'ignorer'; s.confiance = 'sur'; s.raison = suivi; }
+      const attendu = suivi ? null : releveAboAttendu(o, s.cle, s.libelle, pris);
+      if(suivi){ s.type = 'ignorer'; s.abo = false; s.confiance = 'sur'; s.raison = suivi; }
+      else if(attendu){
+        pris.add(attendu.id);
+        const ecart = Math.abs(Math.abs(o.montant) - attendu.montant) >= 0.005;
+        Object.assign(s, {type:'depense', libelle:attendu.libelle, categorie:attendu.categorie||s.categorie, abo:true, confiance:'sur',
+          raison: ecart ? `Abonnement attendu : ${attendu.libelle} · nouveau prix (avant ${fmtEUR(attendu.montant)})` : `Abonnement attendu : ${attendu.libelle}`});
+      }
       const {cle, confiance, raison, ...valeurs} = s;
-      return {id: uid(), date: o.date, brut: o.libelle.trim(), montant: r2(o.montant), cle, suivi: !!suivi, incertain: !!o.signeIncertain, confiance, raison, etat:'attente', s:{...valeurs}, v:{...valeurs}};
+      return {id: uid(), date: o.date, brut: o.libelle.trim(), montant: r2(o.montant), cle, suivi: !!suivi, incertain: !!o.signeIncertain, confiance, raison, etat:'attente', ...(attendu ? {aboPrevId: attendu.id} : {}), s:{...valeurs}, v:{...valeurs}};
     });
 }
 
@@ -4517,6 +4717,7 @@ async function releveChangerColonne(el){
 // banque se trompe parfois de sens), et la catégorie doit exister pour ce type.
 function releveAppliquerType(l, type){
   l.v.type = type;
+  if(type!=='depense') l.v.abo = false;
   if(type==='ignorer') return;
   if((type==='depense') !== (l.montant<0)) l.montant = -l.montant;
   const cats = myCategories(type==='revenu' ? 'revenus' : 'depenses').map(c=>c.nom);
@@ -4573,7 +4774,7 @@ function releveApprendre(modele, l){
   if(modele.historique.length>300) modele.historique = modele.historique.slice(-300);
   if(l.suivi && v.type==='ignorer') return; // ignorée parce que déjà suivie ailleurs : rien à retenir sur ce commerçant
   const prev = modele.regles[l.cle], maj = new Date().toISOString().slice(0,10);
-  const decision = v.type==='ignorer' ? {type:'ignorer', maj} : {type:v.type, libelle:(v.libelle||'').trim(), categorie:v.categorie||'', maj};
+  const decision = v.type==='ignorer' ? {type:'ignorer', maj} : {type:v.type, libelle:(v.libelle||'').trim(), categorie:v.categorie||'', ...(v.type==='depense' && v.abo ? {abo:true} : {}), maj};
   const memeQue = r => r && r.type===v.type && (v.type==='ignorer' || r.categorie===v.categorie);
   if(prev && prev.type!=='ignorer' && v.type!=='ignorer' && prev.type!==v.type){
     // Sens opposé à l'habitude (un remboursement chez un commerçant en dépense,
@@ -4592,13 +4793,20 @@ function releveApprendre(modele, l){
 async function releveValider(ids){
   const s = releveSession; if(!s) return;
   const me = currentUser(), modele = releveModele(true);
-  let ajoutees = 0, ignorees = 0;
+  let ajoutees = 0, ignorees = 0, abos = 0;
   const parId = new Map(s.lignes.map(l=>[l.id, l]));
   ids.forEach(id=>{
     const l = parId.get(id); if(!l || l.etat!=='attente') return;
     const v = l.v, montant = r2(Math.abs(l.montant)), libelle = (v.libelle||'').trim() || releveJoli(l.cle), notes = (v.notes||'').trim();
-    if(v.type==='depense'){
-      state.depenses.push({id:uid(), ownerId:me.id, libelle, categorie:v.categorie||'', montant, modePaiement:'Unique', date:l.date, notes, source:'releve'});
+    const attendu = v.type==='depense' && v.abo && l.aboPrevId ? aboPrevisions().find(p=>p.id===l.aboPrevId) : null;
+    if(attendu){
+      // Le prélèvement attendu est validé avec ce que dit le relevé (date, montant).
+      aboValider(attendu, {libelle, categorie:v.categorie||'', montant, date:l.date, notes, source:'releve', cle:attendu.cle||l.cle});
+      ajoutees++; abos++;
+    } else if(v.type==='depense'){
+      const dep = {id:uid(), ownerId:me.id, libelle, categorie:v.categorie||'', montant, modePaiement:'Unique', date:l.date, notes, source:'releve'};
+      state.depenses.push(dep);
+      if(v.abo){ dep.cle = l.cle; aboDemarrer(dep); abos++; }
       ajoutees++;
     } else if(v.type==='revenu'){
       state.revenusExceptionnels.push({id:uid(), ownerId:me.id, date:l.date, libelle, categorie:v.categorie||releveCategorieDefaut('revenu'), montant, notes, source:'releve'});
@@ -4618,19 +4826,20 @@ async function releveValider(ids){
   releveSauverSession();
   await persist(); await render();
   const msg = ajoutees && ignorees ? `${ajoutees} ajoutée${ajoutees>1?'s':''}, ${ignorees} ignorée${ignorees>1?'s':''}` : ajoutees ? (ajoutees>1 ? `${ajoutees} opérations ajoutées` : 'Opération ajoutée') : (ignorees>1 ? `${ignorees} lignes ignorées` : 'Ligne ignorée');
-  toast(majs ? `${msg} · ${fmtCount(majs, 'autre ligne mise à jour', 'autres lignes mises à jour')}` : msg);
+  const msgAbo = abos ? ` · ${fmtCount(abos, 'abonnement', 'abonnements')}` : '';
+  toast(majs ? `${msg}${msgAbo} · ${fmtCount(majs, 'autre ligne mise à jour', 'autres lignes mises à jour')}` : msg + msgAbo);
 }
 // Après chaque validation, les lignes encore en attente profitent de ce qui
 // vient d'être appris (« CARREFOUR » validé en Courses → les autres CARREFOUR
 // du relevé passent en Courses). Une ligne que l'utilisateur a déjà modifiée
 // garde ses choix, et une ligne déjà suivie ailleurs reste ignorée.
-const RELEVE_CHAMPS_SUGGERES = ['type','libelle','categorie'];
+const RELEVE_CHAMPS_SUGGERES = ['type','libelle','categorie','abo'];
 function releveRafraichirAttente(s){
   const modele = releveModele(false);
   let n = 0;
   s.lignes.forEach(l=>{
     l.maj = false;
-    if(l.etat!=='attente' || l.suivi) return;
+    if(l.etat!=='attente' || l.suivi || l.aboPrevId) return;
     if(RELEVE_CHAMPS_SUGGERES.some(k=>(l.v[k]||'')!==(l.s[k]||''))) return;
     const {cle, confiance, raison, ...valeurs} = releveSuggestion({libelle:l.brut, montant:l.montant, signeIncertain:l.incertain}, modele);
     const change = RELEVE_CHAMPS_SUGGERES.some(k=>(valeurs[k]||'')!==(l.s[k]||''));
@@ -4672,6 +4881,7 @@ function releveLigneHTML(l){
     ${ign ? '' : `<input class="rl-ctl rl-note" data-rl-id="${l.id}" data-rl-champ="notes" value="${attrEsc(l.v.notes||'')}" placeholder="Ajouter un commentaire…" aria-label="Commentaire sur ${nomLigne}" maxlength="200">`}
     <div class="rl-meta"><span class="pill ${cls}">${lbl}</span>${l.confiance==='nouveau' && !l.suivi ? '' : `<span class="rl-raison">${esc(l.raison)}</span>`}</div>
     <div class="rl-actions">
+      ${l.v.type==='depense' ? `<button type="button" class="rl-abo" data-action="releve-abo" data-id="${l.id}" aria-pressed="${!!l.v.abo}" title="${l.aboPrevId ? 'Valide le prélèvement prévu' : 'Prévoit le même prélèvement le mois suivant'}">${icon('repeat')}Abonnement</button>` : ''}
       <button class="btn btn-ghost btn-sm" data-action="releve-valider" data-id="${l.id}">${icon('check')}${ign?'Confirmer':'Valider'}</button>
       ${ign ? '' : `<button class="icon-btn del" data-action="releve-ignorer" data-id="${l.id}" aria-label="Ne pas importer ${nomLigne}">${icon('x')}</button>`}
     </div>
@@ -4742,7 +4952,7 @@ function releveApprentissageHTML(modele){
     </dl>
     ${regles.length ? `<ul class="rl-rules">${regles.slice(0,60).map(([cle,r])=>`<li>
       <span class="rl-rule-key">${esc(cle)}</span>
-      <span class="rl-rule-val">${r.type==='ignorer' ? '<span class="nil">ne pas importer</span>' : `${esc(r.libelle||releveJoli(cle))} · ${esc(r.categorie||'sans catégorie')}${r.type==='revenu'?' · rentrée':''}`}</span>
+      <span class="rl-rule-val">${r.type==='ignorer' ? '<span class="nil">ne pas importer</span>' : `${esc(r.libelle||releveJoli(cle))} · ${esc(r.categorie||'sans catégorie')}${r.type==='revenu'?' · rentrée':''}${r.abo?' · abonnement':''}`}</span>
       <span class="side-note">${r.n>1 ? r.n+' fois' : '1 fois'}</span>
       <button class="icon-btn del" data-action="releve-oublier" data-cle="${attrEsc(cle)}" aria-label="Oublier ${attrEsc(cle)}">${icon('trash')}</button>
     </li>`).join('')}</ul>${regles.length>60 ? `<div class="field-note">Et ${regles.length-60} autres.</div>` : ''}` : ''}
@@ -5053,7 +5263,7 @@ function myApprovedExportRequest(){
   return socialState.accountRequests.find(r=>r.fromId===me.id && r.type==='export' && r.status==='approved');
 }
 function notifBadgeCount(){
-  return pendingAccountRequests().length + (myApprovedExportRequest() ? 1 : 0);
+  return pendingAccountRequests().length + (myApprovedExportRequest() ? 1 : 0) + aboAlertesNonVues().length;
 }
 
 /* ---- Export / purge des données, par utilisateur ---- */
@@ -5422,6 +5632,13 @@ function renderNotifPanel(){
       <div class="info"><div class="name">${esc(from?from.displayName:'?')}</div><div class="meta">${label}</div></div>
     </div>`);
   });
+  aboAlertesNonVues().forEach(a=>{
+    items.push(`<div class="notif-item">
+      <div class="avatar" style="background:var(--raised);color:var(--text);width:32px;height:32px;" aria-hidden="true">${icon(a.type==='prix' ? 'repeat' : 'x')}</div>
+      <div class="info"><div class="name">${a.type==='prix' ? 'Changement de prix' : 'Abonnement retiré'}</div><div class="meta">${esc(aboAlerteTexte(a))}</div></div>
+      <button class="icon-btn" data-action="abo-alerte-vue" data-id="${a.id}" aria-label="Marquer comme lu">${icon('check')}</button>
+    </div>`);
+  });
   if(myApprovedExportRequest()){
     items.push(`<div class="notif-item" data-action="open-parametres" role="button" tabindex="0">
       <div class="avatar" style="background:${avatarColor(me)};width:32px;height:32px;font-size:12px;">${initials(me)}</div>
@@ -5460,9 +5677,9 @@ async function pollNow(){
   renderNotifPanel();
   if(currentView==='parametres'){ await render(); }
 }
-function notifyBrowser(n){
+function notifyBrowser(n, texte){
   if(typeof Notification==='undefined' || Notification.permission!=='granted') return;
-  try{ new Notification('Solde', { body: n>1 ? `${n} nouvelles notifications` : 'Nouvelle notification' }); }catch(e){}
+  try{ new Notification('Solde', { body: texte || (n>1 ? `${n} nouvelles notifications` : 'Nouvelle notification') }); }catch(e){}
 }
 
 function toggleChat(force){
@@ -5492,7 +5709,7 @@ function budgetContextSummary(){
   const key = state.selectedMonth;
   const d = dashboardData(key);
   return `Contexte budget (${monthLabel(key)}) : revenus ${fmtEUR(d.revenu)}, dépenses ${fmtEUR(d.totalDepenses)}, solde ${fmtEUR(d.solde)}. `+
-    `Le site ne gère pour l'instant que des entrées et des sorties datées.`;
+    `Le site gère des entrées et des sorties datées ; les abonnements prévus (${fmtEUR(sumR2(aboPrevisionsDuMois(key),x=>x.montant))} ce mois) ne comptent qu'une fois validés.`;
 }
 async function sendChatMessage(){
   const input = document.getElementById('cp-input');
