@@ -338,6 +338,14 @@ tr.is-current td{background:var(--raised);}
 tr.is-future td{color:var(--faint);}
 tr.is-paused td{opacity:.5;}
 .cell-main{font-weight:500;}
+.grp-toggle{display:inline-flex;align-items:center;gap:6px;background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;cursor:pointer;text-align:left;}
+.grp-chev{display:inline-flex;width:16px;height:16px;color:var(--faint);transition:transform .15s ease;}
+.grp-chev svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;}
+.grp-toggle:hover .grp-chev{color:var(--text);}
+.grp-row.is-open .grp-chev{transform:rotate(90deg);}
+.grp-row .cell-sub{padding-left:22px;}
+.grp-child td:first-child{padding-left:22px;}
+.grp-child .cell-main{font-weight:400;color:var(--muted);}
 .cell-sub{display:block;font-size:13px;margin-top:2px;white-space:normal;}
 .cell-bar{display:block;height:3px;border-radius:2px;background:var(--raised);margin-top:6px;max-width:220px;overflow:hidden;}
 .cell-bar > span{display:block;height:100%;border-radius:2px;}
@@ -374,6 +382,7 @@ tfoot td{border-top:1px solid var(--line-strong);font-weight:600;color:var(--tex
   table.rtable td{display:block;border:none;padding:0;white-space:normal;}
   table.rtable td:empty{display:none;}
   table.rtable td:first-child{flex:0 1 60%;min-width:0;font-size:15px;}
+  table.rtable tr.grp-child td:first-child{padding-left:22px;}
   /* Le montant clé remplit le reste de la première ligne : les autres champs passent dessous. */
   table.rtable td.key{flex:1 0 calc(40% - 6px);margin-left:auto;text-align:right;font-weight:600;order:1;}
   table.rtable td.sub{order:2;font-size:13px;color:var(--faint);}
@@ -3202,6 +3211,7 @@ function compteOptions(){ return jointPartner() ? COMPTES : ['Compte Perso']; }
    mémoire (colFilterOpen/colFilterPending), pour ne synchroniser qu'à la
    validation (Annuler ne doit rien changer, comme dans Excel). */
 let colFilterOpen = null;      // { table, col }
+const depGroupsOpen = new Set(); // libellés (normalisés) dont le détail est déplié dans « Achats et échéanciers »
 let colFilterPending = null;   // Set des valeurs cochées, en cours d'édition
 let colFilterSearch = '';      // texte de recherche dans le panneau ouvert
 
@@ -3294,6 +3304,22 @@ const DEP_COLUMNS = {
 };
 // Commentaire d'une saisie, sous son libellé.
 function noteSub(x){ return x.notes ? `<span class="cell-sub">${esc(x.notes)}</span>` : ''; }
+function depGroupKey(d){ return String(d.libelle||'').trim().toLowerCase(); }
+// Regroupe une liste (déjà filtrée et triée) par libellé, en gardant l'ordre de la
+// première occurrence ; si le tri porte sur le montant, ce sont les totaux qui comptent.
+function depGroups(list, key){
+  const map = new Map();
+  list.forEach(x=>{
+    const k = depGroupKey(x);
+    if(!map.has(k)) map.set(k, {key:k, items:[], total:0});
+    map.get(k).items.push(x);
+  });
+  const groups = [...map.values()];
+  groups.forEach(g=>{ g.total = sumR2(g.items, x=>depenseMensualiteDuMois(x,key)); });
+  const f = tableFilterState('depenses');
+  if(f.sortCol==='montant') groups.sort((a,b)=> f.sortDir==='asc' ? a.total-b.total : b.total-a.total);
+  return groups;
+}
 const FREQ_UNIT = {Annuel:'an', Trimestriel:'trimestre', Hebdomadaire:'semaine', Journalier:'jour'};
 function renderDepenses(){
   const key = state.selectedMonth;
@@ -3313,6 +3339,24 @@ function renderDepenses(){
   const finding = biggest ? `Plus grosse dépense du mois : ${esc(biggest.libelle)}, <strong>${fmtEUR(depenseMensualiteDuMois(biggest,key))}</strong>.` : `Aucun achat ni échéance en ${monthLabel(key)}.`;
   const actionsFor = d0 => `<td class="row-actions"><button class="icon-btn" data-action="edit-depense" data-id="${d0.id}" aria-label="Modifier ${attrEsc(d0.libelle)}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${d0.id}" aria-label="Supprimer ${attrEsc(d0.libelle)}">${icon('trash')}</button></td>`;
   const activeRec = recurrentes.filter(x=>x.statut==='Actif');
+  // Les dépenses portant le même libellé sont regroupées sur une ligne (total du mois) ;
+  // un clic sur le libellé déplie le détail.
+  const depenseRowHTML = (x, child=false) => {
+    const ech = x.modePaiement==='Echelonne';
+    const mois = r2(depenseMensualiteDuMois(x,key));
+    let sub = '';
+    if(ech){
+      const n = echeanceMoisEchus(x, key).length, nb = echeanceNbVersementsPrevus(x);
+      sub = `<span class="cell-sub">${fmtEUR(x.montant)} en ${nb} fois · ${n}/${nb}</span><span class="cell-bar"><span style="width:${Math.min(n/nb,1)*100}%;background:var(--c-echeances)"></span></span>`;
+    } else if(child && x.date){
+      sub = `<span class="cell-sub">${fmtDate(x.date)}</span>`;
+    }
+    return `<tr${child?' class="grp-child"':''}>
+          <td><span class="cell-main">${dash(x.libelle)}</span>${noteSub(x)}${sub}</td><td class="sub first-sub">${dash(x.categorie)}</td><td class="sub">${dash(x.compte||'Compte Perso')}</td>
+          <td class="num key" data-v="${mois}">${fmtEUR(mois)}</td>
+          ${actionsFor(x)}
+        </tr>`;
+  };
   return `
     ${pageHeadHTML({title:'Dépenses', color:VIEW_COLORS.depenses, finding, stepper:monthStepperHTML(key,'dashboard'),
       action:`<button class="btn btn-primary" data-action="add-depense">${icon('plus')}Ajouter une dépense</button>`})}
@@ -3378,19 +3422,16 @@ function renderDepenses(){
           ${colFilterHeaderHTML('depenses', DEP_COLUMNS, 'montant', filtrableArr)}
           <th><span class="sr-only">Actions</span></th>
         </tr></thead>
-        <tbody>${list.map(x=>{
-          const ech = x.modePaiement==='Echelonne';
-          const mois = r2(depenseMensualiteDuMois(x,key));
-          let sub = '';
-          if(ech){
-            const n = echeanceMoisEchus(x, key).length, nb = echeanceNbVersementsPrevus(x);
-            sub = `<span class="cell-sub">${fmtEUR(x.montant)} en ${nb} fois · ${n}/${nb}</span><span class="cell-bar"><span style="width:${Math.min(n/nb,1)*100}%;background:var(--c-echeances)"></span></span>`;
-          }
-          return `<tr>
-          <td><span class="cell-main">${dash(x.libelle)}</span>${noteSub(x)}${sub}</td><td class="sub first-sub">${dash(x.categorie)}</td><td class="sub">${dash(x.compte||'Compte Perso')}</td>
-          <td class="num key" data-v="${mois}">${fmtEUR(mois)}</td>
-          ${actionsFor(x)}
-        </tr>`;}).join('')}</tbody>
+        <tbody>${depGroups(list, key).map(g=>{
+          if(g.items.length===1) return depenseRowHTML(g.items[0]);
+          const open = depGroupsOpen.has(g.key);
+          const same = get => { const v = new Set(g.items.map(get)); return v.size===1 ? dash([...v][0]) : '<span class="nil">Plusieurs</span>'; };
+          return `<tr class="grp-row${open?' is-open':''}">
+          <td><button class="grp-toggle" data-action="toggle-dep-group" data-group="${attrEsc(g.key)}" aria-expanded="${open}"><span class="grp-chev" aria-hidden="true">${icon('chevR')}</span><span class="cell-main">${dash(g.items[0].libelle)}</span></button><span class="cell-sub">${g.items.length} dépenses</span></td>
+          <td class="sub first-sub">${same(x=>x.categorie)}</td><td class="sub">${same(x=>x.compte||'Compte Perso')}</td>
+          <td class="num key" data-v="${g.total}">${fmtEUR(g.total)}</td>
+          <td class="row-actions"></td>
+        </tr>${open ? g.items.map(x=>depenseRowHTML(x, true)).join('') : ''}`;}).join('')}</tbody>
         <tfoot><tr><td>${tableFilterActive('depenses')?'Total (filtré)':'Total'} ${monthLabel(key)}</td><td></td><td></td><td class="num key" data-v="${sumR2(list,x=>depenseMensualiteDuMois(x,key))}">${fmtEUR(sumR2(list,x=>depenseMensualiteDuMois(x,key)))}</td><td></td></tr></tfoot>
       </table></div>`)}
     </div>
@@ -4382,6 +4423,7 @@ async function handleAction(action, id, el){
       state.depenses = state.depenses.filter(x=>x.id!==id);
       state.echVersements = state.echVersements.filter(v=>v.echeanceId!==id);
       await persist(); await render(); toast('Dépense supprimée'); }); break; }
+    case 'toggle-dep-group': { const g = el.dataset.group; if(depGroupsOpen.has(g)) depGroupsOpen.delete(g); else depGroupsOpen.add(g); await render(); break; }
     case 'toggle-depense-statut': { const item=find(mine(state.depenses)); item.statut = item.statut==='Actif'?'Inactif':'Actif'; await persist(); await render(); toast('Statut mis à jour'); break; }
     case 'goto-depenses': currentView = 'depenses'; await render(); break;
     case 'switch-space': currentSpace = el.dataset.space; currentView = defaultViewForSpace(currentSpace); await render(); break;
@@ -6532,42 +6574,81 @@ async function ghPull(){
   const c = await ghPullSocial(true);
   return a || b || c;
 }
-/* Fusion sûre des données du budget : chacun ne modifie jamais que SES PROPRES
-   saisies (ownerId). On peut donc fusionner sans risque : on garde toujours ma
-   version locale pour ce qui m'appartient (même pas encore synchronisé), et on
-   récupère la version distante pour ce qui appartient à quelqu'un d'autre —
-   c'est ce qui permet de voir les ajouts du partenaire sans jamais écraser les
-   miens en cours de frappe. */
-function mergeOwned(localArr, remoteArr, myId){
-  const mine = (localArr||[]).filter(x=>x.ownerId===myId);
-  const others = (remoteArr||[]).filter(x=>x.ownerId!==myId);
-  return [...mine, ...others];
+/* Fusion du budget à trois versions : cet appareil, GitHub, et la « base » —
+   la dernière version que cet appareil sait être identique à GitHub (gardée
+   dans budget_sync_base). Élément par élément (par id) :
+   - modifié seulement ici → on garde la version d'ici ;
+   - modifié seulement sur GitHub (autre appareil, même compte, ou partenaire)
+     → on prend celle de GitHub ;
+   - modifié des deux côtés → celle d'ici (pas encore envoyée, donc la plus
+     récente en pratique) ;
+   une suppression compte comme une modification, elle se propage donc aussi.
+   Sans base (premier passage après cette mise à jour), GitHub l'emporte sur
+   les éléments communs et rien de ce qui n'existe qu'ici n'est perdu. */
+const BUDGET_BASE_KEY = 'budget_sync_base';
+function stableStringify(v){
+  if(Array.isArray(v)) return '['+v.map(stableStringify).join(',')+']';
+  if(v && typeof v==='object') return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+stableStringify(v[k])).join(',')+'}';
+  return JSON.stringify(v);
 }
-function mergeBudget(local, remote, myId){
+function ownedPart(obj){ const out = {}; OWNED_ARRAYS.forEach(k=>{ out[k] = (obj&&obj[k])||[]; }); return out; }
+function loadBudgetBase(){ try{ return JSON.parse(localStorage.getItem(BUDGET_BASE_KEY)||'null'); }catch(e){ return null; } }
+function saveBudgetBase(obj){ try{ localStorage.setItem(BUDGET_BASE_KEY, JSON.stringify(ownedPart(obj))); }catch(e){} }
+function mergeArray3(localArr, remoteArr, baseArr){
+  const keyOf = x=>(x && x.id!=null) ? 'id:'+x.id : 'v:'+stableStringify(x);
+  const index = arr=>{ const m = new Map(); (arr||[]).forEach(x=>m.set(keyOf(x), x)); return m; };
+  const L = index(localArr), R = index(remoteArr), B = baseArr ? index(baseArr) : null;
+  const out = [];
+  new Set([...L.keys(), ...R.keys()]).forEach(k=>{
+    const l = L.get(k), r = R.get(k);
+    let pick;
+    if(!B){ pick = r!==undefined ? r : l; }
+    else{
+      const sb = B.has(k) ? stableStringify(B.get(k)) : undefined;
+      const sl = l!==undefined ? stableStringify(l) : undefined;
+      const sr = r!==undefined ? stableStringify(r) : undefined;
+      pick = (sl===sb && sr!==sb) ? r : l;
+    }
+    if(pick!==undefined) out.push(pick);
+  });
+  return out;
+}
+function mergeBudget(local, remote, base){
   const merged = {...local};
-  OWNED_ARRAYS.forEach(key=>{ merged[key] = mergeOwned(local[key], remote[key], myId); });
+  OWNED_ARRAYS.forEach(key=>{ merged[key] = mergeArray3(local[key], remote[key], base ? (base[key]||[]) : null); });
   return merged;
+}
+function budgetDiffers(a, b){ return stableStringify(ownedPart(a))!==stableStringify(ownedPart(b)); }
+// Réaffiche si une synchro a apporté des changements, sauf pendant une saisie.
+async function renderAfterRemoteChange(){
+  const modal = document.getElementById('modal-root');
+  if(modal && modal.innerHTML) return;
+  if(currentUser()) await render();
+}
+async function ghFetchBudget(cfg){
+  const res = await fetch(ghUrl(cfg, cfg.path||'data.json'), { headers: ghHeaders(cfg.token), cache:'no-store' });
+  if(res.status===404) return { sha:null, remote:null };
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const data = await res.json();
+  const remote = JSON.parse(b64DecodeUnicode(data.content));
+  return { sha:data.sha, remote: (remote && remote.selectedMonth!==undefined) ? remote : null };
 }
 
 async function ghPullBudget(merge){
   const cfg = ghConfig();
   if(!cfg.owner || !cfg.repo || !cfg.token) return false;
   try{
-    const res = await fetch(ghUrl(cfg, cfg.path||'data.json'), { headers: ghHeaders(cfg.token) });
-    if(res.status===404){ ghSha = null; return false; }
-    if(!res.ok){ throw new Error('HTTP '+res.status); }
-    const data = await res.json();
-    ghSha = data.sha;
-    const text = b64DecodeUnicode(data.content);
-    const remote = JSON.parse(text);
-    if(remote && remote.selectedMonth!==undefined){
-      const me = currentUser();
-      state = (merge && me) ? mergeBudget(state, remote, me.id) : remote;
-      localStorage.setItem('budget_store', JSON.stringify(state));
-      ghLastSync = new Date();
-      return true;
-    }
-    return false;
+    const { sha, remote } = await ghFetchBudget(cfg);
+    ghSha = sha;
+    if(!remote) return false;
+    const before = state;
+    state = merge ? mergeBudget(state, remote, loadBudgetBase()) : remote;
+    saveBudgetBase(remote);
+    localStorage.setItem('budget_store', JSON.stringify(state));
+    ghLastSync = new Date();
+    // Des saisies d'ici pas encore sur GitHub (ex. faites hors connexion) : on les envoie.
+    if(budgetDiffers(state, remote)) markDirtyForSync();
+    return budgetDiffers(before, state);
   }catch(e){ console.error('GitHub pull error (budget)', e); return false; }
 }
 // Fusionne les comptes plutôt que d'écraser : un compte créé localement mais
@@ -6584,7 +6665,7 @@ async function ghPullAuth(){
   const cfg = ghConfig();
   if(!cfg.owner || !cfg.repo || !cfg.token) return false;
   try{
-    const res = await fetch(ghUrl(cfg, cfg.authPath||'auth.json'), { headers: ghHeaders(cfg.token) });
+    const res = await fetch(ghUrl(cfg, cfg.authPath||'auth.json'), { headers: ghHeaders(cfg.token), cache:'no-store' });
     if(res.status===404){ ghAuthSha = null; return false; }
     if(!res.ok){ throw new Error('HTTP '+res.status); }
     const data = await res.json();
@@ -6605,7 +6686,7 @@ async function ghPullSocial(merge){
   const cfg = ghConfig();
   if(!cfg.owner || !cfg.repo || !cfg.token) return false;
   try{
-    const res = await fetch(ghUrl(cfg, cfg.socialPath||'social.json'), { headers: ghHeaders(cfg.token) });
+    const res = await fetch(ghUrl(cfg, cfg.socialPath||'social.json'), { headers: ghHeaders(cfg.token), cache:'no-store' });
     if(res.status===404){ ghSocialSha = null; return false; }
     if(!res.ok){ throw new Error('HTTP '+res.status); }
     const data = await res.json();
@@ -6635,7 +6716,7 @@ async function ghPutWithRetry(path, dataObj, message, attempt){
   const cfg = ghConfig();
   if(!cfg.owner || !cfg.repo || !cfg.token) return false;
   try{
-    const check = await fetch(ghUrl(cfg, path), { headers: ghHeaders(cfg.token) });
+    const check = await fetch(ghUrl(cfg, path), { headers: ghHeaders(cfg.token), cache:'no-store' });
     let sha = null;
     if(check.status===200){ const d = await check.json(); sha = d.sha; }
     const body = { message, content: b64EncodeUnicode(JSON.stringify(dataObj, null, 2)) };
@@ -6650,7 +6731,36 @@ async function ghPutWithRetry(path, dataObj, message, attempt){
     return true;
   }catch(e){ console.error('GitHub push error ('+path+')', e); return false; }
 }
-async function ghPushBudget(){ return ghPutWithRetry(ghConfig().path||'data.json', state, 'Mise à jour budget'); }
+/* Envoi du budget : on relit toujours GitHub juste avant et on fusionne, pour
+   ne jamais écraser ce qu'un autre appareil a envoyé entre-temps (ex. un
+   onglet resté ouvert sur le PC pendant qu'on saisit sur le téléphone). */
+async function ghPushBudget(attempt){
+  const cfg = ghConfig();
+  if(!cfg.owner || !cfg.repo || !cfg.token) return false;
+  try{
+    const { sha, remote } = await ghFetchBudget(cfg);
+    let changedHere = false;
+    if(remote){
+      const merged = mergeBudget(state, remote, loadBudgetBase());
+      changedHere = budgetDiffers(state, merged);
+      state = merged;
+      localStorage.setItem('budget_store', JSON.stringify(state));
+      if(!budgetDiffers(state, remote)){ ghSha = sha; saveBudgetBase(remote); ghLastSync = new Date(); if(changedHere) await renderAfterRemoteChange(); return true; }
+    }
+    const snapshot = JSON.parse(JSON.stringify(state));
+    const body = { message:'Mise à jour budget', content: b64EncodeUnicode(JSON.stringify(snapshot, null, 2)) };
+    if(sha) body.sha = sha;
+    const res = await fetch(ghUrl(cfg, cfg.path||'data.json'), { method:'PUT', headers:{...ghHeaders(cfg.token), 'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if(res.status===409 && !attempt) return ghPushBudget(true); // écrit entre-temps ailleurs : on refusionne
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const out = await res.json().catch(()=>null);
+    ghSha = (out && out.content && out.content.sha) || null;
+    saveBudgetBase(snapshot);
+    ghLastSync = new Date();
+    if(changedHere) await renderAfterRemoteChange();
+    return true;
+  }catch(e){ console.error('GitHub push error (budget)', e); return false; }
+}
 async function ghPushAuth(){ return ghPutWithRetry(ghConfig().authPath||'auth.json', authState, 'Mise à jour comptes'); }
 async function ghPushSocial(){ return ghPutWithRetry(ghConfig().socialPath||'social.json', socialState, 'Mise à jour social'); }
 async function ghTestAndConnect(token){
@@ -6777,6 +6887,12 @@ function startPolling(){
   pollTimer = setInterval(pollNow, 45000);
 }
 function stopPolling(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; } }
+// Retour sur l'appli (onglet réaffiché, téléphone déverrouillé) : on récupère
+// tout de suite ce qui a été saisi sur un autre appareil entre-temps.
+document.addEventListener('visibilitychange', async ()=>{
+  if(document.visibilityState!=='visible' || !pollTimer || !ghConfigured()) return;
+  if(await ghPullBudget(true)) await renderAfterRemoteChange();
+});
 async function pollNow(){
   if(document.getElementById('modal-root').innerHTML) return; // ne pas perturber une saisie en cours
   if(!ghConfigured()) return;
