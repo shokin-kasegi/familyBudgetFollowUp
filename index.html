@@ -763,6 +763,7 @@ button,a,[role="button"]{touch-action:manipulation;-webkit-tap-highlight-color:t
 .rl-meta{grid-area:meta;display:flex;align-items:center;gap:8px;min-width:0;}
 .rl-raison{font-size:12px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .rl-actions{grid-area:actions;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:4px;}
+.rl-actions .rl-aboSerie{width:240px;max-width:100%;}
 .rl-ppf-total{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--muted);}
 .rl-ppf-total input{width:96px;height:32px;text-align:right;font-variant-numeric:tabular-nums;}
 .rl-erreur{color:var(--c-over);}
@@ -1580,6 +1581,34 @@ function aboPlanifier(dep){
 function aboDemarrer(dep){
   dep.aboId = dep.aboId || uid();
   return aboPlanifier(dep);
+}
+// Abonnements en cours (un par série, via son prélèvement prévu), pour choisir
+// auquel rattacher une dépense : deux abonnements chez le même commerçant se
+// distinguent par leur nom, leur prix et leur date.
+function aboSeriesAuChoix(){
+  return aboPrevisions().sort((a,b)=>String(a.libelle||'').localeCompare(String(b.libelle||''),'fr') || a.montant-b.montant || a.date.localeCompare(b.date));
+}
+function aboSerieLabel(p){ return `${p.libelle||'Sans nom'} · ${fmtEUR(p.montant)} · le ${Number(String(p.date).slice(8,10))}`; }
+function aboSerieOptions(){
+  return [{value:'', label:'Nouvel abonnement'}, ...aboSeriesAuChoix().map(p=>({value:p.aboId, label:aboSerieLabel(p)}))];
+}
+// Rattache une dépense à un abonnement existant. Si elle tombe le mois du
+// prélèvement prévu (ou après), elle le remplace (changement de prix signalé)
+// et annonce le suivant, qui garde le nom de l'abonnement ; un paiement plus
+// ancien rejoint simplement la série.
+function aboRattacher(dep, aboId){
+  const prev = aboPrevisions().find(p=>p.aboId===aboId);
+  const nom = (prev || mine(state.depenses).find(d=>d.aboId===aboId) || {}).libelle;
+  dep.aboId = aboId;
+  if(prev && moisDe(prev.date) <= moisDe(dep.date)){
+    const ancien = r2(prev.montant);
+    if(!dep.cle && prev.cle) dep.cle = prev.cle;
+    state.depenses = state.depenses.filter(d=>d!==prev);
+    if(Math.abs(r2(dep.montant) - ancien) >= 0.005) aboAlerter({type:'prix', aboId, libelle:nom||dep.libelle, ancien, nouveau:r2(dep.montant), mois:moisDe(dep.date)});
+  }
+  const suivant = aboPlanifier(dep);
+  if(suivant && nom) suivant.libelle = nom;
+  return suivant;
 }
 // Valide une prévision : elle devient une dépense comme les autres, et annonce la suivante.
 // Un montant différent de celui attendu est un changement de prix : il est signalé.
@@ -3221,6 +3250,7 @@ function deleteCategory(type, id){
   return item;
 }
 function depense_fields(){
+  const series = aboSerieOptions();
   return [
     {key:'date', label:'Date de la dépense', type:'date'},
     {key:'libelle', label:'Libellé', placeholder:'Courses, restaurant, réparation…'},
@@ -3228,6 +3258,7 @@ function depense_fields(){
     {key:'montant', label:'Montant (€)', type:'number', step:'0.01'},
     {key:'notes', label:'Commentaire', placeholder:'Facultatif'},
     {key:'abonnement', label:'Abonnement : prévoir le même prélèvement le mois suivant', type:'checkbox', showIf:v=>!v.plusieursFois},
+    ...(series.length>1 ? [{key:'aboSerie', label:'Quel abonnement ?', type:'select', options:series, showIf:v=>!!v.abonnement && !v.plusieursFois}] : []),
     {key:'plusieursFois', label:'Paiement en plusieurs fois : cette dépense est une mensualité', type:'checkbox', showIf:v=>!v.abonnement},
     {key:'montantTotal', label:'Montant total à payer (€)', type:'number', step:'0.01', showIf:v=>!!v.plusieursFois},
   ];
@@ -3254,7 +3285,9 @@ function depenseValidationErrors(data, dep){
 }
 function openDepenseEditModal(depenseId){
   const dep = mine(state.depenses).find(x=>x.id===depenseId);
-  openModal('Modifier la dépense', depense_fields(), {...dep, abonnement:!!dep.aboId, plusieursFois:!!dep.ppfId, montantTotal:dep.ppfId ? ppfEtat(dep.ppfId).total : ''}, async (data)=>{
+  // Déjà abonnement : la série ne change pas ici, le choix n'est proposé qu'en le devenant.
+  const champs = dep.aboId ? depense_fields().filter(f=>f.key!=='aboSerie') : depense_fields();
+  openModal('Modifier la dépense', champs, {...dep, abonnement:!!dep.aboId, plusieursFois:!!dep.ppfId, montantTotal:dep.ppfId ? ppfEtat(dep.ppfId).total : ''}, async (data)=>{
     const errors = depenseValidationErrors(data, dep);
     if(errors.length){ errors.forEach(([key,msg])=>markFieldError(key,msg)); toast(errors[0][1]); return false; }
     Object.assign(dep, {libelle:data.libelle, categorie:data.categorie, montant:data.montant, date:data.date, modePaiement:'Unique', notes:(data.notes||'').trim()});
@@ -3262,7 +3295,10 @@ function openDepenseEditModal(depenseId){
     let msg = 'Dépense mise à jour';
     if(mode!=='abo' && dep.aboId){ aboArreter(dep.aboId); delete dep.aboId; delete dep.cle; msg = 'Ce n’est plus un abonnement'; }
     if(mode!=='ppf' && dep.ppfId){ ppfDetacher(dep); msg = 'Retirée du paiement en plusieurs fois'; }
-    if(mode==='abo' && !dep.aboId){ const prev = aboDemarrer(dep); if(prev) msg = `Abonnement : prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}`; }
+    if(mode==='abo' && !dep.aboId){
+      const prev = data.aboSerie ? aboRattacher(dep, data.aboSerie) : aboDemarrer(dep);
+      msg = prev ? `Abonnement : prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}` : data.aboSerie ? 'Rattachée à l’abonnement' : msg;
+    }
     if(mode==='ppf'){
       const nouveau = !dep.ppfId;
       if(nouveau) ppfDemarrer(dep, data.montantTotal); else { ppfFixerTotal(dep.ppfId, data.montantTotal); ppfRecaler(dep.ppfId); }
@@ -3661,10 +3697,10 @@ async function handleAction(action, id, el){
       const dep = {id:uid(), ownerId:currentUser().id, libelle:data.libelle, categorie:data.categorie, montant:data.montant, modePaiement:'Unique', date:data.date, notes:(data.notes||'').trim()};
       state.depenses.push(dep);
       const mode = depenseMode(data);
-      const prev = mode==='abo' ? aboDemarrer(dep) : null;
+      const prev = mode==='abo' ? (data.aboSerie ? aboRattacher(dep, data.aboSerie) : aboDemarrer(dep)) : null;
       const ppf = mode==='ppf' ? ppfDemarrer(dep, data.montantTotal) : null;
       await persist(); await render();
-      toast(ppf ? ppfToast(ppf, 'Paiement en plusieurs fois ajouté') : prev ? `Abonnement ajouté · prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}` : 'Dépense ajoutée'); }); break;
+      toast(ppf ? ppfToast(ppf, 'Paiement en plusieurs fois ajouté') : prev ? `${data.aboSerie ? 'Prélèvement validé' : 'Abonnement ajouté'} · prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}` : mode==='abo' && data.aboSerie ? 'Rattachée à l’abonnement' : 'Dépense ajoutée'); }); break;
     case 'edit-depense': openDepenseEditModal(id); break;
     case 'del-depense': { const item=find(mine(state.depenses)); confirmDelete(item.libelle, async ()=>{
       state.depenses = state.depenses.filter(x=>x.id!==id);
@@ -3864,7 +3900,19 @@ async function handleAction(action, id, el){
     }
     case 'releve-abo': {
       const l = releveSession && releveSession.lignes.find(x=>x.id===id);
-      if(l && l.v.type==='depense'){ l.v.abo = !l.v.abo; if(l.v.abo) l.v.ppf = false; releveSauverSession(); await render(); document.querySelector(`[data-action="releve-abo"][data-id="${id}"]`)?.focus(); }
+      if(l && l.v.type==='depense'){
+        l.v.abo = !l.v.abo;
+        if(l.v.abo){
+          l.v.ppf = false;
+          // Un prélèvement attendu chez ce commerçant est proposé d'office ; le menu permet d'en choisir un autre.
+          if(!l.aboSerieId && !l.aboChoisi){
+            const pris = new Set(releveSession.lignes.filter(x=>x!==l && x.etat==='attente' && x.aboPrevId).map(x=>x.aboPrevId));
+            const attendu = releveAboAttendu({montant:-Math.abs(l.montant), date:l.date}, l.cle, l.v.libelle, pris);
+            if(attendu) releveChoisirAbo(l, attendu.aboId);
+          }
+        }
+        releveSauverSession(); await render(); document.querySelector(`[data-action="releve-abo"][data-id="${id}"]`)?.focus();
+      }
       break;
     }
     case 'releve-ppf': {
@@ -4965,7 +5013,7 @@ function releveCreerLignes(ops){
           raison: ecart ? `Abonnement attendu : ${attendu.libelle} · nouveau prix (avant ${fmtEUR(attendu.montant)})` : `Abonnement attendu : ${attendu.libelle}`});
       }
       const {cle, confiance, raison, ...valeurs} = s;
-      return {id: uid(), date: o.date, brut: o.libelle.trim(), montant: r2(o.montant), cle, suivi: !!suivi, incertain: !!o.signeIncertain, confiance, raison, etat:'attente', ...(attendu ? {aboPrevId: attendu.id} : {}), ...(mensualite ? {ppfPrevId: mensualite.id} : {}), s:{...valeurs}, v:{...valeurs}};
+      return {id: uid(), date: o.date, brut: o.libelle.trim(), montant: r2(o.montant), cle, suivi: !!suivi, incertain: !!o.signeIncertain, confiance, raison, etat:'attente', ...(attendu ? {aboPrevId: attendu.id, aboSerieId: attendu.aboId} : {}), ...(mensualite ? {ppfPrevId: mensualite.id} : {}), s:{...valeurs}, v:{...valeurs}};
     });
 }
 
@@ -5092,10 +5140,23 @@ function releveChangerChamp(el){
     releveSauverSession();
     return;
   }
+  if(champ==='aboSerie'){ releveChoisirAbo(l, el.value); l.aboChoisi = true; releveSauverSession(); return render(); }
   if(champ==='type') releveAppliquerType(l, el.value);
   else l.v[champ] = el.value;
   releveSauverSession();
   if(champ==='type') return render();
+}
+// Abonnement auquel la ligne correspond (aboId d'une série, ou vide : nouvel
+// abonnement). La ligne prend le nom et la catégorie de la série, pour que deux
+// abonnements chez le même commerçant restent distincts.
+function releveChoisirAbo(l, aboId){
+  const prev = aboId ? aboPrevisions().find(p=>p.aboId===aboId) : null;
+  const ref = prev || (aboId ? mine(state.depenses).find(d=>d.aboId===aboId) : null);
+  if(!ref){ delete l.aboSerieId; delete l.aboPrevId; return; }
+  l.aboSerieId = aboId;
+  if(prev) l.aboPrevId = prev.id; else delete l.aboPrevId;
+  l.v.libelle = ref.libelle || l.v.libelle;
+  if(ref.categorie) l.v.categorie = ref.categorie;
 }
 // Retient la décision de l'utilisateur : règle du commerçant, mots du libellé,
 // format du fichier, et si la suggestion était juste.
@@ -5156,7 +5217,12 @@ async function releveValider(ids){
     } else if(v.type==='depense'){
       const dep = {id:uid(), ownerId:me.id, libelle, categorie:v.categorie||'', montant, modePaiement:'Unique', date:l.date, notes, source:'releve'};
       state.depenses.push(dep);
-      if(v.abo){ dep.cle = l.cle; aboDemarrer(dep); abos++; }
+      if(v.abo){
+        dep.cle = l.cle;
+        // Abonnement choisi dont le prélèvement prévu a déjà été validé (par une autre ligne) : la dépense rejoint sa série.
+        if(l.aboSerieId && mine(state.depenses).some(d=>d.aboId===l.aboSerieId)) aboRattacher(dep, l.aboSerieId); else aboDemarrer(dep);
+        abos++;
+      }
       ajoutees++;
     } else if(v.type==='revenu'){
       state.revenusExceptionnels.push({id:uid(), ownerId:me.id, date:l.date, libelle, categorie:v.categorie||releveCategorieDefaut('revenu'), montant, notes, source:'releve'});
@@ -5202,7 +5268,7 @@ function releveRafraichirAttente(s){
   let n = 0;
   s.lignes.forEach(l=>{
     l.maj = false;
-    if(l.etat!=='attente' || l.suivi || l.aboPrevId || l.ppfPrevId) return;
+    if(l.etat!=='attente' || l.suivi || l.aboPrevId || l.aboChoisi || l.ppfPrevId) return;
     if(RELEVE_CHAMPS_SUGGERES.some(k=>(l.v[k]||'')!==(l.s[k]||''))) return;
     const {cle, confiance, raison, ...valeurs} = releveSuggestion({libelle:l.brut, montant:l.montant, signeIncertain:l.incertain}, modele);
     const change = RELEVE_CHAMPS_SUGGERES.some(k=>(valeurs[k]||'')!==(l.s[k]||''));
@@ -5245,12 +5311,23 @@ function releveLigneHTML(l){
     <div class="rl-meta"><span class="pill ${cls}">${lbl}</span>${l.erreur ? `<span class="rl-raison rl-erreur" role="alert">${esc(l.erreur)}</span>` : l.confiance==='nouveau' && !l.suivi ? '' : `<span class="rl-raison">${esc(l.raison)}</span>`}</div>
     <div class="rl-actions">
       ${l.v.type==='depense' ? `<button type="button" class="rl-abo" data-action="releve-abo" data-id="${l.id}" aria-pressed="${!!l.v.abo}" title="${l.aboPrevId ? 'Valide le prélèvement prévu' : 'Prévoit le même prélèvement le mois suivant'}">${icon('repeat')}Abonnement</button>
+      ${l.v.abo ? releveAboMenuHTML(l, nomLigne) : ''}
       <button type="button" class="rl-abo rl-ppf" data-action="releve-ppf" data-id="${l.id}" aria-pressed="${!!l.v.ppf}" title="${l.ppfPrevId ? 'Valide la mensualité prévue' : 'Mensualité d’un paiement en plusieurs fois'}">${icon('calendar')}En plusieurs fois</button>
       ${l.v.ppf ? `<span class="rl-ppf-total"><input class="rl-ctl" data-rl-id="${l.id}" data-rl-champ="ppfTotal" value="${attrEsc(l.v.ppfTotal||'')}" inputmode="decimal" autocomplete="off" placeholder="Total" aria-label="Montant total à payer pour ${nomLigne}, en euros"><span aria-hidden="true">€</span></span>` : ''}` : ''}
       <button class="btn btn-ghost btn-sm" data-action="releve-valider" data-id="${l.id}">${icon('check')}${ign?'Confirmer':'Valider'}</button>
       ${ign ? '' : `<button class="icon-btn del" data-action="releve-ignorer" data-id="${l.id}" aria-label="Ne pas importer ${nomLigne}">${icon('x')}</button>`}
     </div>
   </li>`;
+}
+// Choix de l'abonnement d'une ligne marquée abonnement : nouveau, ou un en cours.
+function releveAboMenuHTML(l, nomLigne){
+  const options = aboSerieOptions();
+  if(l.aboSerieId && !options.some(o=>o.value===l.aboSerieId)){
+    const ref = mine(state.depenses).find(d=>d.aboId===l.aboSerieId);
+    if(ref) options.push({value:l.aboSerieId, label:ref.libelle||'Sans nom'});
+  }
+  if(options.length<2) return '';
+  return releveMenuHTML(l, 'aboSerie', options, l.aboSerieId||'', `Abonnement auquel correspond ${nomLigne}`);
 }
 // Menu Type d'une ligne : même liste déroulante que la
 // catégorie (la liste native du navigateur détonnait à côté).
