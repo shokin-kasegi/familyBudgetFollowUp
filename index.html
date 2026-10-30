@@ -821,6 +821,11 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
 .rl-menu .cat-select-btn[aria-expanded="true"]{border-color:var(--text);}
 .rl-cat.cat-field{min-width:0;}
 .rl-row.is-ignored .rl-amt,.rl-row.is-ignored .rl-lib{opacity:.55;}
+.rl-plus{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:14px 0 2px;border-top:1px solid var(--line);}
+/* Déjà posés sur une carte de verre : un second flou par ligne ne se verrait pas et coûte cher au défilement.
+   La carte de la liste elle-même est haute de plusieurs écrans : flouter toute sa surface à chaque image
+   fait tomber le défilement, alors que le champ de couleur derrière est déjà un dégradé doux. */
+.rl-row .btn-ghost,.rl-plus .btn-ghost,.card.rl-carte{-webkit-backdrop-filter:none;backdrop-filter:none;}
 .rl-rules{list-style:none;margin:0;padding:0;}
 .rl-rules li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) auto 32px;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:14px;}
 .rl-rule-key{font-size:12px;color:var(--muted);letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -4727,6 +4732,11 @@ async function handleAction(action, id, el){
     }
     case 'releve-valider-surs': await releveValider((releveSession?.lignes||[]).filter(l=>l.etat==='attente' && l.confiance==='sur').map(l=>l.id)); break;
     case 'releve-valider-tout': await releveValider((releveSession?.lignes||[]).filter(l=>l.etat==='attente').map(l=>l.id)); break;
+    case 'releve-plus': {
+      releveAffichees += RELEVE_TRANCHE;
+      releveFocusApres = releveAffichees - RELEVE_TRANCHE; // le focus va sur la première ligne ajoutée
+      await render(); break;
+    }
     case 'releve-fermer': {
       const reste = releveSession ? releveSession.lignes.filter(l=>l.etat==='attente').length : 0;
       const fermer = async ()=>{ releveSession = null; releveSauverSession(); await render(); };
@@ -5477,6 +5487,11 @@ function drawAnalyseChart(){
 let releveSession = null;        // import en cours (null = aucun) ; recopié dans le localStorage de l'appareil
 let releveSessionOwner = null;   // utilisateur auquel appartient releveSession chargée
 let releveFocusApres = null;     // index de la ligne à focaliser après un re-render (validation au clavier)
+// Un relevé annuel compte des milliers de lignes : on n'en affiche qu'une
+// tranche à la fois, sinon chaque validation reconstruit des centaines de
+// milliers d'éléments et la page ne suit plus.
+const RELEVE_TRANCHE = 50;
+let releveAffichees = RELEVE_TRANCHE;
 
 function releveModele(creer){
   const me = currentUser();
@@ -5936,6 +5951,7 @@ async function releveDemarrer(nom, res){
   const modele = releveModele(false);
   releveSession = {nom, format: res.format, sig: res.sig||null, csv: res.csv||null, colonnes: res.colonnes||null,
     formatConnu: !!(res.sig && modele.formats[res.sig]), lignes, debut: new Date().toISOString()};
+  releveAffichees = RELEVE_TRANCHE;
   releveSauverSession();
   await render();
   toast(`${lignes.length} opération${lignes.length>1?'s':''} à vérifier`);
@@ -5998,8 +6014,9 @@ async function releveValider(ids){
   const s = releveSession; if(!s) return;
   const me = currentUser(), modele = releveModele(true);
   let ajoutees = 0, ignorees = 0;
+  const parId = new Map(s.lignes.map(l=>[l.id, l]));
   ids.forEach(id=>{
-    const l = s.lignes.find(x=>x.id===id && x.etat==='attente'); if(!l) return;
+    const l = parId.get(id); if(!l || l.etat!=='attente') return;
     const v = l.v, montant = r2(Math.abs(l.montant)), libelle = (v.libelle||'').trim() || releveJoli(l.cle), notes = (v.notes||'').trim();
     if(v.type==='depense'){
       const dep = {id:uid(), ownerId:me.id, libelle, categorie:v.categorie||'', compte:v.compte||'Compte Perso', montant, modePaiement:'Unique', date:l.date, notes, source:'releve'};
@@ -6199,7 +6216,7 @@ function renderReleve(){
   return `
     ${pageHeadHTML({title:'Import de relevé', finding,
       action: surs.length ? `<button class="btn btn-primary" data-action="releve-valider-surs">${icon('check')}${surs.length>1 ? `Valider les ${surs.length} reconnues` : 'Valider la ligne reconnue'}</button>` : ''})}
-    <div class="card mb16">
+    <div class="card mb16 rl-carte">
       <div class="section-head">
         <h2>${icon('fileIn')}<span class="rl-file">${esc(s.nom)}</span><span class="side-note">${FORMATS[s.format]||''}</span></h2>
         <div class="row-actions">
@@ -6209,7 +6226,11 @@ function renderReleve(){
       </div>
       ${validees+ignorees ? `<div class="field-note" style="margin:-4px 0 12px;">${fmtCount(validees, 'ajoutée', 'ajoutées')} · ${fmtCount(ignorees, 'ignorée', 'ignorées')}</div>` : ''}
       ${s.csv ? releveColonnesHTML(s) : ''}
-      ${attente.length ? `<ul class="rl-list">${attente.map(l=>releveLigneHTML(l)).join('')}</ul>`
+      ${attente.length ? `<ul class="rl-list">${attente.slice(0, releveAffichees).map(l=>releveLigneHTML(l)).join('')}</ul>
+        ${attente.length>releveAffichees ? `<div class="rl-plus">
+          <button class="btn btn-ghost btn-sm" data-action="releve-plus">${icon('chevD')}Afficher ${Math.min(RELEVE_TRANCHE, attente.length-releveAffichees)} lignes de plus</button>
+          <span class="side-note">${releveAffichees} sur ${attente.length} affichées</span>
+        </div>` : ''}`
         : emptyRow('Toutes les lignes ont été traitées.', 'releve-fermer', 'Importer un autre relevé')}
     </div>
     ${releveApprentissageHTML(modele)}`;
