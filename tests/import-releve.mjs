@@ -65,7 +65,7 @@ const lignes = page => page.evaluate(()=>[...document.querySelectorAll('.rl-row'
   cat: r.querySelector('[data-rl-champ="categorie"]')?.value ?? null,
   badge: r.querySelector('.pill').innerText,
   raison: r.querySelector('.rl-raison')?.innerText ?? '',
-  amt: r.querySelector('.rl-amt').innerText,
+  amt: r.querySelector('.rl-signe').innerText + r.querySelector('[data-rl-champ="montant"]').value,
 })));
 
 // Relevés de test : préambule de banque, Latin-1, Débit / Crédit séparés.
@@ -160,7 +160,7 @@ try{
     ok(L.length===7, `relevé 1 : 7 opérations attendues, ${L.length} trouvées`);
     const byLib = s => L.find(l=>l.lib.toLowerCase().includes(s));
     ok(byLib('carrefour market')?.type==='depense' && /54,20/.test(byLib('carrefour market').amt), `relevé 1 : Carrefour Market en dépense de 54,20 € (${JSON.stringify(byLib('carrefour market'))})`);
-    ok(L.some(l=>l.type==='revenu' && /2\s300,00/.test(l.amt)), 'relevé 1 : le salaire est une rentrée de 2 300,00 €');
+    ok(L.some(l=>l.type==='revenu' && /2\s?300,00/.test(l.amt)), 'relevé 1 : le salaire est une rentrée de 2 300,00 €');
     const doublon = L.find(l=>/286,40/.test(l.amt));
     ok(doublon && doublon.type==='ignorer' && /Déjà saisie/.test(doublon.raison), `relevé 1 : courses du 07/09 (déjà saisies) reconnues comme doublon (${JSON.stringify(doublon)})`);
     ok(await page.evaluate(()=>!!document.querySelector('.rl-cols:not([open])')===false), 'relevé 1 : nouveau format — le choix des colonnes est ouvert');
@@ -224,6 +224,16 @@ try{
     await page.waitForTimeout(150);
     boul = (await lignes(page)).find(l=>l.id===boulId);
     ok(boul?.type==='depense' && !/^\+/.test(boul.amt.trim()), `relevé 1 : second clic → dépense (${JSON.stringify(boul)})`);
+    // Montant mal lu par la banque : on le corrige à la main, le sens est conservé.
+    await page.fill(`[data-rl-id="${boulId}"][data-rl-champ="montant"]`, '7,3');
+    await page.click(`.rl-row[data-rl-row="${boulId}"] .rl-date`);
+    await page.waitForTimeout(150);
+    boul = (await lignes(page)).find(l=>l.id===boulId);
+    ok(boul?.type==='depense' && boul.amt==='−7,30', `relevé 1 : montant corrigé, toujours en dépense (${JSON.stringify(boul)})`);
+    ok(await page.evaluate(id=>JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('releve_en_cours_')))).lignes.find(l=>l.id===id).montant, boulId)===-7.3, 'relevé 1 : montant corrigé enregistré dans la session');
+    await page.fill(`[data-rl-id="${boulId}"][data-rl-champ="montant"]`, 'abc');
+    await page.click(`.rl-row[data-rl-row="${boulId}"] .rl-date`);
+    ok((await lignes(page)).find(l=>l.id===boulId)?.amt==='−7,30', 'relevé 1 : saisie invalide → montant précédent remis');
     await choisirCat(boulId, 'Alimentation');
     // SNCF : compte joint, en 3 fois, avec un commentaire.
     const sncfId = (await lignes(page)).find(l=>l.lib.toLowerCase().includes('sncf')).id;

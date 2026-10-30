@@ -791,7 +791,7 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
 .rl-file{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:32ch;}
 .section-head h2 > svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;flex-shrink:0;}
 .rl-list{list-style:none;margin:0;padding:0;}
-.rl-row{display:grid;grid-template-columns:96px minmax(0,1fr) 160px 150px 150px 110px;grid-template-areas:"date lib type cat compte amt" "date note paie paie paie paie" "date meta meta meta actions actions";gap:6px 10px;align-items:center;padding:12px 0;border-top:1px solid var(--line);}
+.rl-row{display:grid;grid-template-columns:96px minmax(0,1fr) 160px 150px 150px 136px;grid-template-areas:"date lib type cat compte amt" "date note paie paie paie paie" "date meta meta meta actions actions";gap:6px 10px;align-items:center;padding:12px 0;border-top:1px solid var(--line);}
 .rl-row:first-child{border-top:none;}
 @keyframes rl-maj{from{background:var(--raised);}}
 .rl-row.is-maj{animation:rl-maj 1.2s ease;}
@@ -809,13 +809,13 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
 .rl-nb{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);}
 .rl-nb .rl-ctl{width:64px;padding:0 8px;}
 .rl-nb-total{font-size:13px;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap;}
-.rl-amt{grid-area:amt;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.rl-amt{grid-area:amt;display:flex;align-items:center;justify-content:flex-end;gap:4px;min-width:0;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;}
 .rl-amt.pos{color:var(--c-reste);}
-button.rl-amt{justify-self:end;display:inline-flex;align-items:center;gap:6px;padding:4px 8px;margin-right:-8px;border:1px solid transparent;border-radius:8px;background:none;font:inherit;font-weight:600;color:inherit;cursor:pointer;}
-button.rl-amt.pos{color:var(--c-reste);}
-button.rl-amt svg{width:12px;height:12px;stroke:var(--faint);fill:none;stroke-width:2;opacity:.6;}
-@media (hover:hover){ button.rl-amt:hover{border-color:var(--line-strong);} button.rl-amt:hover svg{opacity:1;} }
-button.rl-amt:focus-visible{outline:none;border-color:var(--text);}
+.rl-signe{flex:none;width:30px;height:36px;padding:0;border:1px solid transparent;border-radius:10px;background:none;font:inherit;font-weight:600;color:inherit;cursor:pointer;}
+@media (hover:hover){ .rl-signe:hover{border-color:var(--line-strong);} }
+.rl-signe:focus-visible{outline:none;border-color:var(--text);}
+.rl-montant.rl-ctl{width:84px;flex:none;padding:0 8px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;color:inherit;}
+.rl-amt-eur{color:var(--faint);font-weight:400;}
 .rl-meta{grid-area:meta;display:flex;align-items:center;gap:8px;min-width:0;}
 .rl-raison{font-size:12px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .rl-actions{grid-area:actions;display:flex;justify-content:flex-end;align-items:center;gap:4px;}
@@ -4278,11 +4278,13 @@ document.addEventListener('drop', async (e)=>{
   if(f) await releveOuvrirFichier(f);
 });
 // Entrée dans le libellé d'une ligne du relevé : valide cette ligne.
-document.addEventListener('keydown', (e)=>{
+document.addEventListener('keydown', async (e)=>{
   if(e.key!=='Enter' || e.isComposing || !e.target.matches || !e.target.matches('.rl-row input[data-rl-champ]')) return;
   e.preventDefault();
-  releveChangerChamp(e.target);
-  e.target.closest('.rl-row').querySelector('[data-action="releve-valider"]')?.click();
+  const id = e.target.dataset.rlId;
+  await releveChangerChamp(e.target);
+  // La ligne a pu être redessinée (montant passé de − à +) : on retrouve son bouton.
+  document.querySelector(`.rl-row[data-rl-row="${id}"] [data-action="releve-valider"]`)?.click();
 });
 // Lignes de tableau et notifications cliquables : activables au clavier (Entrée / Espace),
 // et le focus est rendu à l'élément équivalent une fois la vue redessinée.
@@ -6063,10 +6065,36 @@ function releveInverserSigne(id){
   releveSauverSession();
   return true;
 }
+// Montant tel qu'affiché dans le champ de saisie : sans signe (porté par le bouton + / −).
+function releveMontantSaisie(m){ return Math.abs(m).toFixed(2).replace('.', ','); }
+// Corrige le montant d'une ligne mal lue. Sans signe tapé, le sens est conservé ;
+// « -12 » ou « +12 » change aussi le sens (et donc le type). Renvoie vrai si le sens a changé.
+function releveChangerMontant(l, el){
+  const n = releveMontant(el.value);
+  if(!isFinite(n) || Math.abs(n)<0.005){ el.value = releveMontantSaisie(l.montant); return false; }
+  const signeTape = /[-−–+()]/.test(el.value);
+  const montant = r2(signeTape ? n : (l.montant<0 ? -Math.abs(n) : Math.abs(n)));
+  const sensChange = (montant<0) !== (l.montant<0);
+  l.montant = montant;
+  el.value = releveMontantSaisie(montant);
+  if(sensChange && l.v.type!=='ignorer') releveAppliquerType(l, montant<0 ? 'depense' : 'revenu');
+  return sensChange;
+}
 function releveChangerChamp(el){
   const s = releveSession; if(!s) return;
   const l = s.lignes.find(x=>x.id===el.dataset.rlId); if(!l) return;
   const champ = el.dataset.rlChamp;
+  if(champ==='montant'){
+    if(releveChangerMontant(l, el)){ releveSauverSession(); return render(); }
+    // Même structure de ligne : seuls les totaux qui dépendent du montant sont remis à jour,
+    // sans re-render, pour que le clic sur « Valider » qui a fait perdre le focus aboutisse.
+    const row = el.closest('.rl-row'), t = document.createElement('template');
+    t.innerHTML = releveLigneHTML(l);
+    const neufs = t.content.querySelectorAll('.rl-nb-total');
+    row?.querySelectorAll('.rl-nb-total').forEach((x,i)=>{ if(neufs[i]) x.textContent = neufs[i].textContent; });
+    releveSauverSession();
+    return;
+  }
   if(champ==='type') releveAppliquerType(l, el.value);
   else l.v[champ] = el.value;
   if(champ==='nbMensualites'){
@@ -6246,7 +6274,10 @@ function releveLigneHTML(l){
     ${releveMenuHTML(l, 'type', RELEVE_TYPES, l.v.type, `Type de l’opération ${nomLigne}`)}
     ${ign ? '<span class="rl-cat"></span>' : releveCategorieHTML(l, nomLigne)}
     ${dep ? releveMenuHTML(l, 'compte', RELEVE_COMPTES, l.v.compte || 'Compte Perso', `Compte de ${nomLigne}`) : '<span class="rl-compte"></span>'}
-    <button type="button" class="rl-amt num${l.montant>0?' pos':''}" data-action="releve-signe" data-id="${l.id}" title="Inverser le sens (+ / −)" aria-label="${l.montant>0?'Rentrée':'Dépense'} de ${attrEsc(fmtEUR(Math.abs(l.montant)))} — inverser le sens">${icon('refresh')}${l.montant>0?'+':''}${fmtEUR(l.montant)}</button>
+    <div class="rl-amt num${l.montant>0?' pos':''}">
+      <button type="button" class="rl-signe" data-action="releve-signe" data-id="${l.id}" title="Inverser le sens (+ / −)" aria-label="${l.montant>0?'Rentrée':'Dépense'} — inverser le sens">${l.montant>0?'+':'−'}</button>
+      <input class="rl-ctl rl-montant" data-rl-id="${l.id}" data-rl-champ="montant" value="${releveMontantSaisie(l.montant)}" inputmode="decimal" autocomplete="off" aria-label="Montant de ${nomLigne}, en euros" ${ign?'disabled':''}><span class="rl-amt-eur" aria-hidden="true">€</span>
+    </div>
     ${ign ? '' : `<input class="rl-ctl rl-note" data-rl-id="${l.id}" data-rl-champ="notes" value="${attrEsc(l.v.notes||'')}" placeholder="Ajouter un commentaire…" aria-label="Commentaire sur ${nomLigne}" maxlength="200">`}
     ${dep ? `<div class="rl-paie">
       ${releveMenuHTML(l, 'paiement', RELEVE_PAIEMENTS, l.v.paiement || 'Unique', `Paiement de ${nomLigne}`)}
