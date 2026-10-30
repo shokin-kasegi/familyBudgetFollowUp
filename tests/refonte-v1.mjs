@@ -110,10 +110,12 @@ try{
       postes: [...document.querySelectorAll('.poste .val')].map(e=>e.innerText),
     }));
     const sumPostes = dash.postes.reduce((s,v)=>s+num(v),0);
-    ok(dash.postes.length===1, `tableau de bord : 1 poste (Dépenses) attendu, ${dash.postes.length} trouvés`);
+    // Une case par catégorie : Alimentation, Sorties, Transport, Cadeaux en septembre.
+    ok(dash.postes.length===4, `tableau de bord : 4 catégories attendues en septembre, ${dash.postes.length} trouvées`);
     // Septembre : 3 200 + 64,20 de revenus, 474,10 de dépenses datées ; abonnements, échéances,
-    // charges, objectifs et compte joint ne comptent plus.
-    ok(Math.abs(num(dash.postes[0]) - 474.10) < 0.005, `dépenses de septembre : 474,10 € attendus, reçu « ${dash.postes[0]} »`);
+    // charges, objectifs et compte joint de l'ancien modèle ne comptent pas.
+    ok(Math.abs(sumPostes - 474.10) < 0.005, `dépenses de septembre : 474,10 € attendus, reçu ${sumPostes}`);
+    ok(Math.abs(num(dash.postes[0]) - 286.40) < 0.005, `première catégorie (Alimentation) : 286,40 € attendus, reçu « ${dash.postes[0]} »`);
     ok(Math.abs(sumPostes + num((dash.reste||'').replace(/\n/g,'')) - num(dash.revenu)) < 0.005, `tableau de bord : postes (${sumPostes}) + reste (${dash.reste}) ≠ revenu (${dash.revenu})`);
     ok(/3 264,20 €/.test(dash.revenu), `revenu de septembre : séparateur de milliers visible (« 3 264,20 € ») — reçu « ${dash.revenu} »`);
 
