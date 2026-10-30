@@ -366,6 +366,14 @@ div.row-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;}
 .icon-btn:active{transform:scale(.92);}
 @media (hover:hover){ .icon-btn:hover{background:var(--raised);color:var(--text);} .icon-btn.del:hover{color:var(--c-over);} }
 .icon-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;}
+/* Sélection multiple : une case par ligne, une barre d'action au-dessus du tableau dès qu'une ligne est cochée. */
+.bulk-cb{width:16px;height:16px;margin:0 6px 0 4px;accent-color:#FFFFFF;cursor:pointer;flex-shrink:0;align-self:center;}
+th .bulk-cb{margin:0;}
+th.bulk-th{text-align:right;width:1%;}
+.bulk-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;margin-bottom:12px;border:1px solid var(--line-strong);border-radius:var(--r-ctl);background:var(--raised);font-size:14px;}
+.bulk-bar[hidden]{display:none;}
+.bulk-bar .bulk-count{font-weight:600;margin-right:auto;}
+@media(max-width:640px){ .bulk-bar{border-radius:14px;gap:4px 12px;} .bulk-bar .bulk-count{flex-basis:100%;} .bulk-bar .btn{padding-left:0;padding-right:0;} .bulk-bar .danger{margin-left:auto;} }
 tfoot td{border-top:1px solid var(--line-strong);font-weight:600;color:var(--text);padding-top:14px;}
 .tot-split{display:block;font-size:13px;font-weight:400;color:var(--faint);margin-top:2px;white-space:normal;}
 
@@ -2554,6 +2562,97 @@ function confirmDelete(label, onYes, opts){
   document.getElementById('del-yes').onclick = ()=>{ onYes(); closeModal(); };
 }
 
+/* ============================== SÉLECTION MULTIPLE ============================== */
+// Chaque tableau a sa propre sélection (clé = nom du tableau). Une case porte un ou
+// plusieurs identifiants (data-ids) : une ligne, un groupe de dépenses, ou tout le
+// tableau pour la case d'en-tête. La sélection survit aux rendus, mais ne garde que
+// les lignes encore affichées : on ne supprime jamais une ligne masquée par un filtre.
+const bulkSel = {};
+const BULK_TABLES = {
+  revrec: {one:'revenu', many:'revenus', done:'supprimé', remove:ids=>{ state.revenusRecurrents = state.revenusRecurrents.filter(x=>!ids.has(x.id)); }},
+  revexc: {one:'rentrée', many:'rentrées', done:'supprimée', remove:ids=>{ state.revenusExceptionnels = state.revenusExceptionnels.filter(x=>!ids.has(x.id)); }},
+  recurrentes: {one:'abonnement', many:'abonnements', done:'supprimé', remove:ids=>removeDepenses(ids)},
+  previsionnelles: {one:'dépense', many:'dépenses', done:'supprimée', remove:ids=>removeDepenses(ids)},
+  depenses: {one:'dépense', many:'dépenses', done:'supprimée', remove:ids=>removeDepenses(ids)},
+  charges: {one:'charge', many:'charges', done:'supprimée', remove:ids=>{ state.charges = state.charges.filter(x=>!ids.has(x.id)); }},
+  versements: {one:'versement', many:'versements', done:'supprimé', remove:ids=>{ state.versements = state.versements.filter(x=>!ids.has(x.id)); }},
+  echVersements: {one:'versement', many:'versements', done:'supprimé', remove:ids=>{ state.echVersements = state.echVersements.filter(x=>!ids.has(x.id)); }},
+};
+function removeDepenses(ids){
+  state.depenses = state.depenses.filter(x=>!ids.has(x.id));
+  state.echVersements = state.echVersements.filter(v=>!ids.has(v.echeanceId));
+}
+function bulkSet(table){ return bulkSel[table] || (bulkSel[table] = new Set()); }
+function bulkCheckHTML(table, ids, label){
+  return `<input type="checkbox" class="bulk-cb" data-bulk="${table}" data-ids="${ids.join(',')}" aria-label="${attrEsc(label)}">`;
+}
+function bulkHeadHTML(table, rows){
+  return `<th class="bulk-th">${bulkCheckHTML(table, rows.map(r=>r.id), 'Tout sélectionner')}</th>`;
+}
+function bulkBarHTML(table){
+  return `<div class="bulk-bar" data-bulk-bar="${table}" hidden role="region" aria-label="Sélection">
+    <span class="bulk-count" aria-live="polite"></span>
+    <button type="button" class="btn btn-text btn-sm" data-action="bulk-select-all" data-bulk="${table}">Tout sélectionner</button>
+    <button type="button" class="btn btn-text btn-sm" data-action="bulk-clear" data-bulk="${table}">Annuler</button>
+    <button type="button" class="btn btn-text btn-sm danger" data-action="bulk-delete" data-bulk="${table}">${icon('trash')}Supprimer</button>
+  </div>`;
+}
+function bulkIdsShown(table){
+  const ids = new Set();
+  document.querySelectorAll(`.bulk-cb[data-bulk="${table}"]`).forEach(cb=>cb.dataset.ids.split(',').filter(Boolean).forEach(id=>ids.add(id)));
+  return ids;
+}
+// Recalé après chaque rendu et chaque clic : cases cochées / partielles, barre affichée.
+function syncBulkUI(){
+  Object.keys(bulkSel).forEach(table=>{
+    const shown = bulkIdsShown(table), sel = bulkSel[table];
+    [...sel].forEach(id=>{ if(!shown.has(id)) sel.delete(id); });
+  });
+  document.querySelectorAll('.bulk-cb').forEach(cb=>{
+    const sel = bulkSet(cb.dataset.bulk), ids = cb.dataset.ids.split(',').filter(Boolean);
+    const n = ids.filter(id=>sel.has(id)).length;
+    cb.checked = ids.length>0 && n===ids.length;
+    cb.indeterminate = n>0 && n<ids.length;
+  });
+  document.querySelectorAll('[data-bulk-bar]').forEach(bar=>{
+    const table = bar.dataset.bulkBar, n = bulkSet(table).size, cfg = BULK_TABLES[table];
+    bar.hidden = n===0;
+    bar.querySelector('.bulk-count').textContent = `${fmtCount(n, cfg.one, cfg.many)} sélectionné${cfg.done.endsWith('e')?'e':''}${n>1?'s':''}`;
+    bar.querySelector('[data-action="bulk-select-all"]').hidden = n===bulkIdsShown(table).size;
+  });
+}
+document.addEventListener('change', (e)=>{
+  const cb = e.target.closest && e.target.closest('.bulk-cb');
+  if(!cb) return;
+  const sel = bulkSet(cb.dataset.bulk);
+  cb.dataset.ids.split(',').filter(Boolean).forEach(id=>{ if(cb.checked) sel.add(id); else sel.delete(id); });
+  syncBulkUI();
+});
+function bulkDelete(table){
+  const cfg = BULK_TABLES[table], ids = new Set(bulkSet(table));
+  const n = ids.size;
+  if(!n) return;
+  if(n===1){
+    // Une seule ligne : même chemin que la corbeille de la ligne.
+    const btn = document.querySelector(`.bulk-cb[data-bulk="${table}"][data-ids="${[...ids][0]}"]`)?.closest('tr')?.querySelector('.icon-btn.del');
+    if(btn){ btn.click(); return; }
+  }
+  const echVers = table==='depenses' ? state.echVersements.filter(v=>ids.has(v.echeanceId)).length : 0;
+  confirmDelete('', async ()=>{
+    // Seules les lignes de l'utilisateur courant peuvent partir, comme pour la suppression unitaire.
+    const own = new Set();
+    ['revenusRecurrents','revenusExceptionnels','depenses','charges','versements','echVersements'].forEach(k=>mine(state[k]).forEach(x=>{ if(ids.has(x.id)) own.add(x.id); }));
+    cfg.remove(own);
+    bulkSet(table).clear();
+    await persist(); await render();
+    toast(`${fmtCount(own.size, cfg.one, cfg.many)} ${cfg.done}${own.size>1?'s':''}`);
+  }, {
+    title: `Supprimer ${fmtCount(n, cfg.one, cfg.many)} ?`,
+    consequence: `Cette action est définitive.${echVers?` ${fmtCount(echVers, 'versement lié est', 'versements liés sont')} aussi supprimé${echVers>1?'s':''}.`:''}`,
+    confirmLabel: `Supprimer (${n})`,
+  });
+}
+
 /* ============================== RENDER ROOT ============================== */
 async function render(){
   renderSidebar();
@@ -3125,18 +3224,18 @@ function renderRevenus(){
       ${tableFilterActive('revrec') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="revrec">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
       ${rrAll.length===0 ? emptyRow(`Aucun revenu récurrent en ${monthLabel(key)}`, 'add-revrec', 'Ajouter un revenu') :
         (rr.length===0 ? emptyRow('Aucun revenu ne correspond à ces filtres', 'clear-table-filter', 'Réinitialiser', 'revrec') : `
-      <div class="table-wrap"><table class="rtable" data-total-col="2" data-name="récurrents">
+      ${bulkBarHTML('revrec')}<div class="table-wrap"><table class="rtable" data-total-col="2" data-name="récurrents">
         <thead><tr>
           ${colFilterHeaderHTML('revrec', REVREC_COLUMNS, 'libelle', rrAll)}
           ${colFilterHeaderHTML('revrec', REVREC_COLUMNS, 'categorie', rrAll)}
           ${colFilterHeaderHTML('revrec', REVREC_COLUMNS, 'montant', rrAll)}
-          <th>Début</th><th>Fin</th><th><span class="sr-only">Actions</span></th>
+          <th>Début</th><th>Fin</th>${bulkHeadHTML('revrec', rr)}
         </tr></thead>
         <tbody>${rr.map(r=>`<tr>
           <td><span class="cell-main">${dash(r.libelle)}</span>${exclNote(r)}</td><td class="sub first-sub">${dash(r.categorie)}</td>
           <td class="num key" data-v="${r2(r.montant)}">${fmtEUR(r.montant)}</td>
           <td class="sub">${r.dateDebut?'depuis '+fmtDate(r.dateDebut):'<span class="nil">—</span>'}</td><td class="sub">${r.dateFin?'jusqu’au '+fmtDate(r.dateFin):'<span class="nil">Sans fin</span>'}</td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-revrec" data-id="${r.id}" aria-label="Modifier ${attrEsc(r.libelle)}">${icon('edit')}</button><button class="icon-btn del" data-action="del-revrec" data-id="${r.id}" aria-label="Supprimer ${attrEsc(r.libelle)}">${icon('trash')}</button></td>
+          <td class="row-actions">${bulkCheckHTML('revrec', [r.id], 'Sélectionner '+(r.libelle||''))}<button class="icon-btn" data-action="edit-revrec" data-id="${r.id}" aria-label="Modifier ${attrEsc(r.libelle)}">${icon('edit')}</button><button class="icon-btn del" data-action="del-revrec" data-id="${r.id}" aria-label="Supprimer ${attrEsc(r.libelle)}">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
         <tfoot><tr><td>Total mensuel</td><td></td><td class="num key" data-v="${sumR2(rr,r=>r.montant)}">${fmtEUR(sumR2(rr,r=>r.montant))}</td><td></td><td></td><td></td></tr></tfoot>
       </table></div>`)}
@@ -3148,18 +3247,18 @@ function renderRevenus(){
       ${tableFilterActive('revexc') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="revexc">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
       ${reAll.length===0 ? emptyRow(`Aucune rentrée exceptionnelle en ${monthLabel(key)}`, 'add-revexc', 'Ajouter') :
         (re.length===0 ? emptyRow('Aucune rentrée ne correspond à ces filtres', 'clear-table-filter', 'Réinitialiser', 'revexc') : `
-      <div class="table-wrap"><table class="rtable" data-total-col="3" data-name="exceptionnelles">
+      ${bulkBarHTML('revexc')}<div class="table-wrap"><table class="rtable" data-total-col="3" data-name="exceptionnelles">
         <thead><tr>
           ${colFilterHeaderHTML('revexc', REVEXC_COLUMNS, 'libelle', reAll)}
           ${colFilterHeaderHTML('revexc', REVEXC_COLUMNS, 'date', reAll)}
           ${colFilterHeaderHTML('revexc', REVEXC_COLUMNS, 'categorie', reAll)}
           ${colFilterHeaderHTML('revexc', REVEXC_COLUMNS, 'montant', reAll)}
-          <th><span class="sr-only">Actions</span></th>
+          ${bulkHeadHTML('revexc', re)}
         </tr></thead>
         <tbody>${re.map(r=>`<tr>
           <td><span class="cell-main">${dash(r.libelle)}</span>${noteSub(r)}${exclNote(r)}</td><td class="sub first-sub">${fmtDate(r.date)}</td><td class="sub">${dash(r.categorie)}</td>
           <td class="num key" data-v="${r2(r.montant)}">${fmtEUR(r.montant)}</td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-revexc" data-id="${r.id}" aria-label="Modifier ${attrEsc(r.libelle)}">${icon('edit')}</button><button class="icon-btn del" data-action="del-revexc" data-id="${r.id}" aria-label="Supprimer ${attrEsc(r.libelle)}">${icon('trash')}</button></td>
+          <td class="row-actions">${bulkCheckHTML('revexc', [r.id], 'Sélectionner '+(r.libelle||''))}<button class="icon-btn" data-action="edit-revexc" data-id="${r.id}" aria-label="Modifier ${attrEsc(r.libelle)}">${icon('edit')}</button><button class="icon-btn del" data-action="del-revexc" data-id="${r.id}" aria-label="Supprimer ${attrEsc(r.libelle)}">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
         <tfoot><tr><td>Total du mois</td><td></td><td></td><td class="num key" data-v="${sumR2(re,r=>r.montant)}">${fmtEUR(sumR2(re,r=>r.montant))}</td><td></td></tr></tfoot>
       </table></div>`)}
@@ -3337,7 +3436,7 @@ function renderDepenses(){
   const total = r2(parts.reduce((s,p)=>s+p.v,0));
   const biggest = [...filtrableArr].sort((x,y)=>depenseMensualiteDuMois(y,key)-depenseMensualiteDuMois(x,key))[0];
   const finding = biggest ? `Plus grosse dépense du mois : ${esc(biggest.libelle)}, <strong>${fmtEUR(depenseMensualiteDuMois(biggest,key))}</strong>.` : `Aucun achat ni échéance en ${monthLabel(key)}.`;
-  const actionsFor = d0 => `<td class="row-actions"><button class="icon-btn" data-action="edit-depense" data-id="${d0.id}" aria-label="Modifier ${attrEsc(d0.libelle)}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${d0.id}" aria-label="Supprimer ${attrEsc(d0.libelle)}">${icon('trash')}</button></td>`;
+  const actionsFor = d0 => `<td class="row-actions">${bulkCheckHTML('depenses', [d0.id], 'Sélectionner '+(d0.libelle||''))}<button class="icon-btn" data-action="edit-depense" data-id="${d0.id}" aria-label="Modifier ${attrEsc(d0.libelle)}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${d0.id}" aria-label="Supprimer ${attrEsc(d0.libelle)}">${icon('trash')}</button></td>`;
   const activeRec = recurrentes.filter(x=>x.statut==='Actif');
   // Les dépenses portant le même libellé sont regroupées sur une ligne (total du mois) ;
   // un clic sur le libellé déplie le détail.
@@ -3373,13 +3472,13 @@ function renderDepenses(){
       <div class="section-head"><h2>${posteDot('fixe')}Abonnements</h2></div>
       ${tableFilterActive('recurrentes') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="recurrentes">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
       ${recurrentes.length===0 ? emptyRow('Aucun abonnement ne correspond à ces filtres', 'clear-table-filter', 'Réinitialiser', 'recurrentes') : `
-      <div class="table-wrap"><table class="rtable" data-total-col="3" data-name="abonnements">
+      ${bulkBarHTML('recurrentes')}<div class="table-wrap"><table class="rtable" data-total-col="3" data-name="abonnements">
         <thead><tr>
           ${colFilterHeaderHTML('recurrentes', REC_COLUMNS, 'libelle', recurrentesAll)}
           ${colFilterHeaderHTML('recurrentes', REC_COLUMNS, 'categorie', recurrentesAll)}
           ${colFilterHeaderHTML('recurrentes', REC_COLUMNS, 'compte', recurrentesAll)}
           ${colFilterHeaderHTML('recurrentes', REC_COLUMNS, 'montant', recurrentesAll)}
-          <th><span class="sr-only">Actions</span></th>
+          ${bulkHeadHTML('recurrentes', recurrentes)}
         </tr></thead>
         <tbody>${recurrentes.map(x=>{
           const paused = x.statut!=='Actif';
@@ -3388,7 +3487,7 @@ function renderDepenses(){
           <td><span class="cell-main">${dash(x.libelle)}</span>${noteSub(x)}${billed}${paused?'<span class="cell-sub">en pause</span>':''}</td>
           <td class="sub first-sub">${dash(x.categorie)}</td><td class="sub">${dash(x.compte)}</td>
           <td class="num key" data-v="${paused?0:r2(monthlyCost(x))}">${paused?'<span class="nil">en pause</span>':fmtEUR(monthlyCost(x))}</td>
-          <td class="row-actions"><button class="btn btn-text btn-sm" data-action="toggle-depense-statut" data-id="${x.id}">${paused?'Reprendre':'Mettre en pause'}</button><button class="icon-btn" data-action="edit-depense" data-id="${x.id}" aria-label="Modifier ${attrEsc(x.libelle)}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${x.id}" aria-label="Supprimer ${attrEsc(x.libelle)}">${icon('trash')}</button></td>
+          <td class="row-actions">${bulkCheckHTML('recurrentes', [x.id], 'Sélectionner '+(x.libelle||''))}<button class="btn btn-text btn-sm" data-action="toggle-depense-statut" data-id="${x.id}">${paused?'Reprendre':'Mettre en pause'}</button><button class="icon-btn" data-action="edit-depense" data-id="${x.id}" aria-label="Modifier ${attrEsc(x.libelle)}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${x.id}" aria-label="Supprimer ${attrEsc(x.libelle)}">${icon('trash')}</button></td>
         </tr>`;}).join('')}</tbody>
         <tfoot><tr><td>Total mensuel${activeRec.length<recurrentes.length?' (hors pause)':''}</td><td></td><td></td><td class="num key" data-v="${sumR2(activeRec, monthlyCost)}">${fmtEUR(sumR2(activeRec, monthlyCost))}</td><td></td></tr></tfoot>
       </table></div>`}
@@ -3398,13 +3497,13 @@ function renderDepenses(){
     <div class="card mb16">
       <div class="section-head"><h2>Dépenses prévisionnelles</h2></div>
       <div class="field-note" style="margin:-6px 0 14px;">Pas encore de date fixée : elles ne comptent pas encore dans ton budget. Planifie une date pour qu’elles soient prises en compte.</div>
-      <div class="table-wrap"><table class="rtable">
-        <thead><tr><th>Libellé</th><th>Catégorie</th><th>Priorité</th><th class="num">Montant estimé</th><th><span class="sr-only">Actions</span></th></tr></thead>
+      ${bulkBarHTML('previsionnelles')}<div class="table-wrap"><table class="rtable">
+        <thead><tr><th>Libellé</th><th>Catégorie</th><th>Priorité</th><th class="num">Montant estimé</th>${bulkHeadHTML('previsionnelles', previsionnelles)}</tr></thead>
         <tbody>${previsionnelles.map(x=>`<tr>
           <td class="cell-main">${dash(x.libelle)}</td><td class="sub first-sub">${dash(x.categorie)}</td>
           <td class="sub">${x.priorite==='Haute' ? '<span class="pill pill-coral">Haute</span>' : dash(x.priorite)}</td>
           <td class="num key">${fmtEUR(x.montant)}</td>
-          <td class="row-actions"><button class="btn btn-ghost btn-sm" data-action="plan-depense" data-id="${x.id}">${icon('calendar')}Planifier une date</button><button class="icon-btn del" data-action="del-depense" data-id="${x.id}" aria-label="Supprimer ${attrEsc(x.libelle)}">${icon('trash')}</button></td>
+          <td class="row-actions">${bulkCheckHTML('previsionnelles', [x.id], 'Sélectionner '+(x.libelle||''))}<button class="btn btn-ghost btn-sm" data-action="plan-depense" data-id="${x.id}">${icon('calendar')}Planifier une date</button><button class="icon-btn del" data-action="del-depense" data-id="${x.id}" aria-label="Supprimer ${attrEsc(x.libelle)}">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
       </table></div>
     </div>` : ''}
@@ -3414,13 +3513,13 @@ function renderDepenses(){
       ${tableFilterActive('depenses') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="depenses">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
       ${filtrableArr.length===0 ? emptyRow(`Aucun achat en ${monthLabel(key)}`, 'add-depense', 'Ajouter une dépense') :
         (list.length===0 ? emptyRow('Aucune dépense ne correspond à ces filtres', 'clear-table-filter', 'Réinitialiser', 'depenses') : `
-      <div class="table-wrap"><table class="rtable" data-total-col="3" data-name="achats">
+      ${bulkBarHTML('depenses')}<div class="table-wrap"><table class="rtable" data-total-col="3" data-name="achats">
         <thead><tr>
           ${colFilterHeaderHTML('depenses', DEP_COLUMNS, 'libelle', filtrableArr)}
           ${colFilterHeaderHTML('depenses', DEP_COLUMNS, 'categorie', filtrableArr)}
           ${colFilterHeaderHTML('depenses', DEP_COLUMNS, 'compte', filtrableArr)}
           ${colFilterHeaderHTML('depenses', DEP_COLUMNS, 'montant', filtrableArr)}
-          <th><span class="sr-only">Actions</span></th>
+          ${bulkHeadHTML('depenses', list)}
         </tr></thead>
         <tbody>${depGroups(list, key).map(g=>{
           if(g.items.length===1) return depenseRowHTML(g.items[0]);
@@ -3430,7 +3529,7 @@ function renderDepenses(){
           <td><button class="grp-toggle" data-action="toggle-dep-group" data-group="${attrEsc(g.key)}" aria-expanded="${open}"><span class="grp-chev" aria-hidden="true">${icon('chevR')}</span><span class="cell-main">${dash(g.items[0].libelle)}</span></button><span class="cell-sub">${g.items.length} dépenses</span></td>
           <td class="sub first-sub">${same(x=>x.categorie)}</td><td class="sub">${same(x=>x.compte||'Compte Perso')}</td>
           <td class="num key" data-v="${g.total}">${fmtEUR(g.total)}</td>
-          <td class="row-actions"></td>
+          <td class="row-actions">${bulkCheckHTML('depenses', g.items.map(x=>x.id), `Sélectionner les ${g.items.length} dépenses ${g.items[0].libelle||''}`)}</td>
         </tr>${open ? g.items.map(x=>depenseRowHTML(x, true)).join('') : ''}`;}).join('')}</tbody>
         <tfoot><tr><td>${tableFilterActive('depenses')?'Total (filtré)':'Total'} ${monthLabel(key)}</td><td></td><td></td><td class="num key" data-v="${sumR2(list,x=>depenseMensualiteDuMois(x,key))}">${fmtEUR(sumR2(list,x=>depenseMensualiteDuMois(x,key)))}</td><td></td></tr></tfoot>
       </table></div>`)}
@@ -3718,16 +3817,16 @@ function renderEchVersements(d, key){
       ${tableFilterActive('echVersements') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="echVersements">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
       ${versAll.length===0 ? emptyRow(`Aucun versement en ${monthLabel(key)}`, 'ech-add-versement', 'Verser', null, ` data-id="${d.id}"`) :
         (versList.length===0 ? emptyRow('Aucun versement ne correspond à ces filtres', 'clear-table-filter', 'Réinitialiser', 'echVersements') : `
-      <div class="table-wrap"><table class="rtable" data-total-col="1" data-name="versements">
+      ${bulkBarHTML('echVersements')}<div class="table-wrap"><table class="rtable" data-total-col="1" data-name="versements">
         <thead><tr>
           ${colFilterHeaderHTML('echVersements', ECH_VERS_COLUMNS, 'date', versAll)}
           ${colFilterHeaderHTML('echVersements', ECH_VERS_COLUMNS, 'montant', versAll)}
-          <th>Note</th><th><span class="sr-only">Actions</span></th>
+          <th>Note</th>${bulkHeadHTML('echVersements', versList)}
         </tr></thead>
         <tbody>${versList.map(v=>`<tr>
           <td>${fmtDate(v.date)}</td>
           <td class="num key" data-v="${r2(v.montant)}">${fmtEUR(v.montant)}</td><td class="wrap sub first-sub">${dash(v.note)}</td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-ech-versement" data-id="${v.id}" aria-label="Modifier le versement">${icon('edit')}</button><button class="icon-btn del" data-action="del-ech-versement" data-id="${v.id}" aria-label="Supprimer le versement">${icon('trash')}</button></td>
+          <td class="row-actions">${bulkCheckHTML('echVersements', [v.id], 'Sélectionner le versement du '+fmtDate(v.date))}<button class="icon-btn" data-action="edit-ech-versement" data-id="${v.id}" aria-label="Modifier le versement">${icon('edit')}</button><button class="icon-btn del" data-action="del-ech-versement" data-id="${v.id}" aria-label="Supprimer le versement">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
         <tfoot><tr><td>Total versé ce mois</td><td class="num key" data-v="${sumR2(versList,v=>v.montant)}">${fmtEUR(sumR2(versList,v=>v.montant))}</td><td></td><td></td></tr></tfoot>
       </table></div>`)}
@@ -3839,16 +3938,16 @@ function renderObjVersements(o, key){
       ${tableFilterActive('versements') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="versements">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
       ${versAll.length===0 ? emptyRow(`Aucun versement en ${monthLabel(key)}`, 'add-versement', 'Verser', null, ` data-obj="${attrEsc(o.nom)}"`) :
         (versList.length===0 ? emptyRow('Aucun versement ne correspond à ces filtres', 'clear-table-filter', 'Réinitialiser', 'versements') : `
-      <div class="table-wrap"><table class="rtable" data-total-col="1" data-name="versements">
+      ${bulkBarHTML('versements')}<div class="table-wrap"><table class="rtable" data-total-col="1" data-name="versements">
         <thead><tr>
           ${colFilterHeaderHTML('versements', VERS_COLUMNS, 'date', versAll)}
           ${colFilterHeaderHTML('versements', VERS_COLUMNS, 'montant', versAll)}
-          <th>Note</th><th><span class="sr-only">Actions</span></th>
+          <th>Note</th>${bulkHeadHTML('versements', versList)}
         </tr></thead>
         <tbody>${versList.map(v=>`<tr>
           <td>${fmtDate(v.date)}</td>
           <td class="num key" data-v="${r2(v.montant)}">${fmtEUR(v.montant)}</td><td class="wrap sub first-sub">${dash(v.note)}</td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-versement" data-id="${v.id}" aria-label="Modifier le versement">${icon('edit')}</button><button class="icon-btn del" data-action="del-versement" data-id="${v.id}" aria-label="Supprimer le versement">${icon('trash')}</button></td>
+          <td class="row-actions">${bulkCheckHTML('versements', [v.id], 'Sélectionner le versement du '+fmtDate(v.date))}<button class="icon-btn" data-action="edit-versement" data-id="${v.id}" aria-label="Modifier le versement">${icon('edit')}</button><button class="icon-btn del" data-action="del-versement" data-id="${v.id}" aria-label="Supprimer le versement">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
         <tfoot><tr><td>Total versé ce mois</td><td class="num key" data-v="${sumR2(versList,v=>v.montant)}">${fmtEUR(sumR2(versList,v=>v.montant))}</td><td></td><td></td></tr></tfoot>
       </table></div>`)}
@@ -3903,14 +4002,14 @@ function renderCharges(){
       ${tableFilterActive('charges') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="charges">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
       ${all.length===0 ? emptyRow(`Aucune charge active en ${monthLabel(key)}`, 'add-charge', 'Ajouter une charge') :
         (list.length===0 ? emptyRow('Aucune charge ne correspond à ces filtres', 'clear-table-filter', 'Réinitialiser', 'charges') : `
-      <div class="table-wrap"><table class="rtable" data-total-col="${nCols-1}" data-name="charges">
+      ${bulkBarHTML('charges')}<div class="table-wrap"><table class="rtable" data-total-col="${nCols-1}" data-name="charges">
         <thead><tr>
           ${colFilterHeaderHTML('charges', CHARGE_COLUMNS, 'categorie', all)}
           ${showType ? colFilterHeaderHTML('charges', CHARGE_COLUMNS, 'type', all) : ''}
           ${showCompte ? colFilterHeaderHTML('charges', CHARGE_COLUMNS, 'compte', all) : ''}
           <th>Période</th>
           ${colFilterHeaderHTML('charges', CHARGE_COLUMNS, 'budget', all)}
-          <th><span class="sr-only">Actions</span></th>
+          ${bulkHeadHTML('charges', list)}
         </tr></thead>
         <tbody>${list.map(c=>`<tr>
           <td><span class="cell-main">${dash(c.categorie)}</span>${c.description?`<span class="cell-sub">${esc(c.description)}</span>`:''}<span class="cell-bar"><span style="width:${total>0?(Number(c.budget)||0)/Math.max(...list.map(x=>Number(x.budget)||0))*100:0}%;background:var(--c-fixe)"></span></span></td>
@@ -3918,7 +4017,7 @@ function renderCharges(){
           ${showCompte ? `<td class="sub${showType?'':' first-sub'}">${dash(c.compte)}</td>` : ''}
           <td class="sub${showType||showCompte?'':' first-sub'}">${chargePeriode(c)}</td>
           <td class="num key" data-v="${r2(c.budget)}">${fmtEUR(c.budget)}</td>
-          <td class="row-actions"><button class="icon-btn" data-action="edit-charge" data-id="${c.id}" aria-label="Modifier ${attrEsc(c.categorie)}">${icon('edit')}</button><button class="icon-btn del" data-action="del-charge" data-id="${c.id}" aria-label="Supprimer ${attrEsc(c.categorie)}">${icon('trash')}</button></td>
+          <td class="row-actions">${bulkCheckHTML('charges', [c.id], 'Sélectionner '+(c.categorie||''))}<button class="icon-btn" data-action="edit-charge" data-id="${c.id}" aria-label="Modifier ${attrEsc(c.categorie)}">${icon('edit')}</button><button class="icon-btn del" data-action="del-charge" data-id="${c.id}" aria-label="Supprimer ${attrEsc(c.categorie)}">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
         <tfoot><tr><td>${tableFilterActive('charges')?'Total (filtré)':'Total actif'} ${monthLabel(key)}${jointPartner()?`<span class="tot-split">dont compte joint : ${fmtEUR(joint)} · perso : ${fmtEUR(perso)}</span>`:''}</td>${'<td></td>'.repeat(nCols-2)}<td class="num key" data-v="${total}">${fmtEUR(total)}</td><td></td></tr></tfoot>
       </table></div>`)}
@@ -4071,6 +4170,7 @@ function afterRender(){
   // Un souci ponctuel de graphique ou d'animation ne doit jamais interrompre
   // le reste de l'application (notifications, sync...).
   try{
+    syncBulkUI();
     updateTableScrollHints();
     if(currentView==='dashboard') dashAfterRender();
     if(currentView==='releve') releveAfterRender();
@@ -4427,6 +4527,9 @@ async function handleAction(action, id, el){
     case 'toggle-depense-statut': { const item=find(mine(state.depenses)); item.statut = item.statut==='Actif'?'Inactif':'Actif'; await persist(); await render(); toast('Statut mis à jour'); break; }
     case 'goto-depenses': currentView = 'depenses'; await render(); break;
     case 'switch-space': currentSpace = el.dataset.space; currentView = defaultViewForSpace(currentSpace); await render(); break;
+    case 'bulk-delete': bulkDelete(el.dataset.bulk); break;
+    case 'bulk-clear': bulkSet(el.dataset.bulk).clear(); syncBulkUI(); break;
+    case 'bulk-select-all': { const sel = bulkSet(el.dataset.bulk); bulkIdsShown(el.dataset.bulk).forEach(id=>sel.add(id)); syncBulkUI(); break; }
     case 'clear-table-filter': state.tableFilters[el.dataset.table] = { sortCol:null, sortDir:'asc', selected:{} }; await persist(); await render(); break;
     case 'toggle-col-filter': {
       const table = el.dataset.table, col = el.dataset.col;
