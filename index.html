@@ -222,6 +222,15 @@ main{flex:1;min-width:0;padding-block:32px 64px;padding-left:max(40px, env(safe-
 .abo-row .num{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--muted);}
 .abo-row .row-actions{display:flex;gap:4px;justify-content:flex-end;}
 @media(max-width:640px){ .abo-row{grid-template-columns:minmax(0,1fr) auto;} .abo-row .row-actions{grid-column:1/-1;} }
+.ppf-row .track{margin-top:2px;}
+.ppf-row .pill{margin-left:6px;vertical-align:1px;}
+.pill-over{background:color-mix(in srgb,var(--c-over) 16%,var(--surface));color:var(--c-over);}
+.ppf-alerte{grid-column:1/-1;margin:0;font-size:13px;color:var(--c-over);}
+.ppf-detail{grid-column:1/-1;font-size:13px;color:var(--muted);}
+.ppf-detail summary{cursor:pointer;width:max-content;padding:2px 0;}
+.ppf-detail ol{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:2px;}
+.ppf-detail li{display:grid;grid-template-columns:minmax(0,1fr) auto 32px;align-items:center;gap:10px;}
+.ppf-detail .icon-btn{width:32px;height:32px;}
 .rl-abo{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:10px;border:1px dashed var(--line-strong);background:none;font:inherit;font-size:13px;color:var(--muted);cursor:pointer;}
 .rl-abo svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8;}
 .rl-abo[aria-pressed="true"]{border-style:solid;border-color:var(--text);color:var(--text);}
@@ -355,6 +364,7 @@ th .bulk-cb{margin:0;}
 th.bulk-th{text-align:right;width:1%;}
 .bulk-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;margin-bottom:12px;border:1px solid var(--line-strong);border-radius:var(--r-ctl);background:var(--raised);font-size:14px;}
 .bulk-bar[hidden]{display:none;}
+.field[hidden]{display:none !important;} /* aussi pour les cases à cocher, mises en ligne par un style local */
 .bulk-bar .bulk-count{font-weight:600;margin-right:auto;}
 @media(max-width:640px){ .bulk-bar{border-radius:14px;gap:4px 12px;} .bulk-bar .bulk-count{flex-basis:100%;} .bulk-bar .btn{padding-left:0;padding-right:0;} .bulk-bar .danger{margin-left:auto;} }
 tfoot td{border-top:1px solid var(--line-strong);font-weight:600;color:var(--text);padding-top:14px;}
@@ -752,7 +762,10 @@ button,a,[role="button"]{touch-action:manipulation;-webkit-tap-highlight-color:t
 .rl-amt-eur{color:var(--faint);font-weight:400;}
 .rl-meta{grid-area:meta;display:flex;align-items:center;gap:8px;min-width:0;}
 .rl-raison{font-size:12px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.rl-actions{grid-area:actions;display:flex;justify-content:flex-end;align-items:center;gap:4px;}
+.rl-actions{grid-area:actions;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:4px;}
+.rl-ppf-total{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--muted);}
+.rl-ppf-total input{width:96px;height:32px;text-align:right;font-variant-numeric:tabular-nums;}
+.rl-erreur{color:var(--c-over);}
 .rl-ctl{width:100%;min-width:0;height:36px;padding:0 10px;border-radius:10px;background:var(--bg);border:1px solid var(--line-strong);font-size:14px;color:var(--text);color-scheme:dark;}
 .rl-ctl:focus{outline:none;border-color:var(--text);}
 .rl-ctl:focus-visible{box-shadow:0 0 0 3px rgba(255,255,255,0.18);}
@@ -1618,8 +1631,117 @@ function aboAlerter(a){
 function aboAlertesNonVues(){ return mine(state.abonnementsAlertes).filter(a=>!a.vue).sort((a,b)=>(b.le||'').localeCompare(a.le||'')); }
 function aboAlerteTexte(a){
   if(a.type==='prix') return `${a.libelle} : ${fmtEUR(a.ancien)} → ${fmtEUR(a.nouveau)} par mois`;
+  if(a.type==='ppf-termine') return `${a.libelle} : payé en entier (${fmtEUR(a.nouveau)})`;
+  if(a.type==='ppf-retard') return `${a.libelle} : mensualité de ${monthLabel(a.mois)} non validée, reportée au mois suivant`;
   return `${a.libelle} retiré : prélèvement de ${monthLabel(a.mois)} non validé`;
 }
+function aboAlerteTitre(a){
+  return {prix:'Changement de prix', 'ppf-termine':'Paiement terminé', 'ppf-retard':'Mensualité en retard'}[a.type] || 'Abonnement retiré';
+}
+
+/* ======================== PAIEMENTS EN PLUSIEURS FOIS ======================== */
+/* Même mécanique que les abonnements : une dépense marquée « en plusieurs fois »
+   porte un identifiant de série (ppfId) et le montant total à payer (ppfTotal).
+   Chaque mensualité validée annonce la suivante (prevu:true), au montant de la
+   dernière mensualité validée, sans dépasser ce qu'il reste à payer. Une prévision
+   ne compte nulle part tant qu'elle n'est pas validée, à la main ou à l'import.
+   Quand les mensualités validées atteignent le total, le paiement est clôturé.
+   Une mensualité qui ferait dépasser le total n'est pas validée : on demande de
+   vérifier les montants (mensualité ou total). Une mensualité non validée à la fin
+   de son mois n'est pas retirée (la somme reste due) : elle passe au mois courant. */
+const PPF_EPS = 0.005;
+function ppfSerie(ppfId){ return mine(state.depenses).filter(d=>d.ppfId===ppfId); }
+function ppfPrevisions(){ return mine(state.depenses).filter(d=>d.prevu && d.ppfId); }
+function ppfPrevisionsDuMois(key){ return ppfPrevisions().filter(d=>moisDe(d.date)===key).sort((a,b)=>a.date.localeCompare(b.date)); }
+function ppfIds(){ return [...new Set(mine(state.depenses).filter(d=>d.ppfId).map(d=>d.ppfId))]; }
+function ppfEtat(ppfId){
+  const serie = ppfSerie(ppfId);
+  const versees = serie.filter(d=>!d.prevu).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const prevu = serie.find(d=>d.prevu) || null;
+  const ref = versees[versees.length-1] || prevu || serie[0] || {};
+  const total = r2(Number((serie.find(d=>Number(d.ppfTotal)>0)||{}).ppfTotal)||0);
+  const paye = sumR2(versees, d=>d.montant);
+  const reste = r2(total - paye);
+  return {ppfId, libelle:ref.libelle||'', categorie:ref.categorie||'', total, paye, reste, versees, prevu, derniere:versees[versees.length-1]||null,
+    termine: versees.length>0 && reste < PPF_EPS, depassement: reste <= -PPF_EPS ? -reste : 0, arrete: serie.some(d=>d.ppfArrete)};
+}
+// Dépassement (en €) si `montant` était validé dans la série, avec un total éventuellement corrigé.
+// `horsId` : mensualité déjà validée qu'on remplace (modification), à ne pas compter deux fois.
+function ppfDepassement(ppfId, montant, total, horsId){
+  const e = ppfEtat(ppfId);
+  const paye = sumR2(e.versees.filter(d=>d.id!==horsId), d=>d.montant);
+  const t = total!=null ? r2(total) : e.total;
+  const dep = r2(paye + r2(montant) - t);
+  return dep >= PPF_EPS ? dep : 0;
+}
+function ppfMessageDepassement(dep, total){
+  return `Le total des mensualités dépasse le montant total (${fmtEUR(total)}) de ${fmtEUR(dep)} : vérifie les montants saisis`;
+}
+function ppfFixerTotal(ppfId, total){ ppfSerie(ppfId).forEach(d=>{ d.ppfTotal = r2(total); }); }
+// Met la série d'accord avec ses mensualités validées : clôture, prochaine mensualité
+// (montant de la dernière validée, plafonné au reste), report d'une mensualité en retard.
+// Renvoie vrai si quelque chose a changé.
+function ppfRecaler(ppfId){
+  const e = ppfEtat(ppfId);
+  const me = currentUser();
+  const retirerPrevu = ()=>{ state.depenses = state.depenses.filter(d=>!(d.prevu && d.ppfId===ppfId && me && d.ownerId===me.id)); };
+  if(!e.versees.length || e.termine || e.arrete){
+    // Clôture : signalée une fois (l'alerte est dédoublonnée par son identifiant).
+    const nouvelle = e.termine && !mine(state.abonnementsAlertes).some(a=>a.id==='ppf-fin-'+ppfId);
+    if(nouvelle) aboAlerter({id:'ppf-fin-'+ppfId, type:'ppf-termine', ppfId, libelle:e.libelle, nouveau:e.paye, mois:moisDe(e.derniere.date)});
+    if(!e.prevu) return nouvelle;
+    retirerPrevu();
+    return true;
+  }
+  const montant = r2(Math.min(r2(e.derniere.montant), e.reste));
+  const cur = currentMonthKey();
+  if(e.prevu){
+    let change = false;
+    if(Math.abs(r2(e.prevu.montant) - montant) >= PPF_EPS){ e.prevu.montant = montant; change = true; }
+    if(moisDe(e.prevu.date) < cur){
+      aboAlerter({id:'ppf-retard-'+e.prevu.id+'-'+moisDe(e.prevu.date), type:'ppf-retard', ppfId, libelle:e.libelle, mois:moisDe(e.prevu.date)});
+      e.prevu.date = dateDansMois(cur, Number(String(e.prevu.date).slice(8,10)));
+      change = true;
+    }
+    return change;
+  }
+  const dep = e.derniere;
+  let key = addMonths(moisDe(dep.date), 1);
+  if(key < cur) key = cur;
+  const prev = {id:uid(), ownerId:dep.ownerId, ppfId, ppfTotal:e.total, libelle:dep.libelle, categorie:dep.categorie||'', montant,
+    modePaiement:'Unique', date:dateDansMois(key, Number(String(dep.date).slice(8,10))), notes:'', prevu:true};
+  if(dep.cle) prev.cle = dep.cle;
+  state.depenses.push(prev);
+  return true;
+}
+function ppfRecalerTout(){ let n = 0; ppfIds().forEach(id=>{ if(ppfRecaler(id)) n++; }); return n; }
+// Marque une dépense comme première mensualité d'un paiement en plusieurs fois.
+function ppfDemarrer(dep, total){
+  delete dep.aboId;
+  dep.ppfId = dep.ppfId || uid();
+  dep.ppfTotal = r2(total);
+  ppfRecaler(dep.ppfId);
+  return ppfEtat(dep.ppfId);
+}
+// Valide la mensualité prévue (elle devient une dépense comme les autres) ; la suivante,
+// ou la clôture, découle du recalage.
+function ppfValider(prev, valeurs){
+  Object.assign(prev, valeurs);
+  prev.montant = r2(prev.montant);
+  delete prev.prevu;
+  ppfRecaler(prev.ppfId);
+  return ppfEtat(prev.ppfId);
+}
+// Retire une dépense de sa série (case décochée) ; la série se recale sans elle.
+function ppfDetacher(dep){
+  const ppfId = dep.ppfId;
+  delete dep.ppfId; delete dep.ppfTotal; delete dep.cle;
+  ppfRecaler(ppfId);
+}
+// Arrête un paiement avant son terme : plus aucune mensualité n'est annoncée.
+function ppfArreter(ppfId){ ppfSerie(ppfId).forEach(d=>{ d.ppfArrete = true; }); ppfRecaler(ppfId); }
+// Texte court d'avancement : « 3 mensualités · 450,00 € sur 1 200,00 € ».
+function ppfAvancement(e){ return `${fmtCount(e.versees.length,'mensualité','mensualités')} · ${fmtEUR(e.paye)} sur ${fmtEUR(e.total)}`; }
 
 /* ============================== SIDEBAR / NAV ============================== */
 const SPACES = [
@@ -1631,6 +1753,7 @@ const NAV_FINANCE = [
   {id:'dashboard', label:'Tableau de bord', icon:'dashboard'},
   {id:'revenus', label:'Revenus', icon:'income'},
   {id:'depenses', label:'Dépenses', icon:'wallet'},
+  {id:'echeancier', label:'Échéancier', icon:'calendar'},
   {id:'releve', label:'Import relevé', icon:'fileIn'},
   {id:'annuelle', label:'Vue annuelle', icon:'chart'},
   {id:'analyse', label:'Analyse', icon:'search'},
@@ -2105,7 +2228,9 @@ function openModal(title, fields, values, onSave, extraHtml){
     if(result===false) return;
     closeModal();
   };
-  setTimeout(()=>{ const first = document.querySelector('#modal-form input:not([type=hidden]),#modal-form select') || document.getElementById('del-yes') || modalFocusables()[0]; if(first) first.focus(); }, 50);
+  // Focus sur le premier champ, sauf si l'utilisateur est déjà dans la modale (saisie rapide) :
+  // lui reprendre le focus enverrait la suite de sa frappe dans un autre champ.
+  setTimeout(()=>{ if(document.querySelector('#modal-root .modal')?.contains(document.activeElement)) return; const first = document.querySelector('#modal-form input:not([type=hidden]),#modal-form select') || document.getElementById('del-yes') || modalFocusables()[0]; if(first) first.focus(); }, 50);
 }
 function fieldHTML(f, values){
   const val = values && values[f.key]!==undefined && values[f.key]!==null ? values[f.key] : (f.default!==undefined?f.default:'');
@@ -2339,12 +2464,12 @@ function bulkDelete(table){
 
 /* ============================== RENDER ROOT ============================== */
 async function render(){
-  if(currentUser() && aboPurger()) persist();
+  if(currentUser() && (aboPurger() + ppfRecalerTout())) persist();
   renderSidebar();
   const view = document.getElementById('view');
   const renderers = {
     dashboard: renderDashboard, revenus: renderRevenus,
-    depenses: renderDepenses, annuelle: renderAnnuelle, analyse: renderAnalyse, parametres: renderParametres, releve: renderReleve,
+    depenses: renderDepenses, echeancier: renderEcheancier, annuelle: renderAnnuelle, analyse: renderAnalyse, parametres: renderParametres, releve: renderReleve,
     groupesListe: renderGroupesListe,
   };
   view.innerHTML = renderers[currentView] ? renderers[currentView]() : '';
@@ -2356,7 +2481,7 @@ async function render(){
 // La vue affichée (et son mois / son année) est reflétée dans l'adresse :
 // #depenses/2026-10, #annuelle/2026, #parametres… — un rechargement ramène au même
 // endroit, un lien peut être partagé et le bouton Retour revient à la vue précédente.
-const ROUTE_VIEWS = ['dashboard','revenus','depenses','releve','annuelle','analyse','parametres','groupesListe'];
+const ROUTE_VIEWS = ['dashboard','revenus','depenses','echeancier','releve','annuelle','analyse','parametres','groupesListe'];
 const MONTH_VIEWS = new Set(['dashboard','revenus','depenses']);
 let lastRoutedView = null;
 function routeHash(){
@@ -2479,6 +2604,8 @@ function renderDashboard(){
 
   const prevus = aboPrevisionsDuMois(key);
   const noteAbos = prevus.length ? `<div class="hero-note">${icon('repeat').replace('<svg','<svg style="width:14px;height:14px;vertical-align:-2px;stroke:currentColor;fill:none;stroke-width:1.8;margin-right:6px"')}${fmtCount(prevus.length,'abonnement prévu','abonnements prévus')} (${fmtEUR(sumR2(prevus,x=>x.montant))}), compté${prevus.length>1?'s':''} une fois validé${prevus.length>1?'s':''}. <button class="link" data-nav="depenses">Voir</button></div>` : '';
+  const prevusPpf = ppfPrevisionsDuMois(key);
+  const notePpf = prevusPpf.length ? `<div class="hero-note">${icon('calendar').replace('<svg','<svg style="width:14px;height:14px;vertical-align:-2px;stroke:currentColor;fill:none;stroke-width:1.8;margin-right:6px"')}${fmtCount(prevusPpf.length,'mensualité prévue','mensualités prévues')} (${fmtEUR(sumR2(prevusPpf,x=>x.montant))}), compté${prevusPpf.length>1?'es':'e'} une fois validée${prevusPpf.length>1?'s':''}. <button class="link" data-nav="echeancier">Voir</button></div>` : '';
 
   return `
     <div class="dash">
@@ -2503,7 +2630,7 @@ function renderDashboard(){
         <div class="flow${dashFocusPoste?' has-focus':''}" data-n="${n}" role="img" aria-label="${attrEsc(flowLabel)}">${segs}</div>
         <h2 class="sr-only">Dépenses par catégorie</h2>
         <div class="postes">${postes}</div>
-        ${noteAbos}
+        ${noteAbos}${notePpf}
       </section>
 
       <section class="card ychart${enter}${dashYearGrown||reduceMotion.matches?'':' first'}" aria-labelledby="year-h">
@@ -2697,6 +2824,78 @@ function chartFilterActiveBarHTML(chartKey){
 /* ============================== VUE ANNUELLE ============================== */
 // Montant de cellule : au centime, et à l'euro sur téléphone (seule exception).
 function amtCell(v, extra, label){ return `<td class="num${extra?' '+extra:''}${v<-0.004 && /key/.test(extra||'')?' neg':''}" data-v="${r2(v)}"${label?` data-label="${label}"`:''}><span class="amt-full">${fmtEUR(v)}</span><span class="amt-short">${fmtEUR0(v)}</span></td>`; }
+/* ============================== ÉCHÉANCIER ============================== */
+/* Abonnements et paiements en plusieurs fois réunis : ce qui est en cours, la
+   prochaine échéance à valider, l'avancement, et ce qui est terminé. */
+function aboSeriesActives(){
+  return aboPrevisions().map(p=>{
+    const versees = mine(state.depenses).filter(d=>d.aboId===p.aboId && !d.prevu).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    return {prevu:p, versees, paye:sumR2(versees, d=>d.montant)};
+  }).sort((a,b)=>a.prevu.date.localeCompare(b.prevu.date));
+}
+function renderEcheancier(){
+  const abos = aboSeriesActives();
+  const ppfs = ppfIds().map(ppfEtat).filter(e=>e.versees.length);
+  const enCours = ppfs.filter(e=>!e.termine && !e.arrete).sort((a,b)=>String(a.prevu?.date||'').localeCompare(String(b.prevu?.date||'')));
+  const finis = ppfs.filter(e=>e.termine || e.arrete).sort((a,b)=>String(b.derniere.date).localeCompare(String(a.derniere.date)));
+  const parMois = sumR2(abos, a=>a.prevu.montant);
+  const resteDu = sumR2(enCours, e=>Math.max(0, e.reste));
+  const enTete = [
+    abos.length ? `${fmtCount(abos.length,'abonnement','abonnements')} (<strong>${fmtEUR(parMois)}</strong> par mois)` : '',
+    enCours.length ? `${fmtCount(enCours.length,'paiement en plusieurs fois','paiements en plusieurs fois')} (reste <strong>${fmtEUR(resteDu)}</strong>)` : '',
+  ].filter(Boolean);
+  const finding = enTete.length ? `En cours : ${enTete.join(' et ')}.` : 'Aucun abonnement ni paiement en plusieurs fois en cours.';
+  const aboHTML = abos.length ? `<ul class="abo-list">${abos.map(a=>{ const p = a.prevu; return `<li class="abo-row">
+      <div><span class="cell-main">${esc(p.libelle)}</span><span class="cell-sub">Prochain prélèvement le ${fmtDate(p.date)}${p.categorie?` · ${esc(p.categorie)}`:''}${a.versees.length?` · depuis ${monthLabel(moisDe(a.versees[0].date))}, ${fmtEUR(a.paye)} payés`:''}</span></div>
+      <span class="num">${fmtEUR(p.montant)}<span class="cell-sub">par mois</span></span>
+      <div class="row-actions">
+        <button class="btn btn-ghost btn-sm" data-action="abo-valider" data-id="${p.id}">${icon('check')}Valider</button>
+        <button class="btn btn-text btn-sm" data-action="abo-prix" data-id="${p.id}">Nouveau prix</button>
+        <button class="icon-btn del" data-action="abo-arreter" data-id="${p.id}" aria-label="Arrêter l’abonnement ${attrEsc(p.libelle)}">${icon('x')}</button>
+      </div>
+    </li>`; }).join('')}</ul>`
+    : `<div class="empty-line">Aucun abonnement en cours. Coche « Abonnement » en ajoutant une dépense, ou depuis l’import du relevé.</div>`;
+  const ppfHTML = enCours.length ? `<ul class="abo-list">${enCours.map(e=>ppfCarteHTML(e)).join('')}</ul>`
+    : `<div class="empty-line">Aucun paiement en plusieurs fois en cours. Coche « Paiement en plusieurs fois » en ajoutant une dépense, ou depuis l’import du relevé.</div>`;
+  const finisHTML = finis.length ? `<div class="card mb16">
+      <div class="section-head"><h2>${icon('check')}Terminés</h2><span class="side-note">${fmtCount(finis.length,'paiement','paiements')}</span></div>
+      <ul class="abo-list">${finis.map(e=>ppfCarteHTML(e)).join('')}</ul>
+    </div>` : '';
+  return `
+    ${pageHeadHTML({title:'Échéancier', finding,
+      action:`<button class="btn btn-primary" data-action="add-depense">${icon('plus')}Ajouter une dépense</button>`})}
+    <section class="card mb16" aria-labelledby="ech-abo">
+      <div class="section-head"><h2 id="ech-abo">${icon('repeat')}Abonnements</h2>${abos.length?`<span class="side-note num">${fmtEUR(parMois)} par mois</span>`:''}</div>
+      ${aboHTML}
+    </section>
+    <section class="card mb16" aria-labelledby="ech-ppf">
+      <div class="section-head"><h2 id="ech-ppf">${icon('calendar')}Paiements en plusieurs fois</h2>${enCours.length?`<span class="side-note num">reste ${fmtEUR(resteDu)}</span>`:''}</div>
+      <p class="field-note" style="margin:-4px 0 8px;">Chaque mensualité ne compte qu’une fois validée, à la main ou par l’import du relevé. La suivante reprend le montant de la dernière validée ; le paiement se clôture quand le total est atteint.</p>
+      ${ppfHTML}
+    </section>
+    ${finisHTML}`;
+}
+// Un paiement en plusieurs fois : avancement, prochaine mensualité, détail des mensualités validées.
+function ppfCarteHTML(e){
+  const part = e.total>0 ? Math.min(1, e.paye/e.total) : 0;
+  const statut = e.depassement ? `<span class="pill pill-over">Dépassement de ${fmtEUR(e.depassement)}</span>`
+    : e.termine ? '<span class="pill pill-teal">Payé</span>' : e.arrete ? '<span class="pill pill-dim">Arrêté</span>' : '';
+  const prochain = e.prevu ? `Prochaine mensualité : ${fmtEUR(e.prevu.montant)} le ${fmtDate(e.prevu.date)}` : '';
+  const actions = e.prevu ? `
+        <button class="btn btn-ghost btn-sm" data-action="ppf-valider" data-id="${e.prevu.id}">${icon('check')}Valider</button>
+        <button class="btn btn-text btn-sm" data-action="ppf-total" data-id="${e.ppfId}">Montant total</button>
+        <button class="icon-btn del" data-action="ppf-arreter" data-id="${e.ppfId}" aria-label="Arrêter le paiement en plusieurs fois ${attrEsc(e.libelle)}">${icon('x')}</button>`
+    : e.depassement ? `<button class="btn btn-text btn-sm" data-action="ppf-total" data-id="${e.ppfId}">Montant total</button>` : '';
+  return `<li class="abo-row ppf-row" data-ppf="${e.ppfId}">
+      <div><span class="cell-main">${esc(e.libelle)}</span>${statut}<span class="cell-sub">${ppfAvancement(e)}${e.categorie?` · ${esc(e.categorie)}`:''}</span>${prochain?`<span class="cell-sub">${prochain}</span>`:''}</div>
+      <span class="num">${e.termine||e.arrete ? fmtEUR(e.paye) : `reste ${fmtEUR(e.reste)}`}</span>
+      <div class="row-actions">${actions}</div>
+      <span class="track" role="img" aria-label="${attrEsc(`${Math.round(part*100)} % payé`)}"><span class="fill" style="background:${e.depassement?'var(--c-over)':'var(--c-echeances)'};transform:scaleX(${part})"></span></span>
+      ${e.depassement ? `<p class="ppf-alerte">Le total des mensualités dépasse le montant total : vérifie les montants saisis ci-dessous, ou corrige le montant total.</p>` : ''}
+      <details class="ppf-detail"><summary>Voir les mensualités</summary><ol>${e.versees.map(d=>`<li><span>${fmtDate(d.date)}</span><span class="num">${fmtEUR(d.montant)}</span><button class="icon-btn" data-action="edit-depense" data-id="${d.id}" aria-label="Modifier la mensualité du ${attrEsc(fmtDate(d.date))}">${icon('edit')}</button></li>`).join('')}</ol></details>
+    </li>`;
+}
+
 function renderAnnuelle(){
   const year = state.selectedYear;
   const {months, totals} = anneeData(year);
@@ -2933,7 +3132,7 @@ function renderDepenses(){
   // Les dépenses portant le même libellé sont regroupées sur une ligne (total du mois) ;
   // un clic sur le libellé déplie le détail.
   const depenseRowHTML = (x, child=false) => `<tr${child?' class="grp-child"':''}>
-          <td><span class="cell-main">${dash(x.libelle)}</span>${x.aboId?'<span class="pill pill-dim pill-abo">Abonnement</span>':''}${noteSub(x)}${x.date?`<span class="cell-sub">${fmtDate(x.date)}</span>`:''}</td><td class="sub first-sub">${dash(x.categorie)}</td>
+          <td><span class="cell-main">${dash(x.libelle)}</span>${x.aboId?'<span class="pill pill-dim pill-abo">Abonnement</span>':''}${x.ppfId?'<span class="pill pill-dim pill-abo">En plusieurs fois</span>':''}${noteSub(x)}${x.date?`<span class="cell-sub">${fmtDate(x.date)}</span>`:''}</td><td class="sub first-sub">${dash(x.categorie)}</td>
           <td class="num key" data-v="${r2(x.montant)}">${fmtEUR(x.montant)}</td>
           ${actionsFor(x)}
         </tr>`;
@@ -2947,6 +3146,7 @@ function renderDepenses(){
     </section>
 
     ${aboPrevusHTML(key)}
+    ${ppfPrevusHTML(key)}
     <div class="card">
       <div class="section-head"><h2>${posteDot('achats')}Sorties</h2></div>
       ${tableFilterActive('depenses') ? `<div class="row-actions" style="justify-content:flex-start;margin-bottom:12px;"><button class="btn btn-ghost btn-sm" data-action="clear-table-filter" data-table="depenses">${icon('x')}Réinitialiser les filtres</button></div>` : ''}
@@ -3027,26 +3227,75 @@ function depense_fields(){
     {key:'categorie', label:'Catégorie', type:'category', categoryType:'depenses'},
     {key:'montant', label:'Montant (€)', type:'number', step:'0.01'},
     {key:'notes', label:'Commentaire', placeholder:'Facultatif'},
-    {key:'abonnement', label:'Abonnement : prévoir le même prélèvement le mois suivant', type:'checkbox'},
+    {key:'abonnement', label:'Abonnement : prévoir le même prélèvement le mois suivant', type:'checkbox', showIf:v=>!v.plusieursFois},
+    {key:'plusieursFois', label:'Paiement en plusieurs fois : cette dépense est une mensualité', type:'checkbox', showIf:v=>!v.abonnement},
+    {key:'montantTotal', label:'Montant total à payer (€)', type:'number', step:'0.01', showIf:v=>!!v.plusieursFois},
   ];
 }
-function depenseValidationErrors(data){
+// Une case masquée (l'autre mode est coché) ne compte pas.
+function depenseMode(data){ return data.plusieursFois ? 'ppf' : data.abonnement ? 'abo' : 'unique'; }
+function depenseValidationErrors(data, dep){
   const errors = [];
   if(!data.date) errors.push(['date','Renseigne une date']);
   if(!data.libelle || !String(data.libelle).trim()) errors.push(['libelle','Renseigne un libellé']);
   if(!data.montant || Number(data.montant)<=0) errors.push(['montant','Renseigne un montant supérieur à 0']);
+  if(depenseMode(data)==='ppf' && !errors.some(e=>e[0]==='montant')){
+    const total = Number(data.montantTotal)||0;
+    if(total<=0) errors.push(['montantTotal','Renseigne le montant total à payer']);
+    else if(dep && dep.ppfId){
+      const dep2 = ppfDepassement(dep.ppfId, data.montant, total, dep.id);
+      if(dep2){ const m = ppfMessageDepassement(dep2, total); errors.push(['montant', m], ['montantTotal', m]); }
+    } else if(r2(data.montant) >= r2(total) - PPF_EPS){
+      const m = r2(data.montant) > r2(total) ? ppfMessageDepassement(r2(r2(data.montant)-r2(total)), total) : 'La mensualité égale le total : c’est un paiement en une fois';
+      errors.push(['montant', m], ['montantTotal', m]);
+    }
+  }
   return errors;
 }
 function openDepenseEditModal(depenseId){
   const dep = mine(state.depenses).find(x=>x.id===depenseId);
-  openModal('Modifier la dépense', depense_fields(), {...dep, abonnement:!!dep.aboId}, async (data)=>{
-    const errors = depenseValidationErrors(data);
+  openModal('Modifier la dépense', depense_fields(), {...dep, abonnement:!!dep.aboId, plusieursFois:!!dep.ppfId, montantTotal:dep.ppfId ? ppfEtat(dep.ppfId).total : ''}, async (data)=>{
+    const errors = depenseValidationErrors(data, dep);
     if(errors.length){ errors.forEach(([key,msg])=>markFieldError(key,msg)); toast(errors[0][1]); return false; }
     Object.assign(dep, {libelle:data.libelle, categorie:data.categorie, montant:data.montant, date:data.date, modePaiement:'Unique', notes:(data.notes||'').trim()});
+    const mode = depenseMode(data);
     let msg = 'Dépense mise à jour';
-    if(data.abonnement && !dep.aboId){ const prev = aboDemarrer(dep); if(prev) msg = `Abonnement : prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}`; }
-    else if(!data.abonnement && dep.aboId){ aboArreter(dep.aboId); delete dep.aboId; delete dep.cle; msg = 'Ce n’est plus un abonnement'; }
+    if(mode!=='abo' && dep.aboId){ aboArreter(dep.aboId); delete dep.aboId; delete dep.cle; msg = 'Ce n’est plus un abonnement'; }
+    if(mode!=='ppf' && dep.ppfId){ ppfDetacher(dep); msg = 'Retirée du paiement en plusieurs fois'; }
+    if(mode==='abo' && !dep.aboId){ const prev = aboDemarrer(dep); if(prev) msg = `Abonnement : prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}`; }
+    if(mode==='ppf'){
+      const nouveau = !dep.ppfId;
+      if(nouveau) ppfDemarrer(dep, data.montantTotal); else { ppfFixerTotal(dep.ppfId, data.montantTotal); ppfRecaler(dep.ppfId); }
+      msg = ppfToast(ppfEtat(dep.ppfId), nouveau ? 'Paiement en plusieurs fois' : 'Mensualité mise à jour');
+    }
     await persist(); await render(); toast(msg); });
+}
+// Message après une mensualité : clôture, ou prochaine mensualité annoncée.
+function ppfToast(e, debut){
+  if(e.termine) return `${e.libelle} : payé en entier, paiement clôturé`;
+  return `${debut} · reste ${fmtEUR(e.reste)}${e.prevu ? ` · prochaine mensualité (${fmtEUR(e.prevu.montant)}) prévue en ${monthLabel(moisDe(e.prevu.date))}` : ''}`;
+}
+// Mensualités attendues ce mois-ci : affichées à part, hors des totaux.
+function ppfPrevusHTML(key){
+  const prevus = ppfPrevisionsDuMois(key);
+  if(!prevus.length) return '';
+  return `<div class="card mb16">
+    <div class="section-head"><h2>${icon('calendar')}Mensualités prévues</h2><span class="side-note num">${fmtEUR(sumR2(prevus,x=>x.montant))}</span></div>
+    <p class="field-note" style="margin:-4px 0 8px;">Pas encore comptées : valide chaque mensualité quand elle passe, ou importe ton relevé. <button class="link" data-nav="echeancier">Voir l’échéancier</button></p>
+    <ul class="abo-list">${prevus.map(p=>ppfPrevuLigneHTML(p)).join('')}</ul>
+  </div>`;
+}
+function ppfPrevuLigneHTML(p){
+  const e = ppfEtat(p.ppfId);
+  return `<li class="abo-row">
+      <div><span class="cell-main">${esc(p.libelle)}</span><span class="cell-sub">${fmtDate(p.date)} · ${ppfAvancement(e)} · reste ${fmtEUR(e.reste)}</span></div>
+      <span class="num">${fmtEUR(p.montant)}</span>
+      <div class="row-actions">
+        <button class="btn btn-ghost btn-sm" data-action="ppf-valider" data-id="${p.id}">${icon('check')}Valider</button>
+        <button class="btn btn-text btn-sm" data-action="ppf-total" data-id="${p.ppfId}">Montant total</button>
+        <button class="icon-btn del" data-action="ppf-arreter" data-id="${p.ppfId}" aria-label="Arrêter le paiement en plusieurs fois ${attrEsc(p.libelle)}">${icon('x')}</button>
+      </div>
+    </li>`;
 }
 // Prélèvements d'abonnement attendus ce mois-ci : affichés à part, hors des totaux.
 function aboPrevusHTML(key){
@@ -3411,8 +3660,11 @@ async function handleAction(action, id, el){
       if(errors.length){ errors.forEach(([key,msg])=>markFieldError(key,msg)); toast(errors[0][1]); return false; }
       const dep = {id:uid(), ownerId:currentUser().id, libelle:data.libelle, categorie:data.categorie, montant:data.montant, modePaiement:'Unique', date:data.date, notes:(data.notes||'').trim()};
       state.depenses.push(dep);
-      const prev = data.abonnement ? aboDemarrer(dep) : null;
-      await persist(); await render(); toast(prev ? `Abonnement ajouté · prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}` : 'Dépense ajoutée'); }); break;
+      const mode = depenseMode(data);
+      const prev = mode==='abo' ? aboDemarrer(dep) : null;
+      const ppf = mode==='ppf' ? ppfDemarrer(dep, data.montantTotal) : null;
+      await persist(); await render();
+      toast(ppf ? ppfToast(ppf, 'Paiement en plusieurs fois ajouté') : prev ? `Abonnement ajouté · prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}` : 'Dépense ajoutée'); }); break;
     case 'edit-depense': openDepenseEditModal(id); break;
     case 'del-depense': { const item=find(mine(state.depenses)); confirmDelete(item.libelle, async ()=>{
       state.depenses = state.depenses.filter(x=>x.id!==id);
@@ -3446,6 +3698,38 @@ async function handleAction(action, id, el){
       const prev = aboPrevisions().find(x=>x.id===id); if(!prev) break;
       confirmDelete('', async ()=>{ aboArreter(prev.aboId); await persist(); await render(); toast('Abonnement arrêté'); },
         {title:`Arrêter « ${esc(prev.libelle)} » ?`, consequence:'Le prélèvement prévu est retiré et plus aucun ne sera annoncé. Ceux déjà validés restent dans tes dépenses.', confirmLabel:'Arrêter'});
+      break; }
+    /* Paiements en plusieurs fois */
+    case 'ppf-valider': {
+      const prev = ppfPrevisions().find(x=>x.id===id); if(!prev) break;
+      const e = ppfEtat(prev.ppfId);
+      const champs = [{key:'date', label:'Date de la mensualité', type:'date'}, {key:'montant', label:'Montant payé (€)', type:'number', step:'0.01'}, {key:'montantTotal', label:'Montant total à payer (€)', type:'number', step:'0.01'}];
+      openModal(`Valider « ${esc(prev.libelle)} »`, champs, {date:prev.date, montant:prev.montant, montantTotal:e.total}, async (data)=>{
+        if(!data.date){ markFieldError('date','Renseigne une date'); return false; }
+        if(!(Number(data.montant)>0)){ markFieldError('montant','Renseigne un montant supérieur à 0'); return false; }
+        if(!(Number(data.montantTotal)>0)){ markFieldError('montantTotal','Renseigne le montant total à payer'); return false; }
+        const dep = ppfDepassement(prev.ppfId, data.montant, data.montantTotal);
+        if(dep){ const m = ppfMessageDepassement(dep, data.montantTotal); markFieldError('montant', m); markFieldError('montantTotal', m); toast(m); return false; }
+        ppfFixerTotal(prev.ppfId, data.montantTotal);
+        const fin = ppfValider(prev, {date:data.date, montant:Number(data.montant)});
+        await persist(); await render();
+        toast(ppfToast(fin, 'Mensualité validée'));
+      }, `<p class="field-note">Déjà payé : ${fmtEUR(e.paye)} · reste ${fmtEUR(e.reste)}. Une fois validée, la mensualité compte dans tes dépenses de ${monthName(moisDe(prev.date))}.</p>`);
+      break; }
+    case 'ppf-total': {
+      const e = ppfEtat(id); if(!e.versees.length) break;
+      openModal(`Montant total : ${esc(e.libelle)}`, [{key:'montantTotal', label:'Montant total à payer (€)', type:'number', step:'0.01'}], {montantTotal:e.total}, async (data)=>{
+        const t = r2(Number(data.montantTotal)||0);
+        if(t<=0){ markFieldError('montantTotal','Renseigne le montant total à payer'); return false; }
+        if(t < r2(e.paye - PPF_EPS)){ const m = ppfMessageDepassement(r2(e.paye - t), t); markFieldError('montantTotal', m); toast(m); return false; }
+        ppfFixerTotal(id, t); ppfRecaler(id);
+        await persist(); await render(); toast(ppfToast(ppfEtat(id), 'Montant total mis à jour'));
+      }, `<p class="field-note">Déjà payé : ${fmtEUR(e.paye)} en ${fmtCount(e.versees.length,'mensualité','mensualités')}.</p>`);
+      break; }
+    case 'ppf-arreter': {
+      const e = ppfEtat(id); if(!e.versees.length) break;
+      confirmDelete('', async ()=>{ ppfArreter(id); await persist(); await render(); toast('Paiement en plusieurs fois arrêté'); },
+        {title:`Arrêter « ${esc(e.libelle)} » ?`, consequence:`La mensualité prévue est retirée et plus aucune ne sera annoncée (reste ${fmtEUR(e.reste)}). Celles déjà validées restent dans tes dépenses.`, confirmLabel:'Arrêter'});
       break; }
     case 'abo-alerte-vue': {
       const a = mine(state.abonnementsAlertes).find(x=>x.id===id);
@@ -3580,7 +3864,17 @@ async function handleAction(action, id, el){
     }
     case 'releve-abo': {
       const l = releveSession && releveSession.lignes.find(x=>x.id===id);
-      if(l && l.v.type==='depense'){ l.v.abo = !l.v.abo; releveSauverSession(); await render(); document.querySelector(`[data-action="releve-abo"][data-id="${id}"]`)?.focus(); }
+      if(l && l.v.type==='depense'){ l.v.abo = !l.v.abo; if(l.v.abo) l.v.ppf = false; releveSauverSession(); await render(); document.querySelector(`[data-action="releve-abo"][data-id="${id}"]`)?.focus(); }
+      break;
+    }
+    case 'releve-ppf': {
+      // « En plusieurs fois » : le montant total est demandé aussitôt.
+      const l = releveSession && releveSession.lignes.find(x=>x.id===id);
+      if(l && l.v.type==='depense'){
+        l.v.ppf = !l.v.ppf; if(l.v.ppf) l.v.abo = false; delete l.erreur;
+        releveSauverSession(); await render();
+        document.querySelector(l.v.ppf && !l.v.ppfTotal ? `.rl-row[data-rl-row="${id}"] [data-rl-champ="ppfTotal"]` : `[data-action="releve-ppf"][data-id="${id}"]`)?.focus();
+      }
       break;
     }
     case 'releve-signe': if(releveInverserSigne(id)){ releveFocusApres = null; await render(); document.querySelector(`[data-action="releve-signe"][data-id="${id}"]`)?.focus(); } break;
@@ -4566,7 +4860,7 @@ function releveDejaSuivi(op){
 function releveSuggestion(op, modele){
   const cle = releveCle(op.libelle);
   const sens = op.montant<0 ? 'depense' : 'revenu';
-  const base = {cle, abo:false};
+  const base = {cle, abo:false, ppf:false};
   const regle = modele.regles[cle];
   // Un commerçant habituellement en dépense qui crédite le compte : c'est un remboursement.
   if(regle && regle.type!=='ignorer' && regle.type!==sens && !op.signeIncertain){
@@ -4616,6 +4910,36 @@ function releveAboAttendu(op, cle, libelle, pris){
     .filter(p=>!pris.has(p.id) && (memeCommercant(p) || String(p.libelle||'').trim().toLowerCase()===nom))
     .sort((a,b)=>Math.abs(a.montant-abs)-Math.abs(b.montant-abs))[0] || null;
 }
+// Une mensualité attendue d'un paiement en plusieurs fois (même commerçant ou même
+// nom), quel que soit son mois : la ligne la validera au lieu de créer une dépense.
+function relevePpfAttendu(op, cle, libelle, pris){
+  if(op.montant>=0) return null;
+  const nom = String(libelle||'').trim().toLowerCase();
+  const premier = cle.split(' ')[0];
+  const abs = Math.abs(op.montant), mois = moisDe(op.date);
+  const ecartMois = p => { const [a,b] = [moisDe(p.date), mois].map(k=>{ const [y,m] = k.split('-').map(Number); return y*12+m; }); return Math.abs(a-b); };
+  const memeCommercant = p => { const c = p.cle || releveCle(p.libelle); return c===cle || (premier.length>=4 && c.split(' ')[0]===premier); };
+  return ppfPrevisions()
+    .filter(p=>!pris.has(p.id) && (memeCommercant(p) || String(p.libelle||'').trim().toLowerCase()===nom))
+    .sort((a,b)=>ecartMois(a)-ecartMois(b) || Math.abs(a.montant-abs)-Math.abs(b.montant-abs))[0] || null;
+}
+// Un prélèvement d'abonnement ou une mensualité déjà validé à la main (pas par un
+// import) pour ce commerçant, dans le même mois ou à quelques jours : la ligne du
+// relevé est le même paiement, elle est mise en « Ne pas importer ». Le montant peut
+// différer (validé avec un autre prix) ; à défaut, la date la plus proche l'emporte.
+function releveSerieDejaValidee(op, cle, libelle, pris){
+  if(op.montant>=0) return '';
+  const nom = String(libelle||'').trim().toLowerCase();
+  const premier = cle.split(' ')[0];
+  const jours = d => Math.abs(new Date(d+'T00:00:00') - new Date(op.date+'T00:00:00')) / 86400000;
+  const memeCommercant = d => { const c = d.cle || releveCle(d.libelle); return c===cle || (premier.length>=4 && c.split(' ')[0]===premier) || String(d.libelle||'').trim().toLowerCase()===nom; };
+  const d = mesSorties()
+    .filter(d=>(d.aboId || d.ppfId) && d.source!=='releve' && d.date && !pris.has(d.id) && memeCommercant(d) && (moisDe(d.date)===moisDe(op.date) || jours(d.date)<=5))
+    .sort((a,b)=>jours(a.date)-jours(b.date))[0];
+  if(!d) return '';
+  pris.add(d.id);
+  return `Déjà validé${d.ppfId ? 'e' : ''} à la main : ${d.libelle} (${d.ppfId ? 'mensualité' : 'abonnement'} du ${fmtDate(d.date)})`;
+}
 function releveCreerLignes(ops){
   const modele = releveModele(false);
   const pris = new Set();
@@ -4623,9 +4947,17 @@ function releveCreerLignes(ops){
     .sort((a,b)=>a.date.localeCompare(b.date))
     .map(o=>{
       const s = releveSuggestion(o, modele);
-      const suivi = releveDejaSuivi(o);
+      const suivi = releveSerieDejaValidee(o, s.cle, s.libelle, pris) || releveDejaSuivi(o);
       const attendu = suivi ? null : releveAboAttendu(o, s.cle, s.libelle, pris);
+      const mensualite = suivi || attendu ? null : relevePpfAttendu(o, s.cle, s.libelle, pris);
       if(suivi){ s.type = 'ignorer'; s.abo = false; s.confiance = 'sur'; s.raison = suivi; }
+      else if(mensualite){
+        pris.add(mensualite.id);
+        const e = ppfEtat(mensualite.ppfId), dep = ppfDepassement(mensualite.ppfId, Math.abs(o.montant));
+        // Une mensualité qui ferait dépasser le total n'est pas « sûre » : elle attend une vérification.
+        Object.assign(s, {type:'depense', libelle:mensualite.libelle, categorie:mensualite.categorie||s.categorie, abo:false, ppf:true, ppfTotal:releveMontantSaisie(e.total), confiance: dep ? 'devine' : 'sur',
+          raison: dep ? `Mensualité attendue : ${mensualite.libelle} · dépasse le total de ${fmtEUR(dep)}, vérifie les montants` : `Mensualité attendue : ${mensualite.libelle} · reste ${fmtEUR(e.reste)}`});
+      }
       else if(attendu){
         pris.add(attendu.id);
         const ecart = Math.abs(Math.abs(o.montant) - attendu.montant) >= 0.005;
@@ -4633,7 +4965,7 @@ function releveCreerLignes(ops){
           raison: ecart ? `Abonnement attendu : ${attendu.libelle} · nouveau prix (avant ${fmtEUR(attendu.montant)})` : `Abonnement attendu : ${attendu.libelle}`});
       }
       const {cle, confiance, raison, ...valeurs} = s;
-      return {id: uid(), date: o.date, brut: o.libelle.trim(), montant: r2(o.montant), cle, suivi: !!suivi, incertain: !!o.signeIncertain, confiance, raison, etat:'attente', ...(attendu ? {aboPrevId: attendu.id} : {}), s:{...valeurs}, v:{...valeurs}};
+      return {id: uid(), date: o.date, brut: o.libelle.trim(), montant: r2(o.montant), cle, suivi: !!suivi, incertain: !!o.signeIncertain, confiance, raison, etat:'attente', ...(attendu ? {aboPrevId: attendu.id} : {}), ...(mensualite ? {ppfPrevId: mensualite.id} : {}), s:{...valeurs}, v:{...valeurs}};
     });
 }
 
@@ -4717,7 +5049,7 @@ async function releveChangerColonne(el){
 // banque se trompe parfois de sens), et la catégorie doit exister pour ce type.
 function releveAppliquerType(l, type){
   l.v.type = type;
-  if(type!=='depense') l.v.abo = false;
+  if(type!=='depense'){ l.v.abo = false; l.v.ppf = false; }
   if(type==='ignorer') return;
   if((type==='depense') !== (l.montant<0)) l.montant = -l.montant;
   const cats = myCategories(type==='revenu' ? 'revenus' : 'depenses').map(c=>c.nom);
@@ -4793,13 +5125,31 @@ function releveApprendre(modele, l){
 async function releveValider(ids){
   const s = releveSession; if(!s) return;
   const me = currentUser(), modele = releveModele(true);
-  let ajoutees = 0, ignorees = 0, abos = 0;
+  let ajoutees = 0, ignorees = 0, abos = 0, ppfs = 0;
+  const bloquees = [];
   const parId = new Map(s.lignes.map(l=>[l.id, l]));
   ids.forEach(id=>{
     const l = parId.get(id); if(!l || l.etat!=='attente') return;
     const v = l.v, montant = r2(Math.abs(l.montant)), libelle = (v.libelle||'').trim() || releveJoli(l.cle), notes = (v.notes||'').trim();
+    delete l.erreur;
     const attendu = v.type==='depense' && v.abo && l.aboPrevId ? aboPrevisions().find(p=>p.id===l.aboPrevId) : null;
-    if(attendu){
+    if(v.type==='depense' && v.ppf){
+      // Paiement en plusieurs fois : il faut le montant total, et la mensualité ne doit pas le faire dépasser.
+      const total = r2(Math.abs(releveMontant(v.ppfTotal)) || 0);
+      const prev = l.ppfPrevId ? ppfPrevisions().find(p=>p.id===l.ppfPrevId) : null;
+      if(!(total>0)){ l.erreur = 'Indique le montant total à payer'; bloquees.push(l); return; }
+      const dep = prev ? ppfDepassement(prev.ppfId, montant, total) : (montant > total - PPF_EPS ? r2(montant - total) : 0);
+      if(dep || (!prev && montant >= total - PPF_EPS)){ l.erreur = dep ? ppfMessageDepassement(dep, total) : 'La mensualité égale le total : c’est un paiement en une fois'; bloquees.push(l); return; }
+      if(prev){
+        ppfFixerTotal(prev.ppfId, total);
+        ppfValider(prev, {libelle, categorie:v.categorie||'', montant, date:l.date, notes, source:'releve', cle:prev.cle||l.cle});
+      } else {
+        const d = {id:uid(), ownerId:me.id, libelle, categorie:v.categorie||'', montant, modePaiement:'Unique', date:l.date, notes, source:'releve', cle:l.cle};
+        state.depenses.push(d);
+        ppfDemarrer(d, total);
+      }
+      ajoutees++; ppfs++;
+    } else if(attendu){
       // Le prélèvement attendu est validé avec ce que dit le relevé (date, montant).
       aboValider(attendu, {libelle, categorie:v.categorie||'', montant, date:l.date, notes, source:'releve', cle:attendu.cle||l.cle});
       ajoutees++; abos++;
@@ -4815,6 +5165,18 @@ async function releveValider(ids){
     l.etat = v.type==='ignorer' ? 'ignoree' : 'validee';
     releveApprendre(modele, l);
   });
+  if(bloquees.length){
+    // Rien n'est validé sans les bons montants : la ligne reste en attente, avec la raison.
+    releveSauverSession();
+    if(ajoutees+ignorees===0){
+      releveFocusApres = null;
+      await render();
+      const l = bloquees[0];
+      document.querySelector(`.rl-row[data-rl-row="${l.id}"] [data-rl-champ="${(Number(releveMontant(l.v.ppfTotal))||0)>0 ? 'montant' : 'ppfTotal'}"]`)?.focus();
+      toast(bloquees.length>1 ? `${fmtCount(bloquees.length,'mensualité','mensualités')} à vérifier : montant total manquant ou dépassé` : l.erreur);
+      return;
+    }
+  }
   if(ajoutees+ignorees===0) return;
   // Le format du fichier est retenu dès la première ligne acceptée.
   if(s.sig && (s.csv || s.colonnes)){
@@ -4826,20 +5188,21 @@ async function releveValider(ids){
   releveSauverSession();
   await persist(); await render();
   const msg = ajoutees && ignorees ? `${ajoutees} ajoutée${ajoutees>1?'s':''}, ${ignorees} ignorée${ignorees>1?'s':''}` : ajoutees ? (ajoutees>1 ? `${ajoutees} opérations ajoutées` : 'Opération ajoutée') : (ignorees>1 ? `${ignorees} lignes ignorées` : 'Ligne ignorée');
-  const msgAbo = abos ? ` · ${fmtCount(abos, 'abonnement', 'abonnements')}` : '';
+  const msgAbo = (abos ? ` · ${fmtCount(abos, 'abonnement', 'abonnements')}` : '') + (ppfs ? ` · ${fmtCount(ppfs, 'mensualité', 'mensualités')}` : '')
+    + (bloquees.length ? ` · ${fmtCount(bloquees.length, 'mensualité à vérifier', 'mensualités à vérifier')}` : '');
   toast(majs ? `${msg}${msgAbo} · ${fmtCount(majs, 'autre ligne mise à jour', 'autres lignes mises à jour')}` : msg + msgAbo);
 }
 // Après chaque validation, les lignes encore en attente profitent de ce qui
 // vient d'être appris (« CARREFOUR » validé en Courses → les autres CARREFOUR
 // du relevé passent en Courses). Une ligne que l'utilisateur a déjà modifiée
 // garde ses choix, et une ligne déjà suivie ailleurs reste ignorée.
-const RELEVE_CHAMPS_SUGGERES = ['type','libelle','categorie','abo'];
+const RELEVE_CHAMPS_SUGGERES = ['type','libelle','categorie','abo','ppf'];
 function releveRafraichirAttente(s){
   const modele = releveModele(false);
   let n = 0;
   s.lignes.forEach(l=>{
     l.maj = false;
-    if(l.etat!=='attente' || l.suivi || l.aboPrevId) return;
+    if(l.etat!=='attente' || l.suivi || l.aboPrevId || l.ppfPrevId) return;
     if(RELEVE_CHAMPS_SUGGERES.some(k=>(l.v[k]||'')!==(l.s[k]||''))) return;
     const {cle, confiance, raison, ...valeurs} = releveSuggestion({libelle:l.brut, montant:l.montant, signeIncertain:l.incertain}, modele);
     const change = RELEVE_CHAMPS_SUGGERES.some(k=>(valeurs[k]||'')!==(l.s[k]||''));
@@ -4879,9 +5242,11 @@ function releveLigneHTML(l){
       <input class="rl-ctl rl-montant" data-rl-id="${l.id}" data-rl-champ="montant" value="${releveMontantSaisie(l.montant)}" inputmode="decimal" autocomplete="off" aria-label="Montant de ${nomLigne}, en euros" ${ign?'disabled':''}><span class="rl-amt-eur" aria-hidden="true">€</span>
     </div>
     ${ign ? '' : `<input class="rl-ctl rl-note" data-rl-id="${l.id}" data-rl-champ="notes" value="${attrEsc(l.v.notes||'')}" placeholder="Ajouter un commentaire…" aria-label="Commentaire sur ${nomLigne}" maxlength="200">`}
-    <div class="rl-meta"><span class="pill ${cls}">${lbl}</span>${l.confiance==='nouveau' && !l.suivi ? '' : `<span class="rl-raison">${esc(l.raison)}</span>`}</div>
+    <div class="rl-meta"><span class="pill ${cls}">${lbl}</span>${l.erreur ? `<span class="rl-raison rl-erreur" role="alert">${esc(l.erreur)}</span>` : l.confiance==='nouveau' && !l.suivi ? '' : `<span class="rl-raison">${esc(l.raison)}</span>`}</div>
     <div class="rl-actions">
-      ${l.v.type==='depense' ? `<button type="button" class="rl-abo" data-action="releve-abo" data-id="${l.id}" aria-pressed="${!!l.v.abo}" title="${l.aboPrevId ? 'Valide le prélèvement prévu' : 'Prévoit le même prélèvement le mois suivant'}">${icon('repeat')}Abonnement</button>` : ''}
+      ${l.v.type==='depense' ? `<button type="button" class="rl-abo" data-action="releve-abo" data-id="${l.id}" aria-pressed="${!!l.v.abo}" title="${l.aboPrevId ? 'Valide le prélèvement prévu' : 'Prévoit le même prélèvement le mois suivant'}">${icon('repeat')}Abonnement</button>
+      <button type="button" class="rl-abo rl-ppf" data-action="releve-ppf" data-id="${l.id}" aria-pressed="${!!l.v.ppf}" title="${l.ppfPrevId ? 'Valide la mensualité prévue' : 'Mensualité d’un paiement en plusieurs fois'}">${icon('calendar')}En plusieurs fois</button>
+      ${l.v.ppf ? `<span class="rl-ppf-total"><input class="rl-ctl" data-rl-id="${l.id}" data-rl-champ="ppfTotal" value="${attrEsc(l.v.ppfTotal||'')}" inputmode="decimal" autocomplete="off" placeholder="Total" aria-label="Montant total à payer pour ${nomLigne}, en euros"><span aria-hidden="true">€</span></span>` : ''}` : ''}
       <button class="btn btn-ghost btn-sm" data-action="releve-valider" data-id="${l.id}">${icon('check')}${ign?'Confirmer':'Valider'}</button>
       ${ign ? '' : `<button class="icon-btn del" data-action="releve-ignorer" data-id="${l.id}" aria-label="Ne pas importer ${nomLigne}">${icon('x')}</button>`}
     </div>
@@ -5634,8 +5999,8 @@ function renderNotifPanel(){
   });
   aboAlertesNonVues().forEach(a=>{
     items.push(`<div class="notif-item">
-      <div class="avatar" style="background:var(--raised);color:var(--text);width:32px;height:32px;" aria-hidden="true">${icon(a.type==='prix' ? 'repeat' : 'x')}</div>
-      <div class="info"><div class="name">${a.type==='prix' ? 'Changement de prix' : 'Abonnement retiré'}</div><div class="meta">${esc(aboAlerteTexte(a))}</div></div>
+      <div class="avatar" style="background:var(--raised);color:var(--text);width:32px;height:32px;" aria-hidden="true">${icon({prix:'repeat','ppf-termine':'check','ppf-retard':'clock'}[a.type] || 'x')}</div>
+      <div class="info"><div class="name">${aboAlerteTitre(a)}</div><div class="meta">${esc(aboAlerteTexte(a))}</div></div>
       <button class="icon-btn" data-action="abo-alerte-vue" data-id="${a.id}" aria-label="Marquer comme lu">${icon('check')}</button>
     </div>`);
   });
