@@ -99,8 +99,28 @@ try {
     await page.dblclick('#view .poste[data-k="cat:Autres"]');
     await page.waitForTimeout(600);
     const autres = await page.$$eval('table[data-name="lignes analysées"] tbody tr td:nth-child(2)', t=>t.map(x=>x.innerText.trim()));
-    ok(autres.length>0 && autres.every(c=>!postes.slice(0,-1).includes(c)), `« Autres » : seulement les petites catégories (${new Set(autres).size})`);
+    ok(autres.length>0 && autres.every(c=>!postes.includes(c)), `« Autres » : seulement les petites catégories (${new Set(autres).size})`);
   }
+  // Deux catégories de même couleur forment un seul poste : le double-clic les reprend toutes les deux.
+  await gotoView(page, '#dashboard/2026-09');
+  const duo = await page.evaluate(async ()=>{
+    const pal = catPalette(2026);
+    const [a, b] = pal.groupes.filter(g=>g!=='Autres');
+    const me = currentUser().id;
+    [a, b].forEach(nom=>{
+      let c = state.categoriesDepenses.find(x=>x.ownerId===me && x.nom===nom);
+      if(!c){ c = {id:uid(), ownerId:me, nom}; state.categoriesDepenses.push(c); }
+      c.couleur = '#3b82f6';
+    });
+    await render();
+    return [a, b];
+  });
+  await page.waitForTimeout(400);
+  await page.dblclick(`#view .poste[data-k="cat:${duo.join(' + ')}"]`);
+  await page.waitForTimeout(600);
+  const duoCats = new Set(await page.$$eval('table[data-name="lignes analysées"] tbody tr td:nth-child(2)', t=>t.map(x=>x.innerText.trim())));
+  ok(duoCats.size===2 && duo.every(c=>duoCats.has(c)), `poste « ${duo.join(' + ')} » : les lignes des deux catégories (${[...duoCats]})`);
+
   ok(errors.length===0, `erreurs console\n    ${errors.join('\n    ')}`);
 } finally {
   await browser.close();
