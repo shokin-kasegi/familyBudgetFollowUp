@@ -259,7 +259,7 @@ try{
   {
     const deps = await mesDeps();
     const serie = deps.filter(d=>d.aboId===music.aboId);
-    ok(serie.length===3 && serie.some(d=>!d.prevu && d.date==='2027-02-06' && d.montant===11.99) && serie.some(d=>d.prevu && d.date==='2027-03-06' && d.libelle==='Apple Music'), `Apple Music : février validé, mars prévu (${JSON.stringify(serie.map(d=>[d.date,d.montant,!!d.prevu]))})`);
+    ok(serie.length===3 && serie.some(d=>!d.prevu && d.date==='2027-02-06' && d.montant===11.99 && d.libelle==='Apple Music') && serie.some(d=>d.prevu && d.date==='2027-03-06' && d.libelle==='Apple Music'), `Apple Music : février validé, mars prévu (${JSON.stringify(serie.map(d=>[d.date,d.montant,!!d.prevu]))})`);
     ok(!deps.some(d=>d.prevu && d.aboId===music.aboId && d.date==='2027-02-06'), 'la prévision de février d’Apple Music est remplacée, pas doublée');
     ok(deps.some(d=>d.prevu && d.libelle==='Apple iCloud' && d.date==='2027-02-04'), 'Apple iCloud reste prévu en février');
     ok((await store()).abonnementsAlertes.some(a=>a.type==='prix' && a.aboId===music.aboId && a.nouveau===11.99), 'changement de prix d’Apple Music signalé');

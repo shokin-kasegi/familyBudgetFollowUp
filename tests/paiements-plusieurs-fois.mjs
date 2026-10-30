@@ -308,6 +308,71 @@ try{
     ok(deps.some(d=>d.libelle==='Vélo' && d.prevu && d.date==='2027-05-02') && deps.some(d=>d.libelle==='Deezer' && d.prevu && d.date==='2027-05-01'), 'les prévisions de mai restent en attente, non validées');
   }
 
+  console.log('\n— Deux paiements chez le même commerçant');
+  const ajouterPpf = async (date, libelle, montant, {total, serie}={}) => {
+    await page.click('[data-action="add-depense"]');
+    await page.fill('#f_date', date);
+    await page.fill('#f_libelle', libelle);
+    await page.fill('#f_montant', montant);
+    await page.check('#f_plusieursFois');
+    if(serie!==undefined && await page.$('#f_ppfSerie')) await page.selectOption('#f_ppfSerie', serie);
+    if(total) await page.fill('#f_montantTotal', total);
+  };
+  await ouvrir('2027-04-10', '#depenses/2027-04');
+  await ajouterPpf('2027-04-04', 'Fnac TV', '100', {total:'600', serie:''});
+  await soumettre();
+  await ajouterPpf('2027-04-06', 'Fnac PC', '150', {total:'900', serie:''});
+  {
+    const opts = await page.$$eval('#f_ppfSerie option', o=>o.map(x=>x.textContent));
+    ok(opts[0]==='Nouveau paiement' && opts.some(t=>/^Fnac TV · 100,00\s€ · reste 500,00\s€$/.test(t)), `formulaire : choix « Nouveau paiement » ou un paiement en cours (${opts})`);
+  }
+  await soumettre();
+  const tv = (await ppfDeps('Fnac TV'))[0].ppfId, pc = (await ppfDeps('Fnac PC'))[0].ppfId;
+  ok(tv && pc && tv!==pc, 'deux paiements Fnac distincts');
+
+  // Mai : la mensualité de la TV est saisie à la main, rattachée au bon paiement.
+  await ouvrir('2027-05-08', '#depenses/2027-05');
+  await ajouterPpf('2027-05-04', 'Fnac', '100', {serie:tv});
+  ok(await page.isHidden('#f_montantTotal'), 'paiement choisi : le montant total n’est pas redemandé');
+  await page.fill('#f_montant', '600');
+  await page.click('#modal-form button[type=submit]');
+  await page.waitForTimeout(300);
+  ok(await page.$('#modal-root .modal-overlay') && /dépasse le montant total/.test(await page.evaluate(()=>document.getElementById('modal-root').innerText)), 'une mensualité qui ferait dépasser le total du paiement choisi est refusée');
+  await page.fill('#f_montant', '100');
+  await soumettre();
+  {
+    const serie = (await mesDeps()).filter(d=>d.ppfId===tv);
+    ok(serie.filter(d=>!d.prevu).length===2 && serie.some(d=>!d.prevu && d.date==='2027-05-04' && d.ppfTotal===600 && d.libelle==='Fnac TV'), `Fnac TV : mai validé (${JSON.stringify(serie.map(d=>[d.date,d.montant,!!d.prevu]))})`);
+    ok(serie.filter(d=>d.prevu).length===1 && serie.some(d=>d.prevu && d.date==='2027-06-04' && d.libelle==='Fnac TV'), 'Fnac TV : juin prévu, sans doublon en mai ; la mensualité prend le nom du paiement');
+    ok((await mesDeps()).some(d=>d.prevu && d.ppfId===pc && d.date==='2027-05-06'), 'Fnac PC reste prévu en mai');
+  }
+  // Import : la mensualité du PC, au libellé générique, est rattachée à la main.
+  await aller('#releve');
+  if(await page.$('[data-action="releve-fermer"]')){ await page.click('[data-action="releve-fermer"]'); await page.waitForTimeout(250); if(await page.$('#del-yes')) await page.click('#del-yes'); await page.waitForTimeout(250); }
+  await page.setInputFiles('#releve-file', {name:'releve-mai.csv', mimeType:'text/csv', buffer:Buffer.from(['Date;Libellé;Montant', '06/05/2027;PRLV SEPA ONEY BANQUE;-150,00'].join('\n'))});
+  await page.waitForSelector('.rl-row');
+  await page.waitForTimeout(250);
+  {
+    const id = await page.$eval('.rl-row', r=>r.dataset.rlRow);
+    const row = `.rl-row[data-rl-row="${id}"]`;
+    ok(!(await page.$(`${row} .rl-ppfSerie`)), 'import : pas de choix tant que la ligne n’est pas en plusieurs fois');
+    await page.click(`${row} [data-action="releve-ppf"]`);
+    await page.waitForTimeout(200);
+    await page.click(`${row} .rl-ppfSerie [data-cat-toggle]`);
+    const choix = await page.$$eval(`${row} .rl-ppfSerie [data-rl-pick]`, b=>b.map(x=>x.textContent));
+    ok(choix[0]==='Nouveau paiement' && choix.some(t=>/^Fnac PC · 150,00/.test(t)) && choix.some(t=>/^Fnac TV · 100,00/.test(t)), `import : menu des paiements en cours (${choix})`);
+    await shot('import-choix-ppf');
+    await page.click(`${row} .rl-ppfSerie [data-rl-pick="${pc}"]`);
+    await page.waitForTimeout(250);
+    ok(await page.$eval(`${row} [data-rl-champ="libelle"]`, i=>i.value)==='Fnac PC', 'la ligne prend le nom du paiement choisi');
+    ok(await page.$eval(`${row} [data-rl-champ="ppfTotal"]`, i=>i.value)==='900,00', 'et son montant total');
+    await page.click(`${row} [data-action="releve-valider"]`);
+    await page.waitForTimeout(400);
+    const serie = (await mesDeps()).filter(d=>d.ppfId===pc);
+    ok(serie.filter(d=>!d.prevu).length===2 && serie.some(d=>!d.prevu && d.date==='2027-05-06' && d.source==='releve') && serie.some(d=>d.prevu && d.date==='2027-06-06') && serie.length===3, `Fnac PC : mai validé par l’import, juin prévu (${JSON.stringify(serie.map(d=>[d.date,d.montant,!!d.prevu]))})`);
+    ok((await mesDeps()).filter(d=>d.ppfId===tv && !d.prevu).length===2, 'Fnac TV n’est pas touché');
+  }
+
   console.log('\n— 390 px');
   await page.setViewportSize({width:390, height:844});
   await aller('#echeancier');
