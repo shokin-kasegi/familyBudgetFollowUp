@@ -1133,6 +1133,8 @@ function defaultState(){
     selectedYear: now.getFullYear(),
     analyseYear: now.getFullYear(),
     analyseTerm: '',
+    analyseCats: [],
+    analyseCatLabel: '',
     tableFilters: {},
     chartFilters: {},
     revenusExceptionnels: [],
@@ -1550,8 +1552,17 @@ function analyseMatchingEntries(term){
   if(!t) return [];
   return mesSorties().filter(d=>(d.libelle||'').toLowerCase().includes(t));
 }
-function analyseMonthlyTotals(term, year){
-  const matches = analyseMatchingEntries(term);
+// Recherche par catégorie (double-clic sur un poste du tableau de bord) :
+// state.analyseCats liste les catégories retenues (plusieurs pour « Autres »),
+// state.analyseCatLabel le nom affiché. Vide = recherche par libellé.
+function analyseCatsActives(){ return Array.isArray(state.analyseCats) && state.analyseCats.length ? state.analyseCats : null; }
+function analyseCourantes(){
+  const cats = analyseCatsActives();
+  if(!cats) return analyseMatchingEntries(state.analyseTerm);
+  const set = new Set(cats);
+  return mesSorties().filter(d=>set.has(catLabel(d)));
+}
+function analyseMonthlyTotals(term, year, matches = analyseMatchingEntries(term)){
   const months = [];
   for(let m=1;m<=12;m++){
     const key = monthKey(year,m);
@@ -2662,7 +2673,7 @@ function renderDashboard(){
     const nb = nbDe(g);
     const sub = `${pctFmt(d.totalDepenses>0 ? g.value/d.totalDepenses : 0)} · ${g.label===CAT_AUTRES ? fmtCount(g.cats,'catégorie','catégories') : fmtCount(nb,'dépense','dépenses')}`;
     return `
-    <button class="poste" data-action="focus-poste" data-k="${attrEsc(kOf(g))}" aria-pressed="${dashFocusPoste===kOf(g)}">
+    <button class="poste" data-action="focus-poste" data-k="${attrEsc(kOf(g))}" aria-pressed="${dashFocusPoste===kOf(g)}" title="Double-clic : voir les lignes dans Analyse">
       <span class="lbl">${catDot(pal.couleur(g.label))}<span>${esc(g.label)}</span></span>
       <span class="val" data-tween="${attrEsc('poste:'+kOf(g))}" data-v="${g.value}">${fmtEUR(motionOff()||!tweenValues.has('poste:'+kOf(g)) ? g.value : tweenValues.get('poste:'+kOf(g)))}</span>
       <span class="sub">${sub}</span>
@@ -3564,6 +3575,26 @@ document.addEventListener('keydown', (e)=>{
   if(panelOk && (colFilterOpen || chartFilterOpen)){ e.preventDefault(); panelOk.click(); }
 });
 
+// Tableau de bord : un double-clic sur un poste (ou son segment) ouvre l'Analyse
+// filtrée sur cette catégorie, avec toutes ses lignes de l'année.
+document.addEventListener('dblclick', async (e)=>{
+  if(currentView!=='dashboard') return;
+  const el = e.target.closest('#view .poste[data-k^="cat:"], #view .flow .seg[data-k^="cat:"]');
+  if(!el) return;
+  e.preventDefault();
+  window.getSelection?.()?.removeAllRanges();
+  const label = el.dataset.k.slice(4);
+  const year = dashYear();
+  const pal = catPalette(year);
+  const cats = label===CAT_AUTRES
+    ? [...new Set(mesSorties().filter(d=>d.date && d.date.slice(0,4)===String(year)).map(catLabel))].filter(c=>pal.groupeDe(c)===CAT_AUTRES)
+    : [label];
+  state.analyseCats = cats; state.analyseCatLabel = label; state.analyseYear = year;
+  dashFocusPoste = null;
+  persist();
+  await navigateTo('analyse');
+});
+
 // Le lien « Aller au contenu » déplace le focus sans toucher à l'adresse (qui porte la vue courante).
 document.addEventListener('click', (e)=>{
   if(!e.target.closest('.skip-link')) return;
@@ -3926,8 +3957,9 @@ async function handleAction(action, id, el){
 
     case 'run-analyse': {
       const val = document.getElementById('analyse-search').value;
-      state.analyseTerm = val; await persist(); await render(); break; }
-    case 'analyse-pick': state.analyseTerm = el.dataset.term; await persist(); await render(); break;
+      state.analyseTerm = val; state.analyseCats = []; await persist(); await render(); break; }
+    case 'analyse-pick': state.analyseTerm = el.dataset.term; state.analyseCats = []; await persist(); await render(); break;
+    case 'analyse-clear-cat': state.analyseCats = []; state.analyseCatLabel = ''; await persist(); await render(); break;
 
     /* Tableau de bord */
     case 'focus-poste': {
@@ -4540,13 +4572,18 @@ function analyseTopTerms(year){
     .filter(x=>x.total>0).sort((a,b)=>b.total-a.total).slice(0,8);
 }
 function renderAnalyse(){
-  const term = state.analyseTerm || '';
+  const cats = analyseCatsActives();
+  const term = cats ? (state.analyseCatLabel || cats.join(', ')) : (state.analyseTerm || '');
   const year = state.analyseYear || new Date().getFullYear();
   const suggestions = analyseSearchableTerms();
   const hasResults = term.trim().length>0;
-  const months = hasResults ? analyseMonthlyTotals(term, year) : [];
+  const matches = hasResults ? analyseCourantes() : [];
+  const months = hasResults ? analyseMonthlyTotals(term, year, matches) : [];
   const yearTotal = sumR2(months, m=>m.total);
-  const prevTotal = hasResults ? sumR2(analyseMonthlyTotals(term, year-1), m=>m.total) : 0;
+  const prevTotal = hasResults ? sumR2(analyseMonthlyTotals(term, year-1, matches), m=>m.total) : 0;
+  // Les lignes de l'année qui composent le total, de la plus récente à la plus ancienne.
+  const lignes = matches.filter(d=>moisDe(d.date).slice(0,4)===String(year))
+    .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
   const top = analyseTopTerms(year);
   const k = 'achats';
   const evo = !hasResults ? '' : prevTotal>0
@@ -4558,11 +4595,12 @@ function renderAnalyse(){
     <div class="card mb16">
       <div class="field" style="margin-bottom:12px;"><label for="analyse-search">Poste à analyser</label>
         <div class="kv-input-row">
-          <input id="analyse-search" type="search" list="analyse-suggestions" placeholder="Courses, restaurant…" value="${attrEsc(term)}" enterkeyhint="search" autocomplete="off">
+          <input id="analyse-search" type="search" list="analyse-suggestions" placeholder="Courses, restaurant…" value="${cats ? '' : attrEsc(term)}" enterkeyhint="search" autocomplete="off">
           <button class="btn btn-ghost" data-action="run-analyse">${icon('search')}Chercher</button>
         </div>
         <datalist id="analyse-suggestions">${suggestions.map(x=>`<option value="${attrEsc(x)}">`).join('')}</datalist>
       </div>
+      ${cats ? `<div class="chips" style="margin:0 0 12px;"><button class="chip" data-action="analyse-clear-cat" aria-label="Retirer le filtre catégorie ${attrEsc(term)}"><span class="t">Catégorie : ${esc(term)}</span>${icon('x').replace('<svg','<svg style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2"')}</button></div>` : ''}
       ${top.length ? `<div class="field-note" style="margin:0 0 8px;">Les plus coûteux en ${year}</div>
       <div class="chips">${top.map(x=>`<button class="chip" data-action="analyse-pick" data-term="${attrEsc(x.t)}">${posteDot(k)}<span class="t">${esc(x.t)}</span><span class="amt">${fmtEUR0(x.total)}</span></button>`).join('')}</div>` : `<div class="empty-line">Aucune dépense saisie en ${year} pour l’instant.</div>`}
     </div>
@@ -4571,7 +4609,7 @@ function renderAnalyse(){
     <section class="card hero mb16" aria-labelledby="ana-l">
       <div class="hero-top">
         <div>
-          <div class="hero-label" id="ana-l">« ${esc(term)} » en ${year}</div>
+          <div class="hero-label" id="ana-l">${cats ? `Catégorie ${esc(term)}` : `« ${esc(term)} »`} en ${year}</div>
           <div class="big fig" style="color:${POSTE_BY_KEY[k].color}" data-tween="ana:${attrEsc(term)}:${year}" data-fmt="big" data-v="${yearTotal}">${bigFmt(yearTotal)}</div>
           <div class="hero-of">${evo}</div>
         </div>
@@ -4583,6 +4621,15 @@ function renderAnalyse(){
       <div class="chart-head"><h2 id="ana-h">Mois par mois</h2><span class="side-note">${posteDot(k)} ${POSTE_BY_KEY[k].label}</span></div>
       <div class="ana-host" data-term="${attrEsc(term)}" data-year="${year}" data-k="${k}"></div>
     </section>
+
+    <div class="card mb16">
+      <div class="section-head"><h2>${posteDot(k)}Lignes ${year}</h2></div>
+      ${lignes.length ? `<div class="table-wrap"><table class="rtable" data-total-col="2" data-name="lignes analysées">
+        <thead><tr><th>Libellé</th><th>Catégorie</th><th class="num">Montant</th></tr></thead>
+        <tbody>${lignes.map(x=>`<tr${isFutureMonth(moisDe(x.date))?' class="is-future"':''}><td><span class="cell-main">${dash(x.libelle)}</span>${x.date?`<span class="cell-sub">${fmtDate(x.date)}</span>`:''}</td><td class="sub first-sub">${dash(x.categorie)}</td><td class="num key" data-v="${r2(x.montant)}">${fmtEUR(x.montant)}</td></tr>`).join('')}</tbody>
+        <tfoot><tr><td>${fmtCount(lignes.length,'ligne','lignes')}</td><td></td><td class="num key" data-v="${sumR2(lignes,x=>x.montant)}">${fmtEUR(sumR2(lignes,x=>x.montant))}</td></tr></tfoot>
+      </table></div>` : `<div class="empty-line">Aucune ligne en ${year}.</div>`}
+    </div>
 
     <div class="card narrow">
       <div class="table-wrap"><table class="rtable" data-total-col="1" data-name="analyse">
@@ -4598,7 +4645,7 @@ function renderAnalyse(){
 function drawAnalyseChart(){
   const host = document.querySelector('#view .ana-host');
   if(!host) return;
-  const months = analyseMonthlyTotals(host.dataset.term, Number(host.dataset.year));
+  const months = analyseMonthlyTotals(host.dataset.term, Number(host.dataset.year), analyseCourantes());
   const color = POSTE_BY_KEY[host.dataset.k].color;
   const narrow = host.clientWidth < 560;
   const W = narrow ? Math.max(300, host.clientWidth) : 1100, H = narrow ? 220 : 260, padL = narrow ? 40 : 56, padB = 28, padT = 10, plotH = H-padB-padT, plotW = W-padL;
