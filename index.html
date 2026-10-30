@@ -338,6 +338,14 @@ tr.is-current td{background:var(--raised);}
 tr.is-future td{color:var(--faint);}
 tr.is-paused td{opacity:.5;}
 .cell-main{font-weight:500;}
+.grp-toggle{display:inline-flex;align-items:center;gap:6px;background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;cursor:pointer;text-align:left;}
+.grp-chev{display:inline-flex;width:16px;height:16px;color:var(--faint);transition:transform .15s ease;}
+.grp-chev svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;}
+.grp-toggle:hover .grp-chev{color:var(--text);}
+.grp-row.is-open .grp-chev{transform:rotate(90deg);}
+.grp-row .cell-sub{padding-left:22px;}
+.grp-child td:first-child{padding-left:22px;}
+.grp-child .cell-main{font-weight:400;color:var(--muted);}
 .cell-sub{display:block;font-size:13px;margin-top:2px;white-space:normal;}
 .cell-bar{display:block;height:3px;border-radius:2px;background:var(--raised);margin-top:6px;max-width:220px;overflow:hidden;}
 .cell-bar > span{display:block;height:100%;border-radius:2px;}
@@ -374,6 +382,7 @@ tfoot td{border-top:1px solid var(--line-strong);font-weight:600;color:var(--tex
   table.rtable td{display:block;border:none;padding:0;white-space:normal;}
   table.rtable td:empty{display:none;}
   table.rtable td:first-child{flex:0 1 60%;min-width:0;font-size:15px;}
+  table.rtable tr.grp-child td:first-child{padding-left:22px;}
   /* Le montant clé remplit le reste de la première ligne : les autres champs passent dessous. */
   table.rtable td.key{flex:1 0 calc(40% - 6px);margin-left:auto;text-align:right;font-weight:600;order:1;}
   table.rtable td.sub{order:2;font-size:13px;color:var(--faint);}
@@ -3192,6 +3201,7 @@ function compteOptions(){ return jointPartner() ? COMPTES : ['Compte Perso']; }
    mémoire (colFilterOpen/colFilterPending), pour ne synchroniser qu'à la
    validation (Annuler ne doit rien changer, comme dans Excel). */
 let colFilterOpen = null;      // { table, col }
+const depGroupsOpen = new Set(); // libellés (normalisés) dont le détail est déplié dans « Achats et échéanciers »
 let colFilterPending = null;   // Set des valeurs cochées, en cours d'édition
 let colFilterSearch = '';      // texte de recherche dans le panneau ouvert
 
@@ -3282,6 +3292,22 @@ const DEP_COLUMNS = {
   paiement:  { label:'Paiement',  type:'text',   get:d=>d.modePaiement==='Echelonne'?'Échelonné':(d.modePaiement==='Previsionnelle'?'Prévisionnelle':'En une fois') },
   montant:   { label:'Ce mois',   type:'number', get:d=>r2(depenseMensualiteDuMois(d, state.selectedMonth)) },
 };
+function depGroupKey(d){ return String(d.libelle||'').trim().toLowerCase(); }
+// Regroupe une liste (déjà filtrée et triée) par libellé, en gardant l'ordre de la
+// première occurrence ; si le tri porte sur le montant, ce sont les totaux qui comptent.
+function depGroups(list, key){
+  const map = new Map();
+  list.forEach(x=>{
+    const k = depGroupKey(x);
+    if(!map.has(k)) map.set(k, {key:k, items:[], total:0});
+    map.get(k).items.push(x);
+  });
+  const groups = [...map.values()];
+  groups.forEach(g=>{ g.total = sumR2(g.items, x=>depenseMensualiteDuMois(x,key)); });
+  const f = tableFilterState('depenses');
+  if(f.sortCol==='montant') groups.sort((a,b)=> f.sortDir==='asc' ? a.total-b.total : b.total-a.total);
+  return groups;
+}
 const FREQ_UNIT = {Annuel:'an', Trimestriel:'trimestre', Hebdomadaire:'semaine', Journalier:'jour'};
 function renderDepenses(){
   const key = state.selectedMonth;
@@ -3301,6 +3327,24 @@ function renderDepenses(){
   const finding = biggest ? `Plus grosse dépense du mois : ${esc(biggest.libelle)}, <strong>${fmtEUR(depenseMensualiteDuMois(biggest,key))}</strong>.` : `Aucun achat ni échéance en ${monthLabel(key)}.`;
   const actionsFor = d0 => `<td class="row-actions"><button class="icon-btn" data-action="edit-depense" data-id="${d0.id}" aria-label="Modifier ${attrEsc(d0.libelle)}">${icon('edit')}</button><button class="icon-btn del" data-action="del-depense" data-id="${d0.id}" aria-label="Supprimer ${attrEsc(d0.libelle)}">${icon('trash')}</button></td>`;
   const activeRec = recurrentes.filter(x=>x.statut==='Actif');
+  // Les dépenses portant le même libellé sont regroupées sur une ligne (total du mois) ;
+  // un clic sur le libellé déplie le détail.
+  const depenseRowHTML = (x, child=false) => {
+    const ech = x.modePaiement==='Echelonne';
+    const mois = r2(depenseMensualiteDuMois(x,key));
+    let sub = '';
+    if(ech){
+      const n = echeanceMoisEchus(x, key).length, nb = echeanceNbVersementsPrevus(x);
+      sub = `<span class="cell-sub">${fmtEUR(x.montant)} en ${nb} fois · ${n}/${nb}</span><span class="cell-bar"><span style="width:${Math.min(n/nb,1)*100}%;background:var(--c-echeances)"></span></span>`;
+    } else if(child && x.date){
+      sub = `<span class="cell-sub">${fmtDate(x.date)}</span>`;
+    }
+    return `<tr${child?' class="grp-child"':''}>
+          <td><span class="cell-main">${dash(x.libelle)}</span>${sub}</td><td class="sub first-sub">${dash(x.categorie)}</td><td class="sub">${dash(x.compte||'Compte Perso')}</td>
+          <td class="num key" data-v="${mois}">${fmtEUR(mois)}</td>
+          ${actionsFor(x)}
+        </tr>`;
+  };
   return `
     ${pageHeadHTML({title:'Dépenses', color:VIEW_COLORS.depenses, finding, stepper:monthStepperHTML(key,'dashboard'),
       action:`<button class="btn btn-primary" data-action="add-depense">${icon('plus')}Ajouter une dépense</button>`})}
@@ -3366,19 +3410,16 @@ function renderDepenses(){
           ${colFilterHeaderHTML('depenses', DEP_COLUMNS, 'montant', filtrableArr)}
           <th><span class="sr-only">Actions</span></th>
         </tr></thead>
-        <tbody>${list.map(x=>{
-          const ech = x.modePaiement==='Echelonne';
-          const mois = r2(depenseMensualiteDuMois(x,key));
-          let sub = '';
-          if(ech){
-            const n = echeanceMoisEchus(x, key).length, nb = echeanceNbVersementsPrevus(x);
-            sub = `<span class="cell-sub">${fmtEUR(x.montant)} en ${nb} fois · ${n}/${nb}</span><span class="cell-bar"><span style="width:${Math.min(n/nb,1)*100}%;background:var(--c-echeances)"></span></span>`;
-          }
-          return `<tr>
-          <td><span class="cell-main">${dash(x.libelle)}</span>${sub}</td><td class="sub first-sub">${dash(x.categorie)}</td><td class="sub">${dash(x.compte||'Compte Perso')}</td>
-          <td class="num key" data-v="${mois}">${fmtEUR(mois)}</td>
-          ${actionsFor(x)}
-        </tr>`;}).join('')}</tbody>
+        <tbody>${depGroups(list, key).map(g=>{
+          if(g.items.length===1) return depenseRowHTML(g.items[0]);
+          const open = depGroupsOpen.has(g.key);
+          const same = get => { const v = new Set(g.items.map(get)); return v.size===1 ? dash([...v][0]) : '<span class="nil">Plusieurs</span>'; };
+          return `<tr class="grp-row${open?' is-open':''}">
+          <td><button class="grp-toggle" data-action="toggle-dep-group" data-group="${attrEsc(g.key)}" aria-expanded="${open}"><span class="grp-chev" aria-hidden="true">${icon('chevR')}</span><span class="cell-main">${dash(g.items[0].libelle)}</span></button><span class="cell-sub">${g.items.length} dépenses</span></td>
+          <td class="sub first-sub">${same(x=>x.categorie)}</td><td class="sub">${same(x=>x.compte||'Compte Perso')}</td>
+          <td class="num key" data-v="${g.total}">${fmtEUR(g.total)}</td>
+          <td class="row-actions"></td>
+        </tr>${open ? g.items.map(x=>depenseRowHTML(x, true)).join('') : ''}`;}).join('')}</tbody>
         <tfoot><tr><td>${tableFilterActive('depenses')?'Total (filtré)':'Total'} ${monthLabel(key)}</td><td></td><td></td><td class="num key" data-v="${sumR2(list,x=>depenseMensualiteDuMois(x,key))}">${fmtEUR(sumR2(list,x=>depenseMensualiteDuMois(x,key)))}</td><td></td></tr></tfoot>
       </table></div>`)}
     </div>
@@ -4354,6 +4395,7 @@ async function handleAction(action, id, el){
       state.depenses = state.depenses.filter(x=>x.id!==id);
       state.echVersements = state.echVersements.filter(v=>v.echeanceId!==id);
       await persist(); await render(); toast('Dépense supprimée'); }); break; }
+    case 'toggle-dep-group': { const g = el.dataset.group; if(depGroupsOpen.has(g)) depGroupsOpen.delete(g); else depGroupsOpen.add(g); await render(); break; }
     case 'toggle-depense-statut': { const item=find(mine(state.depenses)); item.statut = item.statut==='Actif'?'Inactif':'Actif'; await persist(); await render(); toast('Statut mis à jour'); break; }
     case 'goto-depenses': currentView = 'depenses'; await render(); break;
     case 'switch-space': currentSpace = el.dataset.space; currentView = defaultViewForSpace(currentSpace); await render(); break;
