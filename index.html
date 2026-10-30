@@ -4695,7 +4695,7 @@ async function handleAction(action, id, el){
         await render(); toast('GitHub connecté');
       }catch(e){ toast('Connexion impossible — vérifie le jeton'); }
       break; }
-    case 'gh-sync-now': { const ok = await ghPull(); await ghPush(); await render(); toast(ok!==false ? 'Synchronisé' : 'Synchronisé (nouveau fichier créé)'); break; }
+    case 'gh-sync-now': { await ghPull(); await ghPush(); await render(); toast(ghLastError || 'Synchronisé'); break; }
     case 'export-data': exportData(); break;
     case 'import-data': document.getElementById('import-file-input').click(); break;
 
@@ -6743,13 +6743,59 @@ function ghConfig(){
 function ghSaveToken(token){ localStorage.setItem('github_sync_config', JSON.stringify({token})); }
 function ghClearConfig(){ localStorage.removeItem('github_sync_config'); }
 function ghConfigured(){ return !!ghConfig().token; }
-let ghLastSync = null, ghSha = null, ghAuthSha = null, ghSocialSha = null;
+let ghLastSync = null, ghLastError = null, ghErrorToastAt = 0, ghSha = null, ghAuthSha = null, ghSocialSha = null;
+// Synchro réussie / ratée : l'échec n'est plus silencieux (avant, chaque appareil
+// gardait ses données dans son coin sans que personne ne le sache).
+function ghOk(){ ghLastSync = new Date(); ghLastError = null; }
+function ghFail(where, e){
+  console.error('GitHub sync error ('+where+')', e);
+  const status = Number(String(e && e.message || '').replace(/^HTTP /,''));
+  ghLastError = status===401 ? 'Jeton GitHub expiré ou révoqué : reconnecte la synchronisation dans Paramètres.'
+    : status===403 ? 'Accès refusé par GitHub (jeton sans droit d\u2019écriture, ou limite d\u2019appels atteinte).'
+    : !navigator.onLine ? 'Hors connexion : les saisies seront envoyées au retour du réseau.'
+    : 'Synchronisation impossible ('+(e && e.message || 'erreur inconnue')+').';
+  if(Date.now() - ghErrorToastAt > 60000){ ghErrorToastAt = Date.now(); toast(ghLastError); }
+}
 
-function b64EncodeUnicode(str){ return btoa(String.fromCharCode(...new TextEncoder().encode(str))); }
-function b64DecodeUnicode(str){ return new TextDecoder().decode(Uint8Array.from(atob(str.replace(/\n/g,'')), c=>c.charCodeAt(0))); }
+// Par tranches : String.fromCharCode(...octets) d'un seul coup dépasse la pile
+// dès ~125 Ko sur Chrome (moins sur Safari iOS), et tout envoi échouait alors.
+function b64EncodeUnicode(str){
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  for(let i=0; i<bytes.length; i+=0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i+0x8000));
+  return btoa(bin);
+}
+function b64DecodeUnicode(str){
+  const bin = atob(str.replace(/\s/g,''));
+  const bytes = new Uint8Array(bin.length);
+  for(let i=0; i<bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
 
 function ghHeaders(token){ return { 'Authorization':'Bearer '+token, 'Accept':'application/vnd.github+json', 'X-GitHub-Api-Version':'2022-11-28' }; }
 function ghUrl(cfg, path){ return `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${path}`; }
+/* Lit un fichier du dépôt : {sha, text}, ou null s'il n'existe pas. Au-delà de
+   1 Mo, l'API « contents » renvoie un contenu vide : on le relit alors par son
+   blob (jusqu'à 100 Mo). Le paramètre t évite toute copie en cache. */
+async function ghGetFile(cfg, path){
+  const res = await fetch(ghUrl(cfg, path)+'?t='+Date.now(), { headers: ghHeaders(cfg.token), cache:'no-store' });
+  if(res.status===404) return null;
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const data = await res.json();
+  let content = data.content || '';
+  if(!content && data.size>0){
+    const blob = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/git/blobs/${data.sha}?t=${Date.now()}`, { headers: ghHeaders(cfg.token), cache:'no-store' });
+    if(!blob.ok) throw new Error('HTTP '+blob.status);
+    content = (await blob.json()).content || '';
+  }
+  return { sha:data.sha, text: b64DecodeUnicode(content) };
+}
+// JSON compact : un fichier deux fois plus petit, donc des envois plus rapides.
+function ghBody(message, obj, sha){
+  const body = { message, content: b64EncodeUnicode(JSON.stringify(obj)) };
+  if(sha) body.sha = sha;
+  return JSON.stringify(body);
+}
 
 async function ghPull(){
   const a = await ghPullAuth();
@@ -6810,12 +6856,10 @@ async function renderAfterRemoteChange(){
   if(currentUser()) await render();
 }
 async function ghFetchBudget(cfg){
-  const res = await fetch(ghUrl(cfg, cfg.path||'data.json'), { headers: ghHeaders(cfg.token), cache:'no-store' });
-  if(res.status===404) return { sha:null, remote:null };
-  if(!res.ok) throw new Error('HTTP '+res.status);
-  const data = await res.json();
-  const remote = JSON.parse(b64DecodeUnicode(data.content));
-  return { sha:data.sha, remote: (remote && remote.selectedMonth!==undefined) ? remote : null };
+  const f = await ghGetFile(cfg, cfg.path||'data.json');
+  if(!f) return { sha:null, remote:null };
+  const remote = JSON.parse(f.text);
+  return { sha:f.sha, remote: (remote && remote.selectedMonth!==undefined) ? remote : null };
 }
 
 async function ghPullBudget(merge){
@@ -6829,11 +6873,11 @@ async function ghPullBudget(merge){
     state = merge ? mergeBudget(state, remote, loadBudgetBase()) : remote;
     saveBudgetBase(remote);
     localStorage.setItem('budget_store', JSON.stringify(state));
-    ghLastSync = new Date();
+    ghOk();
     // Des saisies d'ici pas encore sur GitHub (ex. faites hors connexion) : on les envoie.
     if(budgetDiffers(state, remote)) markDirtyForSync();
     return budgetDiffers(before, state);
-  }catch(e){ console.error('GitHub pull error (budget)', e); return false; }
+  }catch(e){ ghFail('budget', e); return false; }
 }
 /* Fusion des comptes, sur le même principe que le budget (trois versions,
    base gardée dans auth_sync_base) : un compte créé ici mais pas encore
@@ -6865,12 +6909,10 @@ function supprimerCompte(userId){
   wipeUserData(userId);
 }
 async function ghFetchAuth(cfg){
-  const res = await fetch(ghUrl(cfg, cfg.authPath||'auth.json'), { headers: ghHeaders(cfg.token), cache:'no-store' });
-  if(res.status===404) return { sha:null, remote:null };
-  if(!res.ok) throw new Error('HTTP '+res.status);
-  const data = await res.json();
-  const remote = JSON.parse(b64DecodeUnicode(data.content));
-  return { sha:data.sha, remote: (remote && remote.users) ? remote : null };
+  const f = await ghGetFile(cfg, cfg.authPath||'auth.json');
+  if(!f) return { sha:null, remote:null };
+  const remote = JSON.parse(f.text);
+  return { sha:f.sha, remote: (remote && remote.users) ? remote : null };
 }
 async function ghPullAuth(){
   const cfg = ghConfig();
@@ -6889,10 +6931,10 @@ async function ghPullAuth(){
       authState.deletedUserIds.forEach(wipeUserData);
       if(stableStringify(ownedPart(state))!==avant) localStorage.setItem('budget_store', JSON.stringify(state));
     }
-    ghLastSync = new Date();
+    ghOk();
     if(authDiffers(authState, remote)) markDirtyForSync();
     return authDiffers(before, authState);
-  }catch(e){ console.error('GitHub pull error (auth)', e); return false; }
+  }catch(e){ ghFail('auth', e); return false; }
 }
 // La session ouverte ici appartient à un compte supprimé depuis un autre appareil : on déconnecte.
 // Idem si son mot de passe a été changé ailleurs : il faut se reconnecter.
@@ -6909,21 +6951,18 @@ async function ghPullSocial(merge){
   const cfg = ghConfig();
   if(!cfg.owner || !cfg.repo || !cfg.token) return false;
   try{
-    const res = await fetch(ghUrl(cfg, cfg.socialPath||'social.json'), { headers: ghHeaders(cfg.token), cache:'no-store' });
-    if(res.status===404){ ghSocialSha = null; return false; }
-    if(!res.ok){ throw new Error('HTTP '+res.status); }
-    const data = await res.json();
-    ghSocialSha = data.sha;
-    const text = b64DecodeUnicode(data.content);
-    const remote = JSON.parse(text);
+    const f = await ghGetFile(cfg, cfg.socialPath||'social.json');
+    if(!f){ ghSocialSha = null; return false; }
+    ghSocialSha = f.sha;
+    const remote = JSON.parse(f.text);
     if(remote){
       socialState = merge ? mergeSocial(socialState, remote) : remote;
       localStorage.setItem('budget_social', JSON.stringify(socialState));
-      ghLastSync = new Date();
+      ghOk();
       return true;
     }
     return false;
-  }catch(e){ console.error('GitHub pull error (social)', e); return false; }
+  }catch(e){ ghFail('social', e); return false; }
 }
 async function ghPush(){
   const a = await ghPushAuth();
@@ -6934,25 +6973,21 @@ async function ghPush(){
 /* Écrit un fichier sur GitHub, avec une nouvelle tentative automatique en cas de
    conflit (HTTP 409 — le fichier a changé entre-temps, ex. deux appareils qui
    synchronisent au même moment). On relit simplement le sha à jour et on
-   réessaie une fois, ce qui suffit dans l'immense majorité des cas. */
+   réessaie, jusqu'à trois fois. */
 async function ghPutWithRetry(path, dataObj, message, attempt){
   const cfg = ghConfig();
   if(!cfg.owner || !cfg.repo || !cfg.token) return false;
   try{
-    const check = await fetch(ghUrl(cfg, path), { headers: ghHeaders(cfg.token), cache:'no-store' });
-    let sha = null;
-    if(check.status===200){ const d = await check.json(); sha = d.sha; }
-    const body = { message, content: b64EncodeUnicode(JSON.stringify(dataObj, null, 2)) };
-    if(sha) body.sha = sha;
-    const res = await fetch(ghUrl(cfg, path), { method:'PUT', headers:{...ghHeaders(cfg.token), 'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    if(res.status===409 && !attempt){
-      // Conflit : quelqu'un d'autre a écrit entre-temps. On relit et réessaie une fois.
-      return ghPutWithRetry(path, dataObj, message, true);
+    const f = await ghGetFile(cfg, path);
+    const res = await fetch(ghUrl(cfg, path), { method:'PUT', headers:{...ghHeaders(cfg.token), 'Content-Type':'application/json'}, body: ghBody(message, dataObj, f && f.sha) });
+    if(res.status===409 && (attempt||0)<3){
+      // Conflit : quelqu'un d'autre a écrit entre-temps. On relit et réessaie.
+      return ghPutWithRetry(path, dataObj, message, (attempt||0)+1);
     }
     if(!res.ok){ throw new Error('HTTP '+res.status); }
-    ghLastSync = new Date();
+    ghOk();
     return true;
-  }catch(e){ console.error('GitHub push error ('+path+')', e); return false; }
+  }catch(e){ ghFail(path, e); return false; }
 }
 /* Envoi du budget : on relit toujours GitHub juste avant et on fusionne, pour
    ne jamais écraser ce qu'un autre appareil a envoyé entre-temps (ex. un
@@ -6968,21 +7003,19 @@ async function ghPushBudget(attempt){
       changedHere = budgetDiffers(state, merged);
       state = merged;
       localStorage.setItem('budget_store', JSON.stringify(state));
-      if(!budgetDiffers(state, remote)){ ghSha = sha; saveBudgetBase(remote); ghLastSync = new Date(); if(changedHere) await renderAfterRemoteChange(); return true; }
+      if(!budgetDiffers(state, remote)){ ghSha = sha; saveBudgetBase(remote); ghOk(); if(changedHere) await renderAfterRemoteChange(); return true; }
     }
     const snapshot = JSON.parse(JSON.stringify(state));
-    const body = { message:'Mise à jour budget', content: b64EncodeUnicode(JSON.stringify(snapshot, null, 2)) };
-    if(sha) body.sha = sha;
-    const res = await fetch(ghUrl(cfg, cfg.path||'data.json'), { method:'PUT', headers:{...ghHeaders(cfg.token), 'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    if(res.status===409 && !attempt) return ghPushBudget(true); // écrit entre-temps ailleurs : on refusionne
+    const res = await fetch(ghUrl(cfg, cfg.path||'data.json'), { method:'PUT', headers:{...ghHeaders(cfg.token), 'Content-Type':'application/json'}, body: ghBody('Mise à jour budget', snapshot, sha) });
+    if(res.status===409 && (attempt||0)<3) return ghPushBudget((attempt||0)+1); // écrit entre-temps ailleurs : on refusionne
     if(!res.ok) throw new Error('HTTP '+res.status);
     const out = await res.json().catch(()=>null);
     ghSha = (out && out.content && out.content.sha) || null;
     saveBudgetBase(snapshot);
-    ghLastSync = new Date();
+    ghOk();
     if(changedHere) await renderAfterRemoteChange();
     return true;
-  }catch(e){ console.error('GitHub push error (budget)', e); return false; }
+  }catch(e){ ghFail('budget', e); return false; }
 }
 // Envoi des comptes : comme pour le budget, on refusionne avec GitHub juste
 // avant pour ne jamais écraser une suppression ou une modification faite ailleurs.
@@ -6994,20 +7027,18 @@ async function ghPushAuth(attempt){
     if(remote){
       authState = mergeAuth(authState, remote, loadAuthBase());
       localStorage.setItem('budget_auth', JSON.stringify(authState));
-      if(!authDiffers(authState, remote)){ ghAuthSha = sha; saveAuthBase(remote); ghLastSync = new Date(); return true; }
+      if(!authDiffers(authState, remote)){ ghAuthSha = sha; saveAuthBase(remote); ghOk(); return true; }
     }
     const snapshot = JSON.parse(JSON.stringify(authState));
-    const body = { message:'Mise à jour comptes', content: b64EncodeUnicode(JSON.stringify(snapshot, null, 2)) };
-    if(sha) body.sha = sha;
-    const res = await fetch(ghUrl(cfg, cfg.authPath||'auth.json'), { method:'PUT', headers:{...ghHeaders(cfg.token), 'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    if(res.status===409 && !attempt) return ghPushAuth(true);
+    const res = await fetch(ghUrl(cfg, cfg.authPath||'auth.json'), { method:'PUT', headers:{...ghHeaders(cfg.token), 'Content-Type':'application/json'}, body: ghBody('Mise à jour comptes', snapshot, sha) });
+    if(res.status===409 && (attempt||0)<3) return ghPushAuth((attempt||0)+1);
     if(!res.ok) throw new Error('HTTP '+res.status);
     const out = await res.json().catch(()=>null);
     ghAuthSha = (out && out.content && out.content.sha) || null;
     saveAuthBase(snapshot);
-    ghLastSync = new Date();
+    ghOk();
     return true;
-  }catch(e){ console.error('GitHub push error (auth)', e); return false; }
+  }catch(e){ ghFail('auth', e); return false; }
 }
 async function ghPushSocial(){ return ghPutWithRetry(ghConfig().socialPath||'social.json', socialState, 'Mise à jour social'); }
 async function ghTestAndConnect(token){
@@ -7026,7 +7057,8 @@ function renderGithubSection(){
       ${exportImportHTML()}`;
   }
   return `
-    <div class="status-row"><span class="status-dot" style="background:var(--c-reste);"></span>Connecté${ghLastSync ? ' · dernière synchro '+ghLastSync.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : ''}</div>
+    <div class="status-row"><span class="status-dot" style="background:var(${ghLastError ? '--c-over' : '--c-reste'});"></span>Connecté${ghLastSync ? ' · dernière synchro réussie '+ghLastSync.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : ''}</div>
+    ${ghLastError ? `<div class="field-note" role="alert" style="color:var(--c-over);margin:-4px 0 12px;">${esc(ghLastError)}</div>` : ''}
     <div class="row-actions" style="justify-content:flex-start;gap:10px;">
       <button class="btn btn-ghost btn-sm" data-action="gh-sync-now">${icon('refresh')}Synchroniser maintenant</button>
     </div>
@@ -7119,6 +7151,8 @@ document.addEventListener('visibilitychange', async ()=>{
   const b = await ghPullBudget(true);
   if(a || b) await renderAfterRemoteChange();
 });
+// Retour du réseau : on envoie ce qui a été saisi hors connexion.
+window.addEventListener('online', ()=>{ if(pollTimer) markDirtyForSync(); });
 async function pollNow(){
   if(document.getElementById('modal-root').innerHTML) return; // ne pas perturber une saisie en cours
   if(!ghConfigured()) return;

@@ -10,7 +10,9 @@
    - un compte supprimé ne réapparaît pas quand un appareil qui en a encore
      une copie se relance, et sa session y est fermée ;
    - quand l'admin change le mot de passe d'un compte, les sessions ouvertes
-     de ce compte sont fermées (l'admin, lui, reste connecté). */
+     de ce compte sont fermées (l'admin, lui, reste connecté) ;
+   - un gros budget (plusieurs centaines de Ko, puis plus de 1 Mo, comme après
+     des imports de relevés) s'envoie et se relit sans erreur. */
 import { createRequire } from 'node:module';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -46,13 +48,22 @@ const remoteBudget = ()=>JSON.parse(repo.get('data.json').text);
 
 async function fakeGithub(route){
   const req = route.request();
-  const name = new URL(req.url()).pathname.split('/contents/')[1];
+  const pathname = new URL(req.url()).pathname;
+  const name = pathname.split('/contents/')[1];
   const cors = {'access-control-allow-origin':'*', 'access-control-allow-headers':'*', 'access-control-allow-methods':'GET,PUT,OPTIONS'};
+  const json = obj=>route.fulfill({status:200, headers:{...cors,'content-type':'application/json'}, body:JSON.stringify(obj)});
   if(req.method()==='OPTIONS') return route.fulfill({status:204, headers:cors});
+  if(pathname.includes('/git/blobs/')){
+    const sha = pathname.split('/git/blobs/')[1];
+    const f = [...repo.values()].find(x=>x.sha===sha);
+    return f ? json({sha, content:Buffer.from(f.text).toString('base64'), encoding:'base64'}) : route.fulfill({status:404, headers:cors, body:'{}'});
+  }
   if(req.method()==='GET'){
     const f = repo.get(name);
     if(!f) return route.fulfill({status:404, headers:cors, body:'{}'});
-    return route.fulfill({status:200, headers:{...cors,'content-type':'application/json'}, body:JSON.stringify({sha:f.sha, content:Buffer.from(f.text).toString('base64')})});
+    const size = Buffer.byteLength(f.text);
+    // Comme la vraie API : au-delà de 1 Mo, le contenu n'est pas renvoyé.
+    return json({sha:f.sha, size, encoding: size>1024*1024 ? 'none' : 'base64', content: size>1024*1024 ? '' : Buffer.from(f.text).toString('base64')});
   }
   const body = JSON.parse(req.postData());
   const f = repo.get(name);
@@ -178,6 +189,21 @@ try{
   ok(!remoteAuth().users.some(u=>u.id==='u-lina') && !remoteBudget().depenses.some(d=>d.ownerId==='u-lina'), 'l\'appareil de Lina n\'a rien renvoyé sur GitHub');
   await phone.page.reload(); await phone.page.waitForTimeout(800);
   ok(await phone.page.evaluate(()=>!authState.users.some(u=>u.id==='u-lina') && !state.depenses.some(d=>d.ownerId==='u-lina')), 'le téléphone de l\'admin ne voit plus Lina');
+
+  console.log('\n— Gros budget (imports de relevés)');
+  await edit(phone.page, `for(let i=0;i<1500;i++) state.depenses.push({...arg.tpl, id:'gros-'+i, libelle:'Import relevé n°'+i+' — CB CARREFOUR MARKET'});`, {tpl});
+  ok(remoteBudget().depenses.filter(d=>d.id.startsWith('gros-')).length===1500, 'un budget de '+Math.round(repo.get('data.json').text.length/1024)+' Ko part du téléphone vers GitHub');
+  await pc.page.reload(); await pc.page.waitForTimeout(1500);
+  ok((await localBudget(pc.page)).depenses.filter(d=>d.id.startsWith('gros-')).length===1500, 'le PC le récupère au lancement');
+  await edit(pc.page, `for(let i=0;i<4000;i++) state.depenses.push({...arg.tpl, id:'tres-gros-'+i, libelle:'Import relevé n°'+i+' — PRLV SEPA ÉLECTRICITÉ'});`, {tpl});
+  const taille = repo.get('data.json').text.length;
+  ok(taille>1024*1024 && remoteBudget().depenses.some(d=>d.id==='tres-gros-3999'), 'plus de 1 Mo ('+Math.round(taille/1024)+' Ko) : envoyé par le PC');
+  await phone.page.reload(); await phone.page.waitForTimeout(2500);
+  p = await localBudget(phone.page);
+  ok(p.depenses.some(d=>d.id==='tres-gros-3999') && p.depenses.some(d=>d.id==='gros-1499'), 'et relu par le téléphone (fichier de plus de 1 Mo)');
+  await edit(phone.page, `state.depenses.push({...arg.tpl, id:'apres-gros', libelle:'Après le gros import'});`, {tpl});
+  ok(has(remoteBudget(),'apres-gros') && remoteBudget().depenses.some(d=>d.id==='tres-gros-3999'), 'le téléphone continue d\'envoyer ensuite, sans rien perdre');
+  ok(await phone.page.evaluate(()=>ghLastError===null), 'aucune erreur de synchro signalée');
 
   ok(lina.errors.length===0 && phone.errors.length===0 && pc.errors.length===0, 'aucune erreur JS ('+[...phone.errors, ...pc.errors, ...lina.errors].join(' | ')+')');
 }finally{
