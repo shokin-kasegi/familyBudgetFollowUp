@@ -122,6 +122,24 @@ try{
         '          REF 123456',
         '          SOLDE AU 31/10/2026                         1 500,00',
       ].join('\n'), releveModele(false)).ops,
+      // PDF Revolut : « Argent sortant / Argent entrant », montants alignés à gauche,
+      // sans séparateur de milliers ; paiements annulés et compte d'épargne à part.
+      revolut: (()=>{
+        const L = (...it) => it.map(([str, x, w])=>({str, x, w}));
+        return releveDepuisLignes([
+          L(['Produit', 43, 27], ["Solde d'ouverture", 253, 64], ['Argent sortant', 335, 53], ['Argent entrant', 417, 53]),
+          L(['Transactions du compte : du 1 septembre 2026 au 30 septembre 2026', 43, 300]),
+          L(['Date', 43, 18], ['Description', 125, 45], ['Argent sortant', 335, 53], ['Argent entrant', 417, 53], ['Solde', 535, 21]),
+          L(['1 sept. 2026', 43, 45], ['Apple', 125, 21], ['10,99€', 335, 25], ['1372,56€', 522, 34]),
+          L(['24 sept. 2026', 43, 45], ['Paiement envoyé par CPAM HAUTS DE SEINE SEPA', 125, 150], ['19,00€', 417, 23], ['133,00€', 526, 30]),
+          L(['30 sept. 2026', 43, 45], ['Paiement envoyé par FINANCIERE DUVAL', 125, 130], ['1974,11€', 417, 34], ['2089,45€', 522, 34]),
+          L(['30 sept. 2026', 43, 45], ['Virement à : AMBERINE KHAMASSI', 125, 120], ['1700,00€', 335, 34], ['343,84€', 526, 30]),
+          L(['Renvoyé de 1 septembre 2026 à 30 septembre 2026', 43, 200]),
+          L(['2 sept. 2026', 43, 45], ['Uber Eats', 125, 35], ['58,08€', 335, 25]),
+          L(['Transactions de dépôt de 1 septembre 2026 à 30 septembre 2026', 43, 260]),
+          L(['9 sept. 2026', 43, 45], ["À EUR Compte d'épargne", 125, 90], ['243,00€', 417, 30], ['243,00€', 526, 30]),
+        ], 'pdf', null).ops.map(o=>[o.libelle, o.montant]);
+      })(),
     }));
     ok(JSON.stringify(r.montants.slice(0,7))===JSON.stringify([1234.56,-12.3,-12.3,-45,1234.56,45,8]) && isNaN(r.montants[7]) && isNaN(r.montants[8]), `montants : ${JSON.stringify(r.montants)}`);
     ok(JSON.stringify(r.dates)===JSON.stringify(['2026-10-12','2026-10-12','2026-10-12',null,'2026-10-12','2026-10-03']), `dates : ${JSON.stringify(r.dates)}`);
@@ -131,6 +149,8 @@ try{
     const t = r.texte;
     ok(t.length===3 && t[0].montant===-45.3 && t[1].montant===2100 && t[2].montant===-19.99 && t[0].date==='2026-10-03' && /FREE MOBILE REF 123456/.test(t[2].libelle) && t[0].libelle==='CB CARREFOUR 02/10',
       `texte collé (colonnes Débit / Crédit, année du solde, libellé sur deux lignes) : ${JSON.stringify(t)}`);
+    ok(JSON.stringify(r.revolut)===JSON.stringify([['Apple',-10.99],['Paiement envoyé par CPAM HAUTS DE SEINE SEPA',19],['Paiement envoyé par FINANCIERE DUVAL',1974.11],['Virement à : AMBERINE KHAMASSI',-1700]]),
+      `PDF Revolut (salaire en rentrée, montants à 4 chiffres, sections hors compte ignorées) : ${JSON.stringify(r.revolut)}`);
     // Un remboursement isolé chez un commerçant habituellement en dépense ne doit
     // pas écraser la règle majoritaire ; chaque sens garde sa propre catégorie.
     const sens = await page.evaluate(()=>{
@@ -371,7 +391,7 @@ try{
     await ctx.close();
   }
 
-  console.log('\n— Chercher, filtrer, regrouper par catégorie');
+  console.log('\n— Chercher, filtrer, trier, regrouper par catégorie');
   {
     const {ctx, page, errors} = await openApp(browser, {width:1280, height:900});
     await importer(page, 'releve-filtres.csv', ['Date;Libellé;Montant',
@@ -383,6 +403,29 @@ try{
       groupes: [...document.querySelectorAll('#rl-lignes .rl-groupe')].map(g=>({nom:g.querySelector('h3').innerText, cats:[...g.querySelectorAll('.rl-row')].map(r=>{ const t = r.querySelector('[data-rl-champ="type"]').value; return t==='ignorer' ? 'Ne pas importer' : (r.querySelector('[data-rl-champ="categorie"]')?.value || 'Sans catégorie'); })})),
       libs: [...document.querySelectorAll('#rl-lignes .rl-row')].map(r=>r.querySelector('.rl-brut').innerText),
     }));
+    const ordreReleve = 'CB CARREFOUR MARKET,CB SNCF VOYAGES,CB CARREFOUR CITY,VIR SALAIRE ACME';
+    {
+      const v = await vue();
+      ok(v.libs.join()===ordreReleve && v.groupes.length===0, `par défaut : ordre du relevé, sans regroupement (${v.libs})`);
+      ok(await page.$eval('[data-action="releve-tri"][data-tri=""]', b=>b.getAttribute('aria-pressed'))==='true', '« Ordre du relevé » est l’ordre actif');
+    }
+    // Changer un libellé ou une catégorie ne déplace pas la ligne.
+    {
+      const champ = '#rl-lignes .rl-row:nth-child(2) [data-rl-champ="libelle"]';
+      await page.fill(champ, 'Aaa train');
+      await page.$eval(champ, el=>el.dispatchEvent(new Event('change', {bubbles:true})));
+      await page.click('[data-action="releve-filtre"][data-conf=""]');
+      await page.waitForTimeout(250);
+      ok((await vue()).libs.join()===ordreReleve, `un libellé modifié ne fait pas bouger la ligne (${(await vue()).libs})`);
+    }
+    await page.click('[data-action="releve-tri"][data-tri="libelle"]');
+    await page.waitForTimeout(250);
+    ok((await vue()).libs[0]==='CB SNCF VOYAGES', `tri par libellé, seulement sur demande (${(await vue()).libs})`);
+    await page.click('[data-action="releve-tri"][data-tri="montant"]');
+    await page.waitForTimeout(250);
+    ok((await vue()).libs[0]==='VIR SALAIRE ACME', `tri par montant (${(await vue()).libs})`);
+    await page.click('[data-action="releve-tri"][data-tri="categorie"]');
+    await page.waitForTimeout(250);
     {
       const v = await vue();
       ok(v.libs.length===4 && v.groupes.length>=1 && v.groupes.every(g=>g.cats.every(c=>c===g.nom)), `lignes regroupées par catégorie (${JSON.stringify(v.groupes)})`);
@@ -404,6 +447,7 @@ try{
     await page.click('[data-action="releve-filtre-effacer"]');
     await page.waitForTimeout(250);
     ok((await vue()).libs.length===4 && await page.inputValue('#releve-recherche')==='', '« Tout afficher » efface la recherche');
+    ok(await page.$eval('[data-action="releve-tri"][data-tri="categorie"]', b=>b.getAttribute('aria-pressed'))==='true', '« Tout afficher » garde l’ordre choisi');
     {
       const chips = await page.$$eval('[data-action="releve-filtre"]', b=>b.map(x=>({conf:x.dataset.conf, n:Number(x.querySelector('.amt').innerText)})));
       const c = chips.find(x=>x.conf && x.n>0);
@@ -445,6 +489,44 @@ try{
       await page.waitForTimeout(300);
       ok(/Aucun commerçant appris ne correspond/.test(await page.innerText('#rl-regles')), 'appris : aucun résultat');
     }
+    ok(errors.length===0, `erreurs console : ${errors.join(' | ')}`);
+    await ctx.close();
+  }
+
+  console.log('\n— Sens corrigé : Solde apprend les colonnes du format');
+  {
+    const {ctx, page, errors} = await openApp(browser, {width:1280, height:900});
+    // Relevé sans en-têtes reconnus ni signe : tout est lu en dépense au départ.
+    const releve = (mois, lignes) => ['MA PETITE BANQUE', 'Releve de compte', `Edite le 02 ${mois} 2026`, ...lignes].join('\n');
+    const coller = async texte => {
+      await page.evaluate(async t=>{ await releveDemarrer('Texte collé', releveAnalyserTexte(t, releveModele(false))); }, texte);
+      await page.waitForSelector('.rl-row'); await page.waitForTimeout(200);
+    };
+    const sens = () => page.evaluate(()=>Object.fromEntries([...document.querySelectorAll('.rl-row')].map(r=>[r.querySelector('.rl-brut').innerText, r.querySelector('.rl-signe').innerText==='+' ? 1 : -1])));
+    await coller(releve('oct.', [
+      '03/10/2026   CB BOULANGERIE MARTIN      45,30',
+      '05/10/2026   ACME SARL                                1 980,00',
+      '06/10/2026   ZORGLUB SA                               150,00',
+      '08/10/2026   CB LIBRAIRIE NUIT          19,99',
+    ]));
+    let v = await sens();
+    ok(v['ACME SARL']===-1 && v['ZORGLUB SA']===-1, `au départ, sans indice, tout est lu en dépense (${JSON.stringify(v)})`);
+    const id = await page.$$eval('.rl-row', rs=>rs.find(r=>/ACME/.test(r.querySelector('.rl-brut').innerText)).dataset.rlRow);
+    await page.click(`[data-action="releve-signe"][data-id="${id}"]`);
+    await page.waitForTimeout(300);
+    v = await sens();
+    ok(v['ACME SARL']===1 && v['ZORGLUB SA']===1 && v['CB BOULANGERIE MARTIN']===-1 && v['CB LIBRAIRIE NUIT']===-1,
+      `une correction : les montants de la même colonne passent en rentrée, les autres non (${JSON.stringify(v)})`);
+    ok(/Colonne corrigée/.test(await page.innerText('#toast')), 'la correction est annoncée');
+    await page.click('[data-action="releve-valider-tout"]');
+    await page.waitForTimeout(400);
+    // Relevé suivant de la même banque (autre mois) : lu directement dans le bon sens.
+    await coller(releve('nov.', [
+      '03/11/2026   CB FROMAGERIE DUPRE        12,40',
+      '05/11/2026   VERSEMENT TRUC                           1 980,00',
+    ]));
+    v = await sens();
+    ok(v['VERSEMENT TRUC']===1 && v['CB FROMAGERIE DUPRE']===-1, `relevé suivant : format reconnu, sens lu d'après les colonnes apprises (${JSON.stringify(v)})`);
     ok(errors.length===0, `erreurs console : ${errors.join(' | ')}`);
     await ctx.close();
   }
