@@ -160,7 +160,8 @@ try{
     // (--blur), à l'île et aux couches flottantes ; les radial-gradient ne servent qu'au
     // champ de couleur derrière le verre et au reflet de l'île.
     const blurs = (style.match(/backdrop-filter:[^;}]*/g)||[]);
-    ok(blurs.length>0 && blurs.every(b=>/blur\(/.test(b)), 'backdrop-filter : flou attendu sur le verre');
+    // « none » : flou retiré exprès là où il ne se voit pas et coûte cher (longue liste du relevé).
+    ok(blurs.length>0 && blurs.every(b=>/blur\(|:none$/.test(b)), 'backdrop-filter : flou attendu sur le verre');
     ok((style.match(/radial-gradient/g)||[]).length<=4, 'radial-gradient : seulement le champ de couleur et le reflet de l’île');
     ok(['nuit','givre','lagon'].every(t=>html.includes(`{id:'${t}'`)), 'trois thèmes déclarés (Nuit, Givre, Lagon)');
     // Seules exceptions : les hachures du dépassement (repeating-, un motif qui porte un sens) et les masques de défilement des tableaux.
