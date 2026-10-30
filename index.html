@@ -763,6 +763,7 @@ button,a,[role="button"]{touch-action:manipulation;-webkit-tap-highlight-color:t
 .rl-meta{grid-area:meta;display:flex;align-items:center;gap:8px;min-width:0;}
 .rl-raison{font-size:12px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .rl-actions{grid-area:actions;display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:center;gap:4px;}
+.rl-actions .rl-aboSerie,.rl-actions .rl-ppfSerie{width:290px;max-width:100%;}
 .rl-ppf-total{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--muted);}
 .rl-ppf-total input{width:96px;height:32px;text-align:right;font-variant-numeric:tabular-nums;}
 .rl-erreur{color:var(--c-over);}
@@ -780,6 +781,16 @@ button,a,[role="button"]{touch-action:manipulation;-webkit-tap-highlight-color:t
    fait tomber le défilement, alors que le champ de couleur derrière est déjà un dégradé doux. */
 .rl-row .btn-ghost,.rl-plus .btn-ghost,.card.rl-carte{-webkit-backdrop-filter:none;backdrop-filter:none;}
 .rl-rules{list-style:none;margin:0;padding:0;}
+.rl-filtres{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;}
+.rl-recherche{max-width:420px;}
+.card > .rl-recherche{margin-bottom:12px;}
+.rl-chip{height:30px;padding:0 12px;font-size:13px;background:none;color:var(--muted);cursor:pointer;font-family:inherit;}
+.rl-chip[aria-pressed="true"]{border-color:var(--text);color:var(--text);background:var(--raised);}
+.rl-filtre-res{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-bottom:6px;}
+.rl-groupe + .rl-groupe{margin-top:14px;}
+.rl-groupe-head{display:flex;align-items:baseline;gap:10px;padding:6px 0;}
+.rl-groupe-head h3{margin:0;font-size:14px;font-weight:600;}
+.rl-groupe-head .btn{margin-left:auto;}
 .rl-rules li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) auto 32px;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:14px;}
 .rl-rule-key{font-size:12px;color:var(--muted);letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .rl-rule-val{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -1581,6 +1592,33 @@ function aboDemarrer(dep){
   dep.aboId = dep.aboId || uid();
   return aboPlanifier(dep);
 }
+// Abonnements en cours (un par série, via son prélèvement prévu), pour choisir
+// auquel rattacher une dépense : deux abonnements chez le même commerçant se
+// distinguent par leur nom, leur prix et leur date.
+function aboSeriesAuChoix(){
+  return aboPrevisions().sort((a,b)=>String(a.libelle||'').localeCompare(String(b.libelle||''),'fr') || a.montant-b.montant || a.date.localeCompare(b.date));
+}
+function aboSerieLabel(p){ return `${p.libelle||'Sans nom'} · ${fmtEUR(p.montant)} · le ${Number(String(p.date).slice(8,10))}`; }
+function aboSerieOptions(){
+  return [{value:'', label:'Nouvel abonnement'}, ...aboSeriesAuChoix().map(p=>({value:p.aboId, label:aboSerieLabel(p)}))];
+}
+// Rattache une dépense à un abonnement existant. Si elle tombe le mois du
+// prélèvement prévu (ou après), elle le remplace (changement de prix signalé)
+// et annonce le suivant ; un paiement plus ancien rejoint simplement la série.
+// Elle prend le nom de l'abonnement, qui reste ainsi distinct des autres.
+function aboRattacher(dep, aboId){
+  const prev = aboPrevisions().find(p=>p.aboId===aboId);
+  const nom = (prev || mine(state.depenses).find(d=>d.aboId===aboId) || {}).libelle;
+  if(nom) dep.libelle = nom;
+  dep.aboId = aboId;
+  if(prev && moisDe(prev.date) <= moisDe(dep.date)){
+    const ancien = r2(prev.montant);
+    if(!dep.cle && prev.cle) dep.cle = prev.cle;
+    state.depenses = state.depenses.filter(d=>d!==prev);
+    if(Math.abs(r2(dep.montant) - ancien) >= 0.005) aboAlerter({type:'prix', aboId, libelle:dep.libelle, ancien, nouveau:r2(dep.montant), mois:moisDe(dep.date)});
+  }
+  return aboPlanifier(dep);
+}
 // Valide une prévision : elle devient une dépense comme les autres, et annonce la suivante.
 // Un montant différent de celui attendu est un changement de prix : il est signalé.
 function aboValider(prev, valeurs){
@@ -1737,6 +1775,34 @@ function ppfDetacher(dep){
   const ppfId = dep.ppfId;
   delete dep.ppfId; delete dep.ppfTotal; delete dep.cle;
   ppfRecaler(ppfId);
+}
+// Paiements en cours (au moins une mensualité validée, ni terminés ni arrêtés), pour
+// choisir auquel rattacher une mensualité : deux paiements chez le même commerçant
+// se distinguent par leur nom, leur mensualité et ce qu'il reste à payer.
+function ppfEnCoursAuChoix(){
+  return ppfIds().map(ppfEtat).filter(e=>e.versees.length && !e.termine && !e.arrete)
+    .sort((a,b)=>a.libelle.localeCompare(b.libelle,'fr') || a.reste-b.reste);
+}
+function ppfSerieLabel(e){ return `${e.libelle||'Sans nom'} · ${fmtEUR((e.prevu||e.derniere).montant)} · reste ${fmtEUR(e.reste)}`; }
+function ppfSerieOptions(){
+  return [{value:'', label:'Nouveau paiement'}, ...ppfEnCoursAuChoix().map(e=>({value:e.ppfId, label:ppfSerieLabel(e)}))];
+}
+// Rattache une dépense à un paiement en cours, comme mensualité. Si elle tombe le
+// mois de la mensualité prévue (ou après), elle la remplace ; la suivante (ou la
+// clôture) découle du recalage. Elle prend le nom du paiement, qui reste ainsi
+// distinct des autres. Le dépassement du total est vérifié avant (ppfDepassement).
+function ppfRattacher(dep, ppfId){
+  const e = ppfEtat(ppfId);
+  delete dep.aboId;
+  if(e.libelle) dep.libelle = e.libelle;
+  if(e.prevu && moisDe(e.prevu.date) <= moisDe(dep.date)){
+    if(!dep.cle && e.prevu.cle) dep.cle = e.prevu.cle;
+    state.depenses = state.depenses.filter(d=>d!==e.prevu);
+  }
+  dep.ppfId = ppfId;
+  dep.ppfTotal = e.total;
+  ppfRecaler(ppfId);
+  return ppfEtat(ppfId);
 }
 // Arrête un paiement avant son terme : plus aucune mensualité n'est annoncée.
 function ppfArreter(ppfId){ ppfSerie(ppfId).forEach(d=>{ d.ppfArrete = true; }); ppfRecaler(ppfId); }
@@ -3221,6 +3287,7 @@ function deleteCategory(type, id){
   return item;
 }
 function depense_fields(){
+  const series = aboSerieOptions(), paiements = ppfSerieOptions();
   return [
     {key:'date', label:'Date de la dépense', type:'date'},
     {key:'libelle', label:'Libellé', placeholder:'Courses, restaurant, réparation…'},
@@ -3228,8 +3295,10 @@ function depense_fields(){
     {key:'montant', label:'Montant (€)', type:'number', step:'0.01'},
     {key:'notes', label:'Commentaire', placeholder:'Facultatif'},
     {key:'abonnement', label:'Abonnement : prévoir le même prélèvement le mois suivant', type:'checkbox', showIf:v=>!v.plusieursFois},
+    ...(series.length>1 ? [{key:'aboSerie', label:'Quel abonnement ?', type:'select', options:series, showIf:v=>!!v.abonnement && !v.plusieursFois}] : []),
     {key:'plusieursFois', label:'Paiement en plusieurs fois : cette dépense est une mensualité', type:'checkbox', showIf:v=>!v.abonnement},
-    {key:'montantTotal', label:'Montant total à payer (€)', type:'number', step:'0.01', showIf:v=>!!v.plusieursFois},
+    ...(paiements.length>1 ? [{key:'ppfSerie', label:'Quel paiement ?', type:'select', options:paiements, showIf:v=>!!v.plusieursFois}] : []),
+    {key:'montantTotal', label:'Montant total à payer (€)', type:'number', step:'0.01', showIf:v=>!!v.plusieursFois && !v.ppfSerie},
   ];
 }
 // Une case masquée (l'autre mode est coché) ne compte pas.
@@ -3239,7 +3308,11 @@ function depenseValidationErrors(data, dep){
   if(!data.date) errors.push(['date','Renseigne une date']);
   if(!data.libelle || !String(data.libelle).trim()) errors.push(['libelle','Renseigne un libellé']);
   if(!data.montant || Number(data.montant)<=0) errors.push(['montant','Renseigne un montant supérieur à 0']);
-  if(depenseMode(data)==='ppf' && !errors.some(e=>e[0]==='montant')){
+  if(depenseMode(data)==='ppf' && data.ppfSerie && !errors.some(e=>e[0]==='montant')){
+    // Mensualité d'un paiement en cours : elle ne doit pas faire dépasser son total.
+    const dep2 = ppfDepassement(data.ppfSerie, data.montant, null, dep && dep.id);
+    if(dep2) errors.push(['montant', ppfMessageDepassement(dep2, ppfEtat(data.ppfSerie).total)]);
+  } else if(depenseMode(data)==='ppf' && !errors.some(e=>e[0]==='montant')){
     const total = Number(data.montantTotal)||0;
     if(total<=0) errors.push(['montantTotal','Renseigne le montant total à payer']);
     else if(dep && dep.ppfId){
@@ -3254,7 +3327,9 @@ function depenseValidationErrors(data, dep){
 }
 function openDepenseEditModal(depenseId){
   const dep = mine(state.depenses).find(x=>x.id===depenseId);
-  openModal('Modifier la dépense', depense_fields(), {...dep, abonnement:!!dep.aboId, plusieursFois:!!dep.ppfId, montantTotal:dep.ppfId ? ppfEtat(dep.ppfId).total : ''}, async (data)=>{
+  // Déjà abonnement : la série ne change pas ici, le choix n'est proposé qu'en le devenant.
+  const champs = depense_fields().filter(f=>!(f.key==='aboSerie' && dep.aboId) && !(f.key==='ppfSerie' && dep.ppfId));
+  openModal('Modifier la dépense', champs, {...dep, abonnement:!!dep.aboId, plusieursFois:!!dep.ppfId, montantTotal:dep.ppfId ? ppfEtat(dep.ppfId).total : ''}, async (data)=>{
     const errors = depenseValidationErrors(data, dep);
     if(errors.length){ errors.forEach(([key,msg])=>markFieldError(key,msg)); toast(errors[0][1]); return false; }
     Object.assign(dep, {libelle:data.libelle, categorie:data.categorie, montant:data.montant, date:data.date, modePaiement:'Unique', notes:(data.notes||'').trim()});
@@ -3262,11 +3337,15 @@ function openDepenseEditModal(depenseId){
     let msg = 'Dépense mise à jour';
     if(mode!=='abo' && dep.aboId){ aboArreter(dep.aboId); delete dep.aboId; delete dep.cle; msg = 'Ce n’est plus un abonnement'; }
     if(mode!=='ppf' && dep.ppfId){ ppfDetacher(dep); msg = 'Retirée du paiement en plusieurs fois'; }
-    if(mode==='abo' && !dep.aboId){ const prev = aboDemarrer(dep); if(prev) msg = `Abonnement : prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}`; }
+    if(mode==='abo' && !dep.aboId){
+      const prev = data.aboSerie ? aboRattacher(dep, data.aboSerie) : aboDemarrer(dep);
+      msg = prev ? `Abonnement : prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}` : data.aboSerie ? 'Rattachée à l’abonnement' : msg;
+    }
     if(mode==='ppf'){
-      const nouveau = !dep.ppfId;
-      if(nouveau) ppfDemarrer(dep, data.montantTotal); else { ppfFixerTotal(dep.ppfId, data.montantTotal); ppfRecaler(dep.ppfId); }
-      msg = ppfToast(ppfEtat(dep.ppfId), nouveau ? 'Paiement en plusieurs fois' : 'Mensualité mise à jour');
+      const nouveau = !dep.ppfId, rattache = nouveau && !!data.ppfSerie;
+      if(rattache) ppfRattacher(dep, data.ppfSerie);
+      else if(nouveau) ppfDemarrer(dep, data.montantTotal); else { ppfFixerTotal(dep.ppfId, data.montantTotal); ppfRecaler(dep.ppfId); }
+      msg = ppfToast(ppfEtat(dep.ppfId), rattache ? 'Mensualité ajoutée' : nouveau ? 'Paiement en plusieurs fois' : 'Mensualité mise à jour');
     }
     await persist(); await render(); toast(msg); });
 }
@@ -3360,7 +3439,17 @@ function redrawCurrentCharts(){
   }catch(e){ console.error('redrawCurrentCharts: erreur non bloquante', e); }
 }
 
+let releveRechercheMinuteur = null;
 document.addEventListener('input', (e)=>{
+  if(e.target.id==='releve-recherche' || e.target.id==='releve-regles-recherche'){
+    const lignes = e.target.id==='releve-recherche', val = e.target.value;
+    clearTimeout(releveRechercheMinuteur);
+    releveRechercheMinuteur = setTimeout(()=>{
+      if(lignes){ releveFiltre.q = val; releveAffichees = RELEVE_TRANCHE; releveRedessinerLignes(); }
+      else { releveReglesQ = val; releveRedessinerRegles(); }
+    }, 120);
+    return;
+  }
   if(e.target.dataset && e.target.dataset.action==='col-filter-search'){
     colFilterSearch = e.target.value;
     // Filtre la liste affichée sans re-render complet, pour ne pas perdre le focus pendant la frappe.
@@ -3661,10 +3750,10 @@ async function handleAction(action, id, el){
       const dep = {id:uid(), ownerId:currentUser().id, libelle:data.libelle, categorie:data.categorie, montant:data.montant, modePaiement:'Unique', date:data.date, notes:(data.notes||'').trim()};
       state.depenses.push(dep);
       const mode = depenseMode(data);
-      const prev = mode==='abo' ? aboDemarrer(dep) : null;
-      const ppf = mode==='ppf' ? ppfDemarrer(dep, data.montantTotal) : null;
+      const prev = mode==='abo' ? (data.aboSerie ? aboRattacher(dep, data.aboSerie) : aboDemarrer(dep)) : null;
+      const ppf = mode==='ppf' ? (data.ppfSerie ? ppfRattacher(dep, data.ppfSerie) : ppfDemarrer(dep, data.montantTotal)) : null;
       await persist(); await render();
-      toast(ppf ? ppfToast(ppf, 'Paiement en plusieurs fois ajouté') : prev ? `Abonnement ajouté · prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}` : 'Dépense ajoutée'); }); break;
+      toast(ppf ? ppfToast(ppf, data.ppfSerie ? 'Mensualité ajoutée' : 'Paiement en plusieurs fois ajouté') : prev ? `${data.aboSerie ? 'Prélèvement validé' : 'Abonnement ajouté'} · prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}` : mode==='abo' && data.aboSerie ? 'Rattachée à l’abonnement' : 'Dépense ajoutée'); }); break;
     case 'edit-depense': openDepenseEditModal(id); break;
     case 'del-depense': { const item=find(mine(state.depenses)); confirmDelete(item.libelle, async ()=>{
       state.depenses = state.depenses.filter(x=>x.id!==id);
@@ -3864,7 +3953,19 @@ async function handleAction(action, id, el){
     }
     case 'releve-abo': {
       const l = releveSession && releveSession.lignes.find(x=>x.id===id);
-      if(l && l.v.type==='depense'){ l.v.abo = !l.v.abo; if(l.v.abo) l.v.ppf = false; releveSauverSession(); await render(); document.querySelector(`[data-action="releve-abo"][data-id="${id}"]`)?.focus(); }
+      if(l && l.v.type==='depense'){
+        l.v.abo = !l.v.abo;
+        if(l.v.abo){
+          l.v.ppf = false;
+          // Un prélèvement attendu chez ce commerçant est proposé d'office ; le menu permet d'en choisir un autre.
+          if(!l.aboSerieId && !l.aboChoisi){
+            const pris = new Set(releveSession.lignes.filter(x=>x!==l && x.etat==='attente' && x.aboPrevId).map(x=>x.aboPrevId));
+            const attendu = releveAboAttendu({montant:-Math.abs(l.montant), date:l.date}, l.cle, l.v.libelle, pris);
+            if(attendu) releveChoisirAbo(l, attendu.aboId);
+          }
+        }
+        releveSauverSession(); await render(); document.querySelector(`[data-action="releve-abo"][data-id="${id}"]`)?.focus();
+      }
       break;
     }
     case 'releve-ppf': {
@@ -3872,12 +3973,30 @@ async function handleAction(action, id, el){
       const l = releveSession && releveSession.lignes.find(x=>x.id===id);
       if(l && l.v.type==='depense'){
         l.v.ppf = !l.v.ppf; if(l.v.ppf) l.v.abo = false; delete l.erreur;
+        // Une mensualité attendue chez ce commerçant est proposée d'office ; le menu permet d'en choisir une autre.
+        if(l.v.ppf && !l.ppfSerieId && !l.ppfChoisi){
+          const pris = new Set(releveSession.lignes.filter(x=>x!==l && x.etat==='attente' && x.ppfPrevId).map(x=>x.ppfPrevId));
+          const attendue = relevePpfAttendu({montant:-Math.abs(l.montant), date:l.date}, l.cle, l.v.libelle, pris);
+          if(attendue) releveChoisirPpf(l, attendue.ppfId);
+        }
         releveSauverSession(); await render();
         document.querySelector(l.v.ppf && !l.v.ppfTotal ? `.rl-row[data-rl-row="${id}"] [data-rl-champ="ppfTotal"]` : `[data-action="releve-ppf"][data-id="${id}"]`)?.focus();
       }
       break;
     }
     case 'releve-signe': if(releveInverserSigne(id)){ releveFocusApres = null; await render(); document.querySelector(`[data-action="releve-signe"][data-id="${id}"]`)?.focus(); } break;
+    case 'releve-filtre':
+      releveFiltre.conf = releveFiltre.conf===el.dataset.conf ? '' : el.dataset.conf;
+      releveAffichees = RELEVE_TRANCHE;
+      await render();
+      document.querySelector(`[data-action="releve-filtre"][data-conf="${releveFiltre.conf}"]`)?.focus();
+      break;
+    case 'releve-filtre-effacer':
+      releveFiltre = {q:'', conf:''}; releveAffichees = RELEVE_TRANCHE;
+      await render(); document.getElementById('releve-recherche')?.focus();
+      break;
+    case 'releve-valider-affichees': await releveValider(releveLignesFiltrees((releveSession?.lignes||[]).filter(l=>l.etat==='attente')).map(l=>l.id)); break;
+    case 'releve-valider-groupe': await releveValider(releveLignesFiltrees((releveSession?.lignes||[]).filter(l=>l.etat==='attente')).filter(l=>releveGroupeDe(l)===el.dataset.groupe).map(l=>l.id)); break;
     case 'releve-valider-surs': await releveValider((releveSession?.lignes||[]).filter(l=>l.etat==='attente' && l.confiance==='sur').map(l=>l.id)); break;
     case 'releve-valider-tout': await releveValider((releveSession?.lignes||[]).filter(l=>l.etat==='attente').map(l=>l.id)); break;
     case 'releve-plus': {
@@ -4510,6 +4629,8 @@ let releveFocusApres = null;     // index de la ligne à focaliser après un re-
 // milliers d'éléments et la page ne suit plus.
 const RELEVE_TRANCHE = 50;
 let releveAffichees = RELEVE_TRANCHE;
+let releveFiltre = {q:'', conf:''}; // lignes à vérifier : recherche et badge (vide = tous)
+let releveReglesQ = '';              // « Ce que Solde a appris » : recherche
 
 function releveModele(creer){
   const me = currentUser();
@@ -4965,7 +5086,7 @@ function releveCreerLignes(ops){
           raison: ecart ? `Abonnement attendu : ${attendu.libelle} · nouveau prix (avant ${fmtEUR(attendu.montant)})` : `Abonnement attendu : ${attendu.libelle}`});
       }
       const {cle, confiance, raison, ...valeurs} = s;
-      return {id: uid(), date: o.date, brut: o.libelle.trim(), montant: r2(o.montant), cle, suivi: !!suivi, incertain: !!o.signeIncertain, confiance, raison, etat:'attente', ...(attendu ? {aboPrevId: attendu.id} : {}), ...(mensualite ? {ppfPrevId: mensualite.id} : {}), s:{...valeurs}, v:{...valeurs}};
+      return {id: uid(), date: o.date, brut: o.libelle.trim(), montant: r2(o.montant), cle, suivi: !!suivi, incertain: !!o.signeIncertain, confiance, raison, etat:'attente', ...(attendu ? {aboPrevId: attendu.id, aboSerieId: attendu.aboId} : {}), ...(mensualite ? {ppfPrevId: mensualite.id, ppfSerieId: mensualite.ppfId} : {}), s:{...valeurs}, v:{...valeurs}};
     });
 }
 
@@ -5023,6 +5144,7 @@ async function releveDemarrer(nom, res){
   releveSession = {nom, format: res.format, sig: res.sig||null, csv: res.csv||null, colonnes: res.colonnes||null,
     formatConnu: !!(res.sig && modele.formats[res.sig]), lignes, debut: new Date().toISOString()};
   releveAffichees = RELEVE_TRANCHE;
+  releveFiltre = {q:'', conf:''};
   releveSauverSession();
   await render();
   toast(`${lignes.length} opération${lignes.length>1?'s':''} à vérifier`);
@@ -5092,10 +5214,38 @@ function releveChangerChamp(el){
     releveSauverSession();
     return;
   }
+  if(champ==='aboSerie'){ releveChoisirAbo(l, el.value); l.aboChoisi = true; releveSauverSession(); return render(); }
+  if(champ==='ppfSerie'){ releveChoisirPpf(l, el.value); l.ppfChoisi = true; delete l.erreur; releveSauverSession(); return render(); }
   if(champ==='type') releveAppliquerType(l, el.value);
   else l.v[champ] = el.value;
   releveSauverSession();
   if(champ==='type') return render();
+}
+// Paiement en plusieurs fois auquel la ligne correspond (ppfId, ou vide : nouveau
+// paiement). La ligne prend son nom, sa catégorie et son montant total.
+function releveChoisirPpf(l, ppfId){
+  const e = ppfId ? ppfEtat(ppfId) : null;
+  if(!e || !e.versees.length && !e.prevu){
+    if(l.ppfSerieId){ l.v.ppfTotal = ''; }
+    delete l.ppfSerieId; delete l.ppfPrevId; return;
+  }
+  l.ppfSerieId = ppfId;
+  if(e.prevu) l.ppfPrevId = e.prevu.id; else delete l.ppfPrevId;
+  l.v.libelle = e.libelle || l.v.libelle;
+  if(e.categorie) l.v.categorie = e.categorie;
+  l.v.ppfTotal = releveMontantSaisie(e.total);
+}
+// Abonnement auquel la ligne correspond (aboId d'une série, ou vide : nouvel
+// abonnement). La ligne prend le nom et la catégorie de la série, pour que deux
+// abonnements chez le même commerçant restent distincts.
+function releveChoisirAbo(l, aboId){
+  const prev = aboId ? aboPrevisions().find(p=>p.aboId===aboId) : null;
+  const ref = prev || (aboId ? mine(state.depenses).find(d=>d.aboId===aboId) : null);
+  if(!ref){ delete l.aboSerieId; delete l.aboPrevId; return; }
+  l.aboSerieId = aboId;
+  if(prev) l.aboPrevId = prev.id; else delete l.aboPrevId;
+  l.v.libelle = ref.libelle || l.v.libelle;
+  if(ref.categorie) l.v.categorie = ref.categorie;
 }
 // Retient la décision de l'utilisateur : règle du commerçant, mots du libellé,
 // format du fichier, et si la suggestion était juste.
@@ -5137,12 +5287,19 @@ async function releveValider(ids){
       // Paiement en plusieurs fois : il faut le montant total, et la mensualité ne doit pas le faire dépasser.
       const total = r2(Math.abs(releveMontant(v.ppfTotal)) || 0);
       const prev = l.ppfPrevId ? ppfPrevisions().find(p=>p.id===l.ppfPrevId) : null;
+      // Paiement choisi dont la mensualité prévue a déjà été validée (par une autre ligne) : la dépense rejoint sa série.
+      const serie = !prev && l.ppfSerieId && ppfSerie(l.ppfSerieId).length ? l.ppfSerieId : null;
       if(!(total>0)){ l.erreur = 'Indique le montant total à payer'; bloquees.push(l); return; }
-      const dep = prev ? ppfDepassement(prev.ppfId, montant, total) : (montant > total - PPF_EPS ? r2(montant - total) : 0);
-      if(dep || (!prev && montant >= total - PPF_EPS)){ l.erreur = dep ? ppfMessageDepassement(dep, total) : 'La mensualité égale le total : c’est un paiement en une fois'; bloquees.push(l); return; }
+      const dep = prev || serie ? ppfDepassement(prev ? prev.ppfId : serie, montant, total) : (montant > total - PPF_EPS ? r2(montant - total) : 0);
+      if(dep || (!prev && !serie && montant >= total - PPF_EPS)){ l.erreur = dep ? ppfMessageDepassement(dep, total) : 'La mensualité égale le total : c’est un paiement en une fois'; bloquees.push(l); return; }
       if(prev){
         ppfFixerTotal(prev.ppfId, total);
         ppfValider(prev, {libelle, categorie:v.categorie||'', montant, date:l.date, notes, source:'releve', cle:prev.cle||l.cle});
+      } else if(serie){
+        const d = {id:uid(), ownerId:me.id, libelle, categorie:v.categorie||'', montant, modePaiement:'Unique', date:l.date, notes, source:'releve', cle:l.cle};
+        state.depenses.push(d);
+        ppfFixerTotal(serie, total);
+        ppfRattacher(d, serie);
       } else {
         const d = {id:uid(), ownerId:me.id, libelle, categorie:v.categorie||'', montant, modePaiement:'Unique', date:l.date, notes, source:'releve', cle:l.cle};
         state.depenses.push(d);
@@ -5156,7 +5313,12 @@ async function releveValider(ids){
     } else if(v.type==='depense'){
       const dep = {id:uid(), ownerId:me.id, libelle, categorie:v.categorie||'', montant, modePaiement:'Unique', date:l.date, notes, source:'releve'};
       state.depenses.push(dep);
-      if(v.abo){ dep.cle = l.cle; aboDemarrer(dep); abos++; }
+      if(v.abo){
+        dep.cle = l.cle;
+        // Abonnement choisi dont le prélèvement prévu a déjà été validé (par une autre ligne) : la dépense rejoint sa série.
+        if(l.aboSerieId && mine(state.depenses).some(d=>d.aboId===l.aboSerieId)) aboRattacher(dep, l.aboSerieId); else aboDemarrer(dep);
+        abos++;
+      }
       ajoutees++;
     } else if(v.type==='revenu'){
       state.revenusExceptionnels.push({id:uid(), ownerId:me.id, date:l.date, libelle, categorie:v.categorie||releveCategorieDefaut('revenu'), montant, notes, source:'releve'});
@@ -5202,7 +5364,7 @@ function releveRafraichirAttente(s){
   let n = 0;
   s.lignes.forEach(l=>{
     l.maj = false;
-    if(l.etat!=='attente' || l.suivi || l.aboPrevId || l.ppfPrevId) return;
+    if(l.etat!=='attente' || l.suivi || l.aboPrevId || l.aboChoisi || l.ppfPrevId || l.ppfChoisi) return;
     if(RELEVE_CHAMPS_SUGGERES.some(k=>(l.v[k]||'')!==(l.s[k]||''))) return;
     const {cle, confiance, raison, ...valeurs} = releveSuggestion({libelle:l.brut, montant:l.montant, signeIncertain:l.incertain}, modele);
     const change = RELEVE_CHAMPS_SUGGERES.some(k=>(valeurs[k]||'')!==(l.s[k]||''));
@@ -5245,12 +5407,34 @@ function releveLigneHTML(l){
     <div class="rl-meta"><span class="pill ${cls}">${lbl}</span>${l.erreur ? `<span class="rl-raison rl-erreur" role="alert">${esc(l.erreur)}</span>` : l.confiance==='nouveau' && !l.suivi ? '' : `<span class="rl-raison">${esc(l.raison)}</span>`}</div>
     <div class="rl-actions">
       ${l.v.type==='depense' ? `<button type="button" class="rl-abo" data-action="releve-abo" data-id="${l.id}" aria-pressed="${!!l.v.abo}" title="${l.aboPrevId ? 'Valide le prélèvement prévu' : 'Prévoit le même prélèvement le mois suivant'}">${icon('repeat')}Abonnement</button>
+      ${l.v.abo ? releveAboMenuHTML(l, nomLigne) : ''}
       <button type="button" class="rl-abo rl-ppf" data-action="releve-ppf" data-id="${l.id}" aria-pressed="${!!l.v.ppf}" title="${l.ppfPrevId ? 'Valide la mensualité prévue' : 'Mensualité d’un paiement en plusieurs fois'}">${icon('calendar')}En plusieurs fois</button>
+      ${l.v.ppf ? relevePpfMenuHTML(l, nomLigne) : ''}
       ${l.v.ppf ? `<span class="rl-ppf-total"><input class="rl-ctl" data-rl-id="${l.id}" data-rl-champ="ppfTotal" value="${attrEsc(l.v.ppfTotal||'')}" inputmode="decimal" autocomplete="off" placeholder="Total" aria-label="Montant total à payer pour ${nomLigne}, en euros"><span aria-hidden="true">€</span></span>` : ''}` : ''}
       <button class="btn btn-ghost btn-sm" data-action="releve-valider" data-id="${l.id}">${icon('check')}${ign?'Confirmer':'Valider'}</button>
       ${ign ? '' : `<button class="icon-btn del" data-action="releve-ignorer" data-id="${l.id}" aria-label="Ne pas importer ${nomLigne}">${icon('x')}</button>`}
     </div>
   </li>`;
+}
+// Choix de l'abonnement d'une ligne marquée abonnement : nouveau, ou un en cours.
+function releveAboMenuHTML(l, nomLigne){
+  const options = aboSerieOptions();
+  if(l.aboSerieId && !options.some(o=>o.value===l.aboSerieId)){
+    const ref = mine(state.depenses).find(d=>d.aboId===l.aboSerieId);
+    if(ref) options.push({value:l.aboSerieId, label:ref.libelle||'Sans nom'});
+  }
+  if(options.length<2) return '';
+  return releveMenuHTML(l, 'aboSerie', options, l.aboSerieId||'', `Abonnement auquel correspond ${nomLigne}`);
+}
+// Choix du paiement en plusieurs fois d'une ligne : nouveau, ou un en cours.
+function relevePpfMenuHTML(l, nomLigne){
+  const options = ppfSerieOptions();
+  if(l.ppfSerieId && !options.some(o=>o.value===l.ppfSerieId)){
+    const e = ppfEtat(l.ppfSerieId);
+    if(e.libelle) options.push({value:l.ppfSerieId, label:e.libelle});
+  }
+  if(options.length<2) return '';
+  return releveMenuHTML(l, 'ppfSerie', options, l.ppfSerieId||'', `Paiement en plusieurs fois auquel correspond ${nomLigne}`);
 }
 // Menu Type d'une ligne : même liste déroulante que la
 // catégorie (la liste native du navigateur détonnait à côté).
@@ -5315,13 +5499,91 @@ function releveApprentissageHTML(modele){
       <dt>Formats de fichier</dt><dd>${nbFormats}</dd>
       ${recente!==null ? `<dt>Suggestions justes</dt><dd>${Math.round(recente*100)} %${debut!==null ? ` <span class="side-note">(${Math.round(debut*100)} % au début)</span>` : ''}</dd>` : ''}
     </dl>
-    ${regles.length ? `<ul class="rl-rules">${regles.slice(0,60).map(([cle,r])=>`<li>
+    ${regles.length ? `<input type="search" class="rl-ctl rl-recherche" id="releve-regles-recherche" value="${attrEsc(releveReglesQ)}" placeholder="Chercher un commerçant ou une catégorie…" aria-label="Chercher dans ce que Solde a appris" autocomplete="off" enterkeyhint="search">
+    <div id="rl-regles">${releveReglesHTML(modele)}</div>` : ''}
+  </div>`;
+}
+// Commerçants appris, regroupés par catégorie (rentrées et lignes ignorées à part).
+function releveReglesHTML(modele){
+  const q = releveNorm(releveReglesQ);
+  const groupeDe = r => r.type==='ignorer' ? 'Ne pas importer' : `${r.categorie||'Sans catégorie'}${r.type==='revenu' ? ' · rentrées' : ''}`;
+  const regles = Object.entries(modele.regles)
+    .filter(([cle,r])=>!q || q.split(/\s+/).every(m=>[cle, r.libelle, r.categorie, groupeDe(r)].some(c=>releveNorm(c).includes(m))))
+    .sort((a,b)=>String(a[1].libelle||releveJoli(a[0])).localeCompare(String(b[1].libelle||releveJoli(b[0])),'fr'));
+  if(!regles.length) return `<div class="empty-line">Aucun commerçant appris ne correspond à « ${esc(releveReglesQ)} ».</div>`;
+  const m = new Map();
+  regles.forEach(e=>{ const g = groupeDe(e[1]); if(!m.has(g)) m.set(g, []); m.get(g).push(e); });
+  const rang = g => g==='Ne pas importer' ? 2 : /rentrées$/.test(g) ? 1 : 0;
+  return [...m.entries()].sort((a,b)=>rang(a[0])-rang(b[0]) || a[0].localeCompare(b[0],'fr')).map(([g, es])=>`<section class="rl-groupe" aria-label="${attrEsc(g)}">
+    <div class="rl-groupe-head"><h3>${esc(g)}</h3><span class="side-note">${fmtCount(es.length, 'commerçant', 'commerçants')}</span></div>
+    <ul class="rl-rules">${es.map(([cle,r])=>`<li>
       <span class="rl-rule-key">${esc(cle)}</span>
-      <span class="rl-rule-val">${r.type==='ignorer' ? '<span class="nil">ne pas importer</span>' : `${esc(r.libelle||releveJoli(cle))} · ${esc(r.categorie||'sans catégorie')}${r.type==='revenu'?' · rentrée':''}${r.abo?' · abonnement':''}`}</span>
+      <span class="rl-rule-val">${r.type==='ignorer' ? '<span class="nil">ne pas importer</span>' : `${esc(r.libelle||releveJoli(cle))}${r.abo?' · abonnement':''}`}</span>
       <span class="side-note">${r.n>1 ? r.n+' fois' : '1 fois'}</span>
       <button class="icon-btn del" data-action="releve-oublier" data-cle="${attrEsc(cle)}" aria-label="Oublier ${attrEsc(cle)}">${icon('trash')}</button>
-    </li>`).join('')}</ul>${regles.length>60 ? `<div class="field-note">Et ${regles.length-60} autres.</div>` : ''}` : ''}
+    </li>`).join('')}</ul></section>`).join('');
+}
+/* ---------- Filtrer, regrouper et chercher ---------- */
+// Badge d'une ligne, tel qu'affiché (« Déjà suivie » à part).
+function releveBadge(l){ return l.suivi ? 'suivi' : RELEVE_BADGES[l.confiance] ? l.confiance : 'nouveau'; }
+const RELEVE_FILTRES = [{conf:'sur', label:'Reconnues'}, {conf:'appris', label:'Apprises'}, {conf:'devine', label:'Devinées'}, {conf:'nouveau', label:'Nouvelles'}, {conf:'suivi', label:'Déjà suivies'}];
+function releveNorm(t){ return releveSansAccents(t).toLowerCase().trim(); }
+// Une recherche trouve le libellé, le texte de la banque, la catégorie, le commentaire ou le montant.
+function releveCorrespond(l, q){
+  if(!q) return true;
+  const montant = releveMontantSaisie(l.montant);
+  const champs = [l.v.libelle, l.brut, l.v.categorie, l.v.notes, montant, montant.replace(',', '.')];
+  return releveNorm(q).split(/\s+/).every(m=>champs.some(c=>releveNorm(c).includes(m)));
+}
+function releveLignesFiltrees(attente){
+  return attente.filter(l=>(!releveFiltre.conf || releveBadge(l)===releveFiltre.conf) && releveCorrespond(l, releveFiltre.q));
+}
+// Les lignes sont regroupées par catégorie (« Ne pas importer » et « Sans catégorie » en dernier),
+// par date dans chaque groupe.
+function releveGroupeDe(l){ return l.v.type==='ignorer' ? 'Ne pas importer' : (String(l.v.categorie||'').trim() || 'Sans catégorie'); }
+function releveGroupes(lignes){
+  const m = new Map();
+  lignes.forEach(l=>{ const g = releveGroupeDe(l); if(!m.has(g)) m.set(g, []); m.get(g).push(l); });
+  const rang = g => g==='Ne pas importer' ? 2 : g==='Sans catégorie' ? 1 : 0;
+  return [...m.entries()].sort((a,b)=>rang(a[0])-rang(b[0]) || a[0].localeCompare(b[0],'fr'))
+    .map(([nom, ls])=>({nom, lignes: ls.sort((a,b)=>a.date.localeCompare(b.date))}));
+}
+function releveFiltresHTML(attente){
+  const nb = c => attente.filter(l=>releveBadge(l)===c).length;
+  const chips = RELEVE_FILTRES.filter(f=>nb(f.conf)).map(f=>`<button type="button" class="chip rl-chip" data-action="releve-filtre" data-conf="${f.conf}" aria-pressed="${releveFiltre.conf===f.conf}">${f.label}<span class="amt">${nb(f.conf)}</span></button>`).join('');
+  return `<div class="rl-filtres">
+    <input type="search" class="rl-ctl rl-recherche" id="releve-recherche" value="${attrEsc(releveFiltre.q)}" placeholder="Chercher un libellé, une catégorie, un montant…" aria-label="Chercher dans les lignes à vérifier" autocomplete="off" enterkeyhint="search">
+    <div class="chips" role="group" aria-label="Filtrer par badge"><button type="button" class="chip rl-chip" data-action="releve-filtre" data-conf="" aria-pressed="${!releveFiltre.conf}">Toutes<span class="amt">${attente.length}</span></button>${chips}</div>
   </div>`;
+}
+function releveLignesHTML(attente){
+  const filtrees = releveLignesFiltrees(attente);
+  const filtre = !!(releveFiltre.q || releveFiltre.conf);
+  if(!filtrees.length) return `<div class="empty-line">Aucune ligne ne correspond${releveFiltre.q ? ` à « ${esc(releveFiltre.q)} »` : ''}. <button class="link" data-action="releve-filtre-effacer">Tout afficher</button></div>`;
+  const ordre = releveGroupes(filtrees);
+  const visibles = new Set(ordre.flatMap(g=>g.lignes).slice(0, releveAffichees).map(l=>l.id));
+  const groupes = ordre.map(g=>({...g, vis: g.lignes.filter(l=>visibles.has(l.id))})).filter(g=>g.vis.length);
+  return `${filtre ? `<div class="rl-filtre-res"><span class="side-note">${fmtCount(filtrees.length, 'ligne affichée', 'lignes affichées')} sur ${attente.length}</span>
+      ${filtrees.length>1 ? `<button class="btn btn-ghost btn-sm" data-action="releve-valider-affichees">${icon('check')}Valider les ${filtrees.length} affichées</button>` : ''}</div>` : ''}
+    ${groupes.map(g=>`<section class="rl-groupe" aria-label="${attrEsc(g.nom)}">
+      <div class="rl-groupe-head"><h3>${esc(g.nom)}</h3><span class="side-note">${fmtCount(g.lignes.length, 'ligne', 'lignes')}</span>
+        ${g.lignes.length>1 ? `<button class="btn btn-text btn-sm" data-action="releve-valider-groupe" data-groupe="${attrEsc(g.nom)}">${g.nom==='Ne pas importer' ? 'Tout confirmer' : 'Tout valider'}</button>` : ''}</div>
+      <ul class="rl-list">${g.vis.map(l=>releveLigneHTML(l)).join('')}</ul>
+    </section>`).join('')}
+    ${filtrees.length>releveAffichees ? `<div class="rl-plus">
+      <button class="btn btn-ghost btn-sm" data-action="releve-plus">${icon('chevD')}Afficher ${Math.min(RELEVE_TRANCHE, filtrees.length-releveAffichees)} lignes de plus</button>
+      <span class="side-note">${releveAffichees} sur ${filtrees.length} affichées</span>
+    </div>` : ''}`;
+}
+// Pendant la frappe, seule la liste est redessinée : le champ de recherche garde le focus.
+function releveRedessinerLignes(){
+  const el = document.getElementById('rl-lignes');
+  if(!el || !releveSession) return;
+  el.innerHTML = releveLignesHTML(releveSession.lignes.filter(l=>l.etat==='attente'));
+}
+function releveRedessinerRegles(){
+  const el = document.getElementById('rl-regles');
+  if(el) el.innerHTML = releveReglesHTML(releveModele(false));
 }
 function renderReleve(){
   releveChargerSession();
@@ -5365,11 +5627,7 @@ function renderReleve(){
       </div>
       ${validees+ignorees ? `<div class="field-note" style="margin:-4px 0 12px;">${fmtCount(validees, 'ajoutée', 'ajoutées')} · ${fmtCount(ignorees, 'ignorée', 'ignorées')}</div>` : ''}
       ${s.csv ? releveColonnesHTML(s) : ''}
-      ${attente.length ? `<ul class="rl-list">${attente.slice(0, releveAffichees).map(l=>releveLigneHTML(l)).join('')}</ul>
-        ${attente.length>releveAffichees ? `<div class="rl-plus">
-          <button class="btn btn-ghost btn-sm" data-action="releve-plus">${icon('chevD')}Afficher ${Math.min(RELEVE_TRANCHE, attente.length-releveAffichees)} lignes de plus</button>
-          <span class="side-note">${releveAffichees} sur ${attente.length} affichées</span>
-        </div>` : ''}`
+      ${attente.length ? `${releveFiltresHTML(attente)}<div id="rl-lignes">${releveLignesHTML(attente)}</div>`
         : emptyRow('Toutes les lignes ont été traitées.', 'releve-fermer', 'Importer un autre relevé')}
     </div>
     ${releveApprentissageHTML(modele)}`;

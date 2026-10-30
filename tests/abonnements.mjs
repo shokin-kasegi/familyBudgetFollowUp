@@ -220,6 +220,78 @@ try{
   await page.waitForTimeout(350);
   ok(!(await mesDeps()).some(d=>d.prevu && d.libelle==='Forfait mobile'), 'décocher Abonnement retire le prélèvement prévu');
 
+  console.log('\n— Deux abonnements chez le même commerçant');
+  const ajouterAbo = async (date, libelle, montant, serie) => {
+    await page.click('[data-action="add-depense"]');
+    await page.fill('#f_date', date);
+    await page.fill('#f_libelle', libelle);
+    await page.fill('#f_montant', montant);
+    await page.check('#f_abonnement');
+    if(serie!==undefined) await page.selectOption('#f_aboSerie', serie);
+    await page.click('#modal-form button[type=submit]');
+    await page.waitForTimeout(350);
+  };
+  await ajouterAbo('2027-01-04', 'Apple iCloud', '2.99');
+  ok(await page.evaluate(()=>!!document.getElementById('f_aboSerie')) === false, 'pas de choix d’abonnement quand aucun n’est en cours');
+  await page.click('[data-action="add-depense"]');
+  await page.check('#f_abonnement');
+  {
+    const opts = await page.$$eval('#f_aboSerie option', o=>o.map(x=>x.textContent));
+    ok(opts.length===2 && opts[0]==='Nouvel abonnement' && /Apple iCloud · 2,99\s€ · le 4$/.test(opts[1]), `formulaire : choix « Nouvel abonnement » ou un abonnement en cours (${opts})`);
+    await page.click('#cancel-btn');
+    await page.waitForTimeout(200);
+  }
+  await ajouterAbo('2027-01-06', 'Apple Music', '10.99', '');
+  {
+    const prevus = (await mesDeps()).filter(d=>d.prevu && /^Apple/.test(d.libelle));
+    ok(prevus.length===2 && new Set(prevus.map(d=>d.aboId)).size===2, `deux abonnements Apple distincts (${JSON.stringify(prevus.map(d=>d.libelle))})`);
+  }
+  // Février : le prélèvement d'Apple Music est saisi à la main, rattaché à la bonne série.
+  await ouvrir('2027-02-08', '#depenses/2027-02');
+  const music = (await mesDeps()).find(d=>d.prevu && d.libelle==='Apple Music');
+  await page.click('[data-action="add-depense"]');
+  await page.check('#f_abonnement');
+  const opts = await page.$$eval('#f_aboSerie option', o=>o.map(x=>x.textContent));
+  ok(opts.length===3 && opts.some(t=>/Apple Music · 10,99/.test(t)) && opts.some(t=>/Apple iCloud · 2,99/.test(t)), `les deux abonnements Apple sont proposés, avec leur prix (${opts})`);
+  await page.click('#cancel-btn');
+  await page.waitForTimeout(200);
+  await ajouterAbo('2027-02-06', 'Apple', '11.99', music.aboId);
+  {
+    const deps = await mesDeps();
+    const serie = deps.filter(d=>d.aboId===music.aboId);
+    ok(serie.length===3 && serie.some(d=>!d.prevu && d.date==='2027-02-06' && d.montant===11.99 && d.libelle==='Apple Music') && serie.some(d=>d.prevu && d.date==='2027-03-06' && d.libelle==='Apple Music'), `Apple Music : février validé, mars prévu (${JSON.stringify(serie.map(d=>[d.date,d.montant,!!d.prevu]))})`);
+    ok(!deps.some(d=>d.prevu && d.aboId===music.aboId && d.date==='2027-02-06'), 'la prévision de février d’Apple Music est remplacée, pas doublée');
+    ok(deps.some(d=>d.prevu && d.libelle==='Apple iCloud' && d.date==='2027-02-04'), 'Apple iCloud reste prévu en février');
+    ok((await store()).abonnementsAlertes.some(a=>a.type==='prix' && a.aboId===music.aboId && a.nouveau===11.99), 'changement de prix d’Apple Music signalé');
+  }
+  // Import : le prélèvement iCloud, au libellé générique, est rattaché à la main.
+  await aller('#releve');
+  await page.click('.rl-head [data-action="releve-fermer"], [data-action="releve-fermer"]');
+  await page.waitForTimeout(250);
+  await page.setInputFiles('#releve-file', {name:'releve-apple.csv', mimeType:'text/csv', buffer:Buffer.from(['Date;Libellé;Montant', '04/02/2027;PRLV SEPA ITUNES SARL;-2,99'].join('\n'))});
+  await page.waitForSelector('.rl-row');
+  await page.waitForTimeout(250);
+  {
+    const id = await page.$eval('.rl-row', r=>r.dataset.rlRow);
+    const row = `.rl-row[data-rl-row="${id}"]`;
+    ok(!(await page.$(`${row} .rl-aboSerie`)), 'import : pas de choix tant que la ligne n’est pas un abonnement');
+    await page.click(`${row} [data-action="releve-abo"]`);
+    await page.waitForTimeout(200);
+    await page.click(`${row} .rl-aboSerie [data-cat-toggle]`);
+    const choix = await page.$$eval(`${row} .rl-aboSerie [data-rl-pick]`, b=>b.map(x=>x.textContent));
+    ok(choix.length===3 && choix[0]==='Nouvel abonnement' && choix.some(t=>/^Apple Music · 11,99/.test(t)), `import : menu des abonnements en cours (${choix})`);
+    await shot('import-choix-abonnement');
+    const icloud = (await mesDeps()).find(d=>d.prevu && d.libelle==='Apple iCloud');
+    await page.click(`${row} .rl-aboSerie [data-rl-pick="${icloud.aboId}"]`);
+    await page.waitForTimeout(250);
+    ok(await page.$eval(`${row} [data-rl-champ="libelle"]`, i=>i.value)==='Apple iCloud', 'la ligne prend le nom de l’abonnement choisi');
+    await page.click(`${row} [data-action="releve-valider"]`);
+    await page.waitForTimeout(400);
+    const serie = (await mesDeps()).filter(d=>d.aboId===icloud.aboId);
+    ok(serie.some(d=>!d.prevu && d.date==='2027-02-04' && d.source==='releve') && serie.some(d=>d.prevu && d.date==='2027-03-04') && serie.length===3, `Apple iCloud : février validé par l’import, mars prévu (${JSON.stringify(serie.map(d=>[d.date,d.montant,!!d.prevu]))})`);
+    ok((await mesDeps()).filter(d=>d.prevu && d.aboId===music.aboId).length===1, 'Apple Music n’est pas touché');
+  }
+
   ok(errors.length===0, `erreurs console\n    ${errors.join('\n    ')}`);
 } finally {
   await browser.close();
