@@ -4382,9 +4382,7 @@ async function handleAction(action, id, el){
         else toast('Compte mis à jour'); }, legacyNote); break; }
     case 'del-user': { const u=find(authState.users); if(u.role==='admin' && authState.users.filter(x=>x.role==='admin').length<=1) return toast('Impossible de supprimer le dernier admin');
       confirmDelete(u.displayName, async ()=>{
-        authState.users = authState.users.filter(x=>x.id!==id);
-        socialState.accountRequests = socialState.accountRequests.filter(r=>r.fromId!==id);
-        wipeUserData(id);
+        supprimerCompte(id);
         await Promise.all([persistAuth(), persistSocial(), persist()]); await render(); toast('Compte et données supprimés'); }); break; }
 
     /* Comptes : export ciblé et purge de données par l'admin */
@@ -4433,10 +4431,7 @@ async function handleAction(action, id, el){
       }
       // type 'delete' : on redemande une confirmation explicite avant d'agir, c'est irréversible
       confirmDelete(u ? `le compte de ${u.displayName} (demande approuvée)` : 'ce compte', async ()=>{
-        if(u){
-          authState.users = authState.users.filter(x=>x.id!==u.id);
-          wipeUserData(u.id);
-        }
+        if(u) supprimerCompte(u.id);
         req.status='done';
         socialState.accountRequests = socialState.accountRequests.filter(r=>r.id!==req.id);
         await Promise.all([persistAuth(), persistSocial(), persist()]); await render(); renderNotifPanel(); toast('Compte supprimé'); });
@@ -6398,7 +6393,8 @@ function mergeArray3(localArr, remoteArr, baseArr){
 }
 function mergeBudget(local, remote, base){
   const merged = {...local};
-  OWNED_ARRAYS.forEach(key=>{ merged[key] = mergeArray3(local[key], remote[key], base ? (base[key]||[]) : null); });
+  const supprimes = new Set(authState.deletedUserIds||[]);
+  OWNED_ARRAYS.forEach(key=>{ merged[key] = mergeArray3(local[key], remote[key], base ? (base[key]||[]) : null).filter(x=>!supprimes.has(x.ownerId)); });
   return merged;
 }
 function budgetDiffers(a, b){ return stableStringify(ownedPart(a))!==stableStringify(ownedPart(b)); }
@@ -6434,36 +6430,71 @@ async function ghPullBudget(merge){
     return budgetDiffers(before, state);
   }catch(e){ console.error('GitHub pull error (budget)', e); return false; }
 }
-// Fusionne les comptes plutôt que d'écraser : un compte créé localement mais
-// pas encore poussé sur GitHub (ex. juste après la création admin, avant la
-// toute première synchro) ne doit JAMAIS disparaître simplement parce que le
-// dépôt distant ne le connaît pas encore.
-function mergeAuthUsers(localUsers, remoteUsers){
-  const byId = new Map();
-  (remoteUsers||[]).forEach(u=>byId.set(u.id, u));
-  (localUsers||[]).forEach(u=>{ if(!byId.has(u.id)) byId.set(u.id, u); });
-  return Array.from(byId.values());
+/* Fusion des comptes, sur le même principe que le budget (trois versions,
+   base gardée dans auth_sync_base) : un compte créé ici mais pas encore
+   envoyé n'est jamais perdu, et une ancienne copie d'un compte (mot de passe,
+   rôle…) ne vient pas écraser celle, plus récente, qui est sur GitHub.
+   Les comptes supprimés sont notés dans deletedUserIds : cette liste ne fait
+   que grandir et passe d'appareil en appareil, si bien qu'un téléphone ou un
+   PC qui a encore une copie du compte ne peut plus le faire réapparaître —
+   ni lui, ni ses données. */
+const AUTH_BASE_KEY = 'auth_sync_base';
+function loadAuthBase(){ try{ return JSON.parse(localStorage.getItem(AUTH_BASE_KEY)||'null'); }catch(e){ return null; } }
+function saveAuthBase(obj){ try{ localStorage.setItem(AUTH_BASE_KEY, JSON.stringify({users:obj.users||[]})); }catch(e){} }
+function mergeAuth(local, remote, base){
+  const deletedUserIds = [...new Set([...(local.deletedUserIds||[]), ...(remote.deletedUserIds||[])])];
+  const supprimes = new Set(deletedUserIds);
+  const users = mergeArray3(local.users, remote.users, base ? (base.users||[]) : null).filter(u=>!supprimes.has(u.id));
+  // le code d'installation, une fois consommé quelque part, reste consommé partout
+  return {...local, users, deletedUserIds, setupCodeUsed: !!(local.setupCodeUsed || remote.setupCodeUsed)};
+}
+function authDiffers(a, b){
+  const part = x=>({users:(x&&x.users)||[], deletedUserIds:[...((x&&x.deletedUserIds)||[])].sort(), setupCodeUsed:!!(x&&x.setupCodeUsed)});
+  return stableStringify(part(a))!==stableStringify(part(b));
+}
+// Supprime un compte (et ses données) de façon définitive, y compris sur les autres appareils.
+function supprimerCompte(userId){
+  authState.users = authState.users.filter(x=>x.id!==userId);
+  authState.deletedUserIds = [...new Set([...(authState.deletedUserIds||[]), userId])];
+  socialState.accountRequests = socialState.accountRequests.filter(r=>r.fromId!==userId);
+  wipeUserData(userId);
+}
+async function ghFetchAuth(cfg){
+  const res = await fetch(ghUrl(cfg, cfg.authPath||'auth.json'), { headers: ghHeaders(cfg.token), cache:'no-store' });
+  if(res.status===404) return { sha:null, remote:null };
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const data = await res.json();
+  const remote = JSON.parse(b64DecodeUnicode(data.content));
+  return { sha:data.sha, remote: (remote && remote.users) ? remote : null };
 }
 async function ghPullAuth(){
   const cfg = ghConfig();
   if(!cfg.owner || !cfg.repo || !cfg.token) return false;
   try{
-    const res = await fetch(ghUrl(cfg, cfg.authPath||'auth.json'), { headers: ghHeaders(cfg.token), cache:'no-store' });
-    if(res.status===404){ ghAuthSha = null; return false; }
-    if(!res.ok){ throw new Error('HTTP '+res.status); }
-    const data = await res.json();
-    ghAuthSha = data.sha;
-    const text = b64DecodeUnicode(data.content);
-    const remote = JSON.parse(text);
-    if(remote && remote.users){
-      authState.users = mergeAuthUsers(authState.users, remote.users);
-      if(remote.setupCodeUsed) authState.setupCodeUsed = true; // une fois consommé quelque part, ça reste consommé partout
-      localStorage.setItem('budget_auth', JSON.stringify(authState));
-      ghLastSync = new Date();
-      return true;
+    const { sha, remote } = await ghFetchAuth(cfg);
+    ghAuthSha = sha;
+    if(!remote) return false;
+    const before = authState;
+    authState = mergeAuth(authState, remote, loadAuthBase());
+    saveAuthBase(remote);
+    localStorage.setItem('budget_auth', JSON.stringify(authState));
+    // Un compte supprimé ailleurs : ses données disparaissent aussi d'ici.
+    if((authState.deletedUserIds||[]).length){
+      const avant = stableStringify(ownedPart(state));
+      authState.deletedUserIds.forEach(wipeUserData);
+      if(stableStringify(ownedPart(state))!==avant) localStorage.setItem('budget_store', JSON.stringify(state));
     }
-    return false;
+    ghLastSync = new Date();
+    if(authDiffers(authState, remote)) markDirtyForSync();
+    return authDiffers(before, authState);
   }catch(e){ console.error('GitHub pull error (auth)', e); return false; }
+}
+// La session ouverte ici appartient à un compte supprimé depuis un autre appareil : on déconnecte.
+function sessionRevoquee(){
+  const s = getSession();
+  if(!s || authState.users.some(u=>u.id===s.userId)) return false;
+  clearSession(); stopPolling(); location.reload();
+  return true;
 }
 async function ghPullSocial(merge){
   const cfg = ghConfig();
@@ -6544,7 +6575,31 @@ async function ghPushBudget(attempt){
     return true;
   }catch(e){ console.error('GitHub push error (budget)', e); return false; }
 }
-async function ghPushAuth(){ return ghPutWithRetry(ghConfig().authPath||'auth.json', authState, 'Mise à jour comptes'); }
+// Envoi des comptes : comme pour le budget, on refusionne avec GitHub juste
+// avant pour ne jamais écraser une suppression ou une modification faite ailleurs.
+async function ghPushAuth(attempt){
+  const cfg = ghConfig();
+  if(!cfg.owner || !cfg.repo || !cfg.token) return false;
+  try{
+    const { sha, remote } = await ghFetchAuth(cfg);
+    if(remote){
+      authState = mergeAuth(authState, remote, loadAuthBase());
+      localStorage.setItem('budget_auth', JSON.stringify(authState));
+      if(!authDiffers(authState, remote)){ ghAuthSha = sha; saveAuthBase(remote); ghLastSync = new Date(); return true; }
+    }
+    const snapshot = JSON.parse(JSON.stringify(authState));
+    const body = { message:'Mise à jour comptes', content: b64EncodeUnicode(JSON.stringify(snapshot, null, 2)) };
+    if(sha) body.sha = sha;
+    const res = await fetch(ghUrl(cfg, cfg.authPath||'auth.json'), { method:'PUT', headers:{...ghHeaders(cfg.token), 'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if(res.status===409 && !attempt) return ghPushAuth(true);
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const out = await res.json().catch(()=>null);
+    ghAuthSha = (out && out.content && out.content.sha) || null;
+    saveAuthBase(snapshot);
+    ghLastSync = new Date();
+    return true;
+  }catch(e){ console.error('GitHub push error (auth)', e); return false; }
+}
 async function ghPushSocial(){ return ghPutWithRetry(ghConfig().socialPath||'social.json', socialState, 'Mise à jour social'); }
 async function ghTestAndConnect(token){
   ghSaveToken(token);
@@ -6650,11 +6705,19 @@ function stopPolling(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null;
 // tout de suite ce qui a été saisi sur un autre appareil entre-temps.
 document.addEventListener('visibilitychange', async ()=>{
   if(document.visibilityState!=='visible' || !pollTimer || !ghConfigured()) return;
-  if(await ghPullBudget(true)) await renderAfterRemoteChange();
+  const a = await ghPullAuth();
+  if(sessionRevoquee()) return;
+  const b = await ghPullBudget(true);
+  if(a || b) await renderAfterRemoteChange();
 });
 async function pollNow(){
   if(document.getElementById('modal-root').innerHTML) return; // ne pas perturber une saisie en cours
   if(!ghConfigured()) return;
+  // Comptes et budget aussi : un onglet resté ouvert (PC) doit voir ce qui a
+  // été saisi ou supprimé sur un autre appareil sans avoir à recharger.
+  const touchedAuth = await ghPullAuth();
+  if(sessionRevoquee()) return;
+  if(await ghPullBudget(true) || touchedAuth) await renderAfterRemoteChange();
   const beforeCount = notifBadgeCount();
   const touchedSocial = await ghPullSocial(true);
   if(!touchedSocial) return;

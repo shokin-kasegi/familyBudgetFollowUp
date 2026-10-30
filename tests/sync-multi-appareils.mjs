@@ -5,7 +5,10 @@
    - ajout, modification et suppression faits sur le PC → visibles sur le téléphone ;
    - un onglet PC resté ouvert (pas à jour) qui enregistre n'écrase pas ce que
      le téléphone a envoyé entre-temps ;
-   - les saisies du partenaire continuent d'arriver. */
+   - les saisies du partenaire continuent d'arriver ;
+   - un onglet resté ouvert récupère tout seul les changements (sondage) ;
+   - un compte supprimé ne réapparaît pas quand un appareil qui en a encore
+     une copie se relance, et sa session y est fermée. */
 import { createRequire } from 'node:module';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -56,7 +59,7 @@ async function fakeGithub(route){
   return route.fulfill({status:200, headers:{...cors,'content-type':'application/json'}, body:JSON.stringify({content:{sha:repo.get(name).sha}})});
 }
 
-async function device(browser, store){
+async function device(browser, store, me=DEMO.me){
   const ctx = await browser.newContext({viewport:{width:390, height:844}});
   await ctx.route('https://api.github.com/**', fakeGithub);
   const page = await ctx.newPage();
@@ -71,7 +74,7 @@ async function device(browser, store){
     localStorage.setItem('budget_session_remember', JSON.stringify({userId:me, expiresAt:Date.now()+864e5}));
     localStorage.setItem('github_sync_config', JSON.stringify({token:'test'}));
     sessionStorage.setItem('seeded','1');
-  }, {users:DEMO.users, store, me:DEMO.me});
+  }, {users:DEMO.users, store, me});
   await page.goto(BASE + '/index.html#depenses/2026-09');
   await page.waitForSelector('#view > *', {timeout:10000});
   await page.waitForTimeout(300);
@@ -128,7 +131,34 @@ try{
   p = await localBudget(phone.page);
   ok(has(p,'lina-new') && has(p,'pc-2'), 'au retour sur l\'appli, le téléphone récupère les nouveautés');
 
-  ok(phone.errors.length===0 && pc.errors.length===0, 'aucune erreur JS ('+[...phone.errors, ...pc.errors].join(' | ')+')');
+  console.log('\n— Onglet PC resté ouvert, sans changer d\'onglet');
+  const st2 = remoteBudget();
+  st2.depenses.push({...tpl, id:'lina-2', ownerId:DEMO.users[1].id, libelle:'Ajout Lina 2'});
+  put('data.json', st2);
+  await pc.page.evaluate(()=>pollNow());
+  ok(has(await localBudget(pc.page),'lina-2'), 'le sondage périodique récupère aussi le budget');
+
+  console.log('\n— Suppression du compte de Lina par l\'admin (PC)');
+  const lina = await device(browser, DEMO.store, 'u-lina'); // appareil de Lina, copie locale du compte
+  await lina.page.evaluate(()=>{ document.dispatchEvent(new Event('visibilitychange')); });
+  await pc.page.evaluate(async ()=>{ supprimerCompte('u-lina'); await Promise.all([persistAuth(), persistSocial(), persist()]); });
+  await pc.page.waitForTimeout(2200);
+  const remoteAuth = ()=>JSON.parse(repo.get('auth.json').text);
+  ok(!remoteAuth().users.some(u=>u.id==='u-lina'), 'GitHub n\'a plus le compte de Lina');
+  ok(!remoteBudget().depenses.some(d=>d.ownerId==='u-lina'), 'GitHub n\'a plus les données de Lina');
+
+  // Un appareil avec une vieille copie (sans la suppression) envoie ses comptes.
+  await phone.page.evaluate(async ()=>{ authState.users.find(u=>u.id==='u-me').displayName += ''; await ghPushAuth(); await ghPushBudget(); });
+  ok(!remoteAuth().users.some(u=>u.id==='u-lina'), 'une vieille copie ne fait pas réapparaître le compte');
+
+  await lina.page.reload(); await lina.page.waitForTimeout(1000);
+  ok(await lina.page.evaluate(()=>!currentUser() && !authState.users.some(u=>u.id==='u-lina')), 'sur l\'appareil de Lina, la session est fermée et le compte a disparu');
+  await lina.page.waitForTimeout(2000);
+  ok(!remoteAuth().users.some(u=>u.id==='u-lina') && !remoteBudget().depenses.some(d=>d.ownerId==='u-lina'), 'l\'appareil de Lina n\'a rien renvoyé sur GitHub');
+  await phone.page.reload(); await phone.page.waitForTimeout(800);
+  ok(await phone.page.evaluate(()=>!authState.users.some(u=>u.id==='u-lina') && !state.depenses.some(d=>d.ownerId==='u-lina')), 'le téléphone de l\'admin ne voit plus Lina');
+
+  ok(lina.errors.length===0 && phone.errors.length===0 && pc.errors.length===0, 'aucune erreur JS ('+[...phone.errors, ...pc.errors, ...lina.errors].join(' | ')+')');
 }finally{
   await browser.close(); server.close();
 }
