@@ -194,6 +194,9 @@ main{flex:1;min-width:0;padding-block:32px 64px;padding-left:max(40px, env(safe-
 .ratio{text-align:right;}
 .ratio .pct{font-size:40px;}
 .ratio small{display:block;color:var(--muted);font-size:13px;margin-top:4px;}
+.hero-hors{margin-top:6px;font-size:13px;color:var(--muted);}
+.hero-hors b{color:var(--text);font-weight:600;}
+.hors-revenu{margin-top:16px;}
 .hero-norev{margin-top:12px;color:var(--muted);}
 
 .flow{position:relative;height:28px;margin:28px 0 22px;display:flex;gap:3px;border-radius:10px;overflow:hidden;}
@@ -1530,21 +1533,31 @@ function forOwner(arr, ownerId){ return (arr||[]).filter(e=>e.ownerId===ownerId)
 function mesSorties(){ return mine(state.depenses).filter(estSortie); }
 function revenusDuMoisListe(key){ return mine(state.revenusExceptionnels).filter(r=>dansLeMois(r, key)); }
 function revenusDuMois(key){ return sumR2(revenusDuMoisListe(key), r=>r.montant); }
+// Catégories de revenus mises « hors revenu total » (ex. Remboursement) : leurs
+// entrées restent dans le reste à vivre, mais pas dans le revenu affiché, la part
+// du revenu engagée ni le repère du revenu des graphiques.
+function categoriesHorsRevenu(){ return new Set(myCategories('revenus').filter(c=>c.horsRevenu).map(c=>c.nom)); }
+function estHorsRevenu(r, hors){ return !!r.categorie && (hors||categoriesHorsRevenu()).has(r.categorie); }
 function depensesDuMois(key){ return mesSorties().filter(d=>dansLeMois(d, key)); }
 function depenseMontantDuMois(dep, key){ return estSortie(dep) && dansLeMois(dep, key) ? (Number(dep.montant)||0) : 0; }
 
 /* Chaque partie est arrondie au centime avant d'être additionnée : le total et
    le solde correspondent toujours aux montants affichés. */
-function dashboardData(key){
-  const revenu = revenusDuMois(key);
+function dashboardData(key, hors){
+  hors = hors || categoriesHorsRevenu();
+  const rentrees = revenusDuMoisListe(key);
+  const entrees = sumR2(rentrees, r=>r.montant);
+  const horsRevenu = sumR2(rentrees.filter(r=>estHorsRevenu(r, hors)), r=>r.montant);
+  const revenu = r2(entrees - horsRevenu);
   const liste = depensesDuMois(key);
   const achats = sumR2(liste, d=>d.montant);
   const parts = { achats };
   const totalDepenses = achats;
-  const solde = r2(revenu - totalDepenses);
+  // Le reste à vivre compte toutes les entrées, y compris celles hors revenu total.
+  const solde = r2(entrees - totalDepenses);
   const parCat = new Map();
   liste.forEach(d=>{ const c = catLabel(d); parCat.set(c, r2((parCat.get(c)||0) + r2(d.montant))); });
-  return {key, revenu, parts, totalDepenses, solde, parCat};
+  return {key, revenu, entrees, horsRevenu, parts, totalDepenses, solde, parCat};
 }
 
 /* ---------- Catégories dans les graphiques ---------- */
@@ -1697,13 +1710,13 @@ function openCatCouleur(cats){
 }
 function catDot(color){ return `<span class="dot" style="background:${color}" aria-hidden="true"></span>`; }
 function anneeData(year){
-  const months = [];
+  const months = [], hors = categoriesHorsRevenu();
   for(let m=1;m<=12;m++){
     const key = monthKey(year,m);
-    const d = dashboardData(key);
+    const d = dashboardData(key, hors);
     months.push({key, ...d});
   }
-  const totals = {revenu:sumR2(months,m=>m.revenu), depenses:sumR2(months,m=>m.totalDepenses), solde:sumR2(months,m=>m.solde)};
+  const totals = {revenu:sumR2(months,m=>m.revenu), horsRevenu:sumR2(months,m=>m.horsRevenu), depenses:sumR2(months,m=>m.totalDepenses), solde:sumR2(months,m=>m.solde)};
   return {months, totals};
 }
 
@@ -2807,7 +2820,7 @@ function dashYear(){ return Number(state.selectedMonth.slice(0,4)); }
 // Phrase de constat, calculée depuis les chiffres du mois (jamais écrite en dur).
 function dashFinding(key, d){
   const mois = monthName(key);
-  if(d.revenu<=0.01) return `Aucun revenu saisi pour ${monthLabel(key)}. <button class="link" data-action="add-revexc">Ajouter un revenu</button>`;
+  if(d.entrees<=0.01) return `Aucun revenu saisi pour ${monthLabel(key)}. <button class="link" data-action="add-revexc">Ajouter un revenu</button>`;
   const resteTxt = v => v<0 ? `<strong>${fmtEUR0(-v)}</strong> de dépassement` : `<strong>${fmtEUR0(v)}</strong> de reste à vivre`;
   if(isFutureMonth(key)) return `Prévision pour ${mois} : ${resteTxt(d.solde)} si rien d’autre n’est ajouté.`;
   const prev = [1,2,3].map(i=>dashboardData(addMonths(key,-i)));
@@ -2832,11 +2845,12 @@ function renderDashboard(){
   const pal = catPalette(dashYear());
   // Du plus gros poste du mois au plus petit, « Autres » en dernier ; chaque catégorie garde sa couleur de l'année.
   const groupes = catGroupesDuMois(d.parCat, pal).sort((a,b)=>(a.label===CAT_AUTRES)-(b.label===CAT_AUTRES) || b.value-a.value);
-  // Contrôle : les catégories plus le reste redonnent exactement le revenu.
-  console.assert(Math.abs(sumR2(groupes, g=>g.value) + d.solde - d.revenu) < 0.005, 'Tableau de bord : catégories + reste ≠ revenu', key, d);
+  // Contrôle : les catégories plus le reste redonnent exactement les entrées du mois.
+  console.assert(Math.abs(sumR2(groupes, g=>g.value) + d.solde - d.entrees) < 0.005, 'Tableau de bord : catégories + reste ≠ entrées', key, d);
 
-  const noRev = d.revenu<=0.01;
-  const base = Math.max(d.revenu, d.totalDepenses) || 1;
+  const noRev = d.entrees<=0.01;
+  const base = Math.max(d.entrees, d.totalDepenses) || 1;
+  const horsNote = d.horsRevenu>0.004 ? `<div class="hero-hors">+ <b class="num">${fmtEUR(d.horsRevenu)}</b> hors revenu total (${esc([...new Set(revenusDuMoisListe(key).filter(r=>estHorsRevenu(r)).map(r=>r.categorie))].join(', '))}), inclus dans le reste à vivre</div>` : '';
   const mois = monthName(key);
   const nbDe = g => depensesDuMois(key).filter(x=>pal.groupeDe(catLabel(x))===g.label).length;
   const kOf = g => 'cat:'+g.label;
@@ -2880,9 +2894,9 @@ function renderDashboard(){
               ? `<div class="big fig none" data-dash="reste" aria-label="Aucun revenu">—</div>
                  <div class="hero-norev">Aucun revenu saisi pour ${monthLabel(key)}. <button class="link" data-action="add-revexc">Ajouter un revenu</button></div>`
               : `<div class="big fig${d.solde<0?' over':''}" data-dash="reste" data-tween="reste" data-v="${d.solde}">${bigFmt(motionOff()||!tweenValues.has('reste') ? d.solde : tweenValues.get('reste'))}</div>
-                 <div class="hero-of">sur <b class="num" data-dash="revenu">${fmtEUR(d.revenu)}</b> de revenu en ${mois}</div>`}
+                 <div class="hero-of">sur <b class="num" data-dash="revenu">${fmtEUR(d.revenu)}</b> de revenu en ${mois}</div>${horsNote}`}
           </div>
-          ${noRev ? '' : `<div class="ratio"><div class="pct fig" data-tween="pct" data-v="${d.totalDepenses/d.revenu}">${pctFmt(motionOff()||!tweenValues.has('pct') ? d.totalDepenses/d.revenu : tweenValues.get('pct'))}</div><small>${d.solde<0?'du revenu, dépassé':'du revenu engagé'}</small></div>`}
+          ${noRev || d.revenu<=0.01 ? '' : `<div class="ratio"><div class="pct fig" data-tween="pct" data-v="${d.totalDepenses/d.revenu}">${pctFmt(motionOff()||!tweenValues.has('pct') ? d.totalDepenses/d.revenu : tweenValues.get('pct'))}</div><small>${d.solde<0?'du revenu, dépassé':'du revenu engagé'}</small></div>`}
         </div>
         <div class="flow${dashFocusPoste?' has-focus':''}" data-n="${n}" role="img" aria-label="${attrEsc(flowLabel)}">${segs}</div>
         <h2 class="sr-only">Dépenses par catégorie</h2>
@@ -3024,7 +3038,8 @@ function chartValueLabel(item, dim){
   return dim==='categorie' ? 'Sans catégorie' : (item.libelle || 'Sans nom');
 }
 function revAnnuelItemsForMonth(key){
-  return revenusDuMoisListe(key).map(r=>({libelle:r.libelle, categorie:r.categorie, montant:Number(r.montant)||0}));
+  const hors = categoriesHorsRevenu();
+  return revenusDuMoisListe(key).filter(r=>!estHorsRevenu(r, hors)).map(r=>({libelle:r.libelle, categorie:r.categorie, montant:Number(r.montant)||0}));
 }
 function revAnnuelItemsForYear(year){
   const items = [];
@@ -3199,6 +3214,7 @@ function renderAnnuelle(){
         </tbody>
         <tfoot><tr><td>Total ${year}</td>${amtCell(totals.revenu,'sub first-sub','Revenus')}${amtCell(totals.depenses,'sub','Dépenses')}${amtCell(totals.solde,'key')}</tr></tfoot>
       </table></div>
+      ${totals.horsRevenu>0.004 ? `<p class="field-note" style="margin-top:10px;">Revenus hors ${esc([...categoriesHorsRevenu()].join(', '))} (${fmtEUR(totals.horsRevenu)} sur l’année), comptés dans le solde.</p>` : ''}
     </div>
   `;
 }
@@ -3215,7 +3231,10 @@ function renderRevenus(){
   const reAll = revenusDuMoisListe(key);
   const reFiltered = applyTableFilterAndSort('revexc', REVEXC_COLUMNS, reAll);
   const re = tableFilterState('revexc').sortCol ? reFiltered : [...reFiltered].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const hors = categoriesHorsRevenu();
   const total = sumR2(reAll, r=>r.montant);
+  const horsTotal = sumR2(reAll.filter(r=>estHorsRevenu(r, hors)), r=>r.montant);
+  const revenu = r2(total - horsTotal);
   const finding = total<=0 ? `Aucun revenu saisi pour ${monthLabel(key)}.` : `${fmtCount(reAll.length, 'entrée', 'entrées')} ce mois-ci.`;
   return `
     ${pageHeadHTML({title:'Revenus', color:VIEW_COLORS.revenus, finding, stepper:monthStepperHTML(key,'dashboard'),
@@ -3223,7 +3242,9 @@ function renderRevenus(){
 
     <section class="card hero mb16" aria-labelledby="rev-l">
       <div class="hero-label" id="rev-l">Revenus de ${monthName(key)}</div>
-      <div class="big fig" data-tween="rev:total" data-fmt="big" data-v="${total}">${bigFmt(total)}</div>
+      <div class="big fig" data-tween="rev:total" data-fmt="big" data-v="${revenu}">${bigFmt(revenu)}</div>
+      ${horsTotal>0.004 ? `<div class="hero-hors">+ <b class="num">${fmtEUR(horsTotal)}</b> hors revenu total, inclus dans le reste à vivre</div>` : ''}
+      ${horsRevenuReglageHTML()}
     </section>
 
     <div class="card">
@@ -3240,7 +3261,7 @@ function renderRevenus(){
           ${bulkHeadHTML('revexc', re)}
         </tr></thead>
         <tbody>${re.map(r=>`<tr>
-          <td><span class="cell-main">${dash(r.libelle)}</span>${noteSub(r)}</td><td class="sub first-sub">${fmtDate(r.date)}</td><td class="sub">${dash(r.categorie)}</td>
+          <td><span class="cell-main">${dash(r.libelle)}</span>${noteSub(r)}</td><td class="sub first-sub">${fmtDate(r.date)}</td><td class="sub">${dash(r.categorie)}${estHorsRevenu(r, hors) ? ' <span class="pill pill-dim" title="Compté dans le reste à vivre, pas dans le revenu total">hors revenu</span>' : ''}</td>
           <td class="num key" data-v="${r2(r.montant)}">${fmtEUR(r.montant)}</td>
           <td class="row-actions">${bulkCheckHTML('revexc', [r.id], 'Sélectionner '+(r.libelle||''))}<button class="icon-btn" data-action="edit-revexc" data-id="${r.id}" aria-label="Modifier ${attrEsc(r.libelle)}">${icon('edit')}</button><button class="icon-btn del" data-action="del-revexc" data-id="${r.id}" aria-label="Supprimer ${attrEsc(r.libelle)}">${icon('trash')}</button></td>
         </tr>`).join('')}</tbody>
@@ -3248,6 +3269,15 @@ function renderRevenus(){
       </table></div>`)}
     </div>
   `;
+}
+// Réglage : quelles catégories de revenus sortent du revenu total.
+function horsRevenuReglageHTML(){
+  const cats = myCategories('revenus');
+  if(!cats.length) return '';
+  return `<div class="hors-revenu">
+      <div class="field-note" id="hors-l">Exclure du revenu total (restent dans le reste à vivre) :</div>
+      <div class="chips" role="group" aria-labelledby="hors-l">${cats.map(c=>`<button type="button" class="chip rl-chip" data-action="toggle-hors-revenu" data-id="${c.id}" aria-pressed="${!!c.horsRevenu}">${esc(c.nom)}</button>`).join('')}</div>
+    </div>`;
 }
 function emptyState(iconName, title, desc, action, btnLabel){
   const btnIcon = action==='clear-table-filter' ? 'x' : (action && action.startsWith('goto-')) ? 'chevR' : 'plus';
@@ -3952,6 +3982,9 @@ async function handleAction(action, id, el){
       if(Number(data.montant)<0){ markFieldError('montant','Un revenu ne peut pas être négatif'); toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense.'); return false; }
       if(reportFieldErrors(fieldRequiredErrors(revexcFields(), data))) return false;
       Object.assign(find(mine(state.revenusExceptionnels)), data); await persist(); await render(); toast('Revenu mis à jour'); }); break;
+    case 'toggle-hors-revenu': { const cat = mine(state.categoriesRevenus).find(c=>c.id===id); if(!cat) break;
+      if(cat.horsRevenu) delete cat.horsRevenu; else cat.horsRevenu = true;
+      await persist(); await render(); toast(cat.horsRevenu ? `${cat.nom} : exclu du revenu total` : `${cat.nom} : compté dans le revenu total`); break; }
     case 'del-revexc': { const item=find(mine(state.revenusExceptionnels)); confirmDelete(item.libelle, async ()=>{ state.revenusExceptionnels = state.revenusExceptionnels.filter(x=>x.id!==id); await persist(); await render(); toast('Revenu supprimé'); }); break; }
 
     /* Dépenses (sorties datées, payées en une fois) */
