@@ -1,6 +1,6 @@
 /* Tests de la sélection multiple — Playwright (Chromium), sans dépendance à installer.
    Usage : node tests/selection-multiple.mjs
-   Sur Dépenses (achats, abonnements) et Charges (données de démo) :
+   Sur Dépenses et Revenus (données de démo) :
    - la barre de sélection n'apparaît qu'une fois une ligne cochée ;
    - « Tout sélectionner » (en-tête) coche toutes les lignes affichées ;
    - la suppression groupée demande confirmation puis retire exactement les lignes cochées ;
@@ -97,8 +97,7 @@ async function checkTable(browser, {hash, table, stateKey}){
 const browser = await chromium.launch();
 try{
   await checkTable(browser, {hash:'#depenses/2026-09', table:'depenses', stateKey:'depenses'});
-  await checkTable(browser, {hash:'#depenses/2026-09', table:'recurrentes', stateKey:'depenses'});
-  await checkTable(browser, {hash:'#charges/2026-09', table:'charges', stateKey:'charges'});
+  await checkTable(browser, {hash:'#revenus/2026-09', table:'revexc', stateKey:'revenusExceptionnels'});
 
   console.log('— 390 px');
   const {ctx, page, errors} = await openApp(browser, {width:390, height:844, hash:'#depenses/2026-09'});

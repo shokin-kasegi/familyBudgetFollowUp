@@ -1,6 +1,10 @@
 /* Jeu de données de démonstration (repris du prototype de la refonte) : deux
-   comptes liés par un compte joint, une année 2026 complète. Injecté dans le
-   localStorage avant le chargement de l'app par tests/refonte-v1.mjs.
+   comptes, une année 2026 complète. Injecté dans le localStorage avant le
+   chargement de l'app par les tests.
+   Le budget ne gère pour l'instant que des entrées et des sorties datées. Les
+   données de l'ancien modèle (revenus récurrents, abonnements, échéances,
+   objectifs, charges, compte joint) sont gardées ici exprès : l'app doit les
+   ignorer sans erreur.
    DEV UNIQUEMENT — ne jamais charger ce fichier depuis le site. */
 (function(global){
   const ME = 'u-me', LINA = 'u-lina';
@@ -28,7 +32,9 @@
       {id:id('rr'), ownerId:LINA, libelle:'Salaire', categorie:'Salaire', montant:2600, dateDebut:'2025-01-01', dateFin:null},
     ],
     revenusExceptionnels:[
+      ...Array.from({length:12}, (_,i)=>({id:id('re'), ownerId:ME, date:`2026-${String(i+1).padStart(2,'0')}-01`, libelle:'Salaire', categorie:'Salaire', montant:3200})),
       {id:id('re'), ownerId:ME, date:'2026-09-12', libelle:'Remboursement mutuelle', categorie:'Remboursement', montant:64.20},
+      {id:id('re'), ownerId:LINA, date:'2026-09-01', libelle:'Salaire', categorie:'Salaire', montant:2600},
     ],
     depenses:[
       ...abos, ...achats,
