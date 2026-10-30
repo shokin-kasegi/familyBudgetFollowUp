@@ -793,6 +793,8 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
 .rl-list{list-style:none;margin:0;padding:0;}
 .rl-row{display:grid;grid-template-columns:96px minmax(0,1fr) 160px 150px 150px 110px;grid-template-areas:"date lib type cat compte amt" "date note paie paie paie paie" "date meta meta meta actions actions";gap:6px 10px;align-items:center;padding:12px 0;border-top:1px solid var(--line);}
 .rl-row:first-child{border-top:none;}
+@keyframes rl-maj{from{background:var(--raised);}}
+.rl-row.is-maj{animation:rl-maj 1.2s ease;}
 .rl-date{grid-area:date;align-self:start;padding-top:9px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;}
 .rl-lib{grid-area:lib;min-width:0;display:flex;flex-direction:column;gap:3px;}
 .rl-brut{font-size:12px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -1045,7 +1047,7 @@ main{padding-top:calc(88px + env(safe-area-inset-top,0px)) !important;}
 /* ---------- Mouvement réduit : plus de déplacement ni de défilement de
    chiffres ; seuls de brefs fondus restent. ---------- */
 @media (prefers-reduced-motion: reduce){
-  .enter,.ychart.first rect.b,.ring.done,.detail-in,tbody tr.is-new,.auth-brand .mark.draw circle{animation:none !important;}
+  .enter,.ychart.first rect.b,.ring.done,.detail-in,tbody tr.is-new,.rl-row.is-maj,.auth-brand .mark.draw circle{animation:none !important;}
   .seg,.split span,.track .fill,.ring .val,.progress > div{transition-duration:0s !important;}
   .modal,.modal-overlay.closing .modal,.col-filter-panel,.user-actions,.cat-select.open .cat-dropdown{animation-name:fadein !important;animation-duration:.15s !important;}
   .modal-overlay.closing .modal{animation-name:fadeout !important;}
@@ -5877,7 +5879,7 @@ function releveCreerLignes(ops){
       const suivi = releveDejaSuivi(o);
       if(suivi){ s.type = 'ignorer'; s.confiance = 'sur'; s.raison = suivi; }
       const {cle, confiance, raison, ...valeurs} = s;
-      return {id: uid(), date: o.date, brut: o.libelle.trim(), montant: r2(o.montant), cle, suivi: !!suivi, confiance, raison, etat:'attente', s:{...valeurs}, v:{...valeurs}};
+      return {id: uid(), date: o.date, brut: o.libelle.trim(), montant: r2(o.montant), cle, suivi: !!suivi, incertain: !!o.signeIncertain, confiance, raison, etat:'attente', s:{...valeurs}, v:{...valeurs}};
     });
 }
 
@@ -6024,9 +6026,30 @@ async function releveValider(ids){
     if(!s.formatRetenu){ f.imports = (f.imports||0) + 1; s.formatRetenu = true; }
     modele.formats[s.sig] = {...f, colonnes: s.csv ? s.csv.col : (s.colonnes || f.colonnes), nom: s.nom, maj: new Date().toISOString().slice(0,10)};
   }
+  const majs = releveRafraichirAttente(s);
   releveSauverSession();
   await persist(); await render();
-  toast(ajoutees && ignorees ? `${ajoutees} ajoutée${ajoutees>1?'s':''}, ${ignorees} ignorée${ignorees>1?'s':''}` : ajoutees ? (ajoutees>1 ? `${ajoutees} opérations ajoutées` : 'Opération ajoutée') : (ignorees>1 ? `${ignorees} lignes ignorées` : 'Ligne ignorée'));
+  const msg = ajoutees && ignorees ? `${ajoutees} ajoutée${ajoutees>1?'s':''}, ${ignorees} ignorée${ignorees>1?'s':''}` : ajoutees ? (ajoutees>1 ? `${ajoutees} opérations ajoutées` : 'Opération ajoutée') : (ignorees>1 ? `${ignorees} lignes ignorées` : 'Ligne ignorée');
+  toast(majs ? `${msg} · ${fmtCount(majs, 'autre ligne mise à jour', 'autres lignes mises à jour')}` : msg);
+}
+// Après chaque validation, les lignes encore en attente profitent de ce qui
+// vient d'être appris (« CARREFOUR » validé en Courses → les autres CARREFOUR
+// du relevé passent en Courses). Une ligne que l'utilisateur a déjà modifiée
+// garde ses choix, et une ligne déjà suivie ailleurs reste ignorée.
+const RELEVE_CHAMPS_SUGGERES = ['type','libelle','categorie','compte'];
+function releveRafraichirAttente(s){
+  const modele = releveModele(false);
+  let n = 0;
+  s.lignes.forEach(l=>{
+    l.maj = false;
+    if(l.etat!=='attente' || l.suivi) return;
+    if(RELEVE_CHAMPS_SUGGERES.some(k=>(l.v[k]||'')!==(l.s[k]||''))) return;
+    const {cle, confiance, raison, ...valeurs} = releveSuggestion({libelle:l.brut, montant:l.montant, signeIncertain:l.incertain}, modele);
+    const change = RELEVE_CHAMPS_SUGGERES.some(k=>(valeurs[k]||'')!==(l.s[k]||''));
+    if(change){ l.v = {...l.v, ...valeurs}; l.s = {...valeurs}; l.maj = true; n++; }
+    if(change || confiance!==l.confiance){ l.confiance = confiance; l.raison = raison; }
+  });
+  return n;
 }
 function releveRetirerCategorie(type, nom){
   if(!releveSession) return;
@@ -6050,7 +6073,7 @@ function releveLigneHTML(l){
   const ign = l.v.type==='ignorer', dep = l.v.type==='depense';
   const plusieurs = dep && l.v.paiement==='Echelonne', nb = releveNbMensualites(l.v);
   const nomLigne = attrEsc(l.v.libelle || l.brut);
-  return `<li class="rl-row${ign?' is-ignored':''}" data-rl-row="${l.id}">
+  return `<li class="rl-row${ign?' is-ignored':''}${l.maj?' is-maj':''}" data-rl-row="${l.id}">
     <div class="rl-date">${fmtDate(l.date)}</div>
     <div class="rl-lib">
       <input class="rl-ctl" data-rl-id="${l.id}" data-rl-champ="libelle" value="${attrEsc(l.v.libelle)}" aria-label="Libellé" ${ign?'disabled':''}>
@@ -6192,6 +6215,8 @@ function renderReleve(){
     ${releveApprentissageHTML(modele)}`;
 }
 function releveAfterRender(){
+  // Le surlignage des lignes mises à jour ne se joue qu'une fois.
+  (releveSession?.lignes||[]).forEach(l=>{ l.maj = false; });
   if(releveFocusApres===null) return;
   const btns = [...document.querySelectorAll('.rl-row [data-action="releve-valider"]')];
   const b = btns[Math.min(releveFocusApres, btns.length-1)];

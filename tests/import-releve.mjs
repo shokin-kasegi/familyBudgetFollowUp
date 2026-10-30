@@ -281,6 +281,36 @@ try{
     await ctx.close();
   }
 
+  console.log('\n— Validation : les lignes suivantes profitent de ce qui vient d’être appris');
+  {
+    const {ctx, page, errors} = await openApp(browser, {width:1440, height:900});
+    await importer(page, 'releve-maj.csv', [
+      'Date;Libellé;Débit euros;Crédit euros;',
+      '02/09/2026;"CB PRIMEUR MARTIN 01/09";12,40;;',
+      '09/09/2026;"CB PRIMEUR MARTIN 08/09";8,10;;',
+      '16/09/2026;"CB PRIMEUR MARTIN 15/09";9,70;;',
+    ].join('\r\n'));
+    let L = await lignes(page);
+    ok(L.length===3 && L.every(l=>l.badge==='Nouvelle'), `3 lignes nouvelles (${JSON.stringify(L)})`);
+    // La troisième est modifiée à la main : elle doit garder son choix.
+    await page.click(`.rl-row[data-rl-row="${L[2].id}"] .rl-cat [data-cat-toggle]`);
+    await page.click(`.rl-row[data-rl-row="${L[2].id}"] .cat-select.open [data-cat-select="Loisirs"]`);
+    await page.waitForTimeout(120);
+    await page.fill(`[data-rl-id="${L[0].id}"][data-rl-champ="libelle"]`, 'Primeur');
+    await page.click(`.rl-row[data-rl-row="${L[0].id}"] .rl-cat [data-cat-toggle]`);
+    await page.click(`.rl-row[data-rl-row="${L[0].id}"] .cat-select.open [data-cat-select="Alimentation"]`);
+    await page.waitForTimeout(120);
+    await page.click(`[data-action="releve-valider"][data-id="${L[0].id}"]`);
+    await page.waitForTimeout(350);
+    const R = await lignes(page);
+    const deux = R.find(l=>l.id===L[1].id), trois = R.find(l=>l.id===L[2].id);
+    ok(deux && deux.lib==='Primeur' && deux.cat==='Alimentation' && deux.badge==='Apprise', `la ligne suivante reprend le nom et la catégorie appris (${JSON.stringify(deux)})`);
+    ok(trois && trois.cat==='Loisirs' && trois.lib!=='Primeur', `la ligne modifiée à la main garde ses choix (${JSON.stringify(trois)})`);
+    ok(await page.evaluate(id=>!!document.querySelector(`.rl-row[data-rl-row="${id}"].is-maj`), L[1].id), 'la ligne mise à jour est signalée');
+    ok(errors.length===0, `erreurs console : ${errors.join(' | ')}`);
+    await ctx.close();
+  }
+
   console.log('\n— 390 px');
   {
     const {ctx, page, errors} = await openApp(browser, {width:390, height:844});
