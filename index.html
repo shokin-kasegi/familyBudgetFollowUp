@@ -6470,42 +6470,81 @@ async function ghPull(){
   const c = await ghPullSocial(true);
   return a || b || c;
 }
-/* Fusion sûre des données du budget : chacun ne modifie jamais que SES PROPRES
-   saisies (ownerId). On peut donc fusionner sans risque : on garde toujours ma
-   version locale pour ce qui m'appartient (même pas encore synchronisé), et on
-   récupère la version distante pour ce qui appartient à quelqu'un d'autre —
-   c'est ce qui permet de voir les ajouts du partenaire sans jamais écraser les
-   miens en cours de frappe. */
-function mergeOwned(localArr, remoteArr, myId){
-  const mine = (localArr||[]).filter(x=>x.ownerId===myId);
-  const others = (remoteArr||[]).filter(x=>x.ownerId!==myId);
-  return [...mine, ...others];
+/* Fusion du budget à trois versions : cet appareil, GitHub, et la « base » —
+   la dernière version que cet appareil sait être identique à GitHub (gardée
+   dans budget_sync_base). Élément par élément (par id) :
+   - modifié seulement ici → on garde la version d'ici ;
+   - modifié seulement sur GitHub (autre appareil, même compte, ou partenaire)
+     → on prend celle de GitHub ;
+   - modifié des deux côtés → celle d'ici (pas encore envoyée, donc la plus
+     récente en pratique) ;
+   une suppression compte comme une modification, elle se propage donc aussi.
+   Sans base (premier passage après cette mise à jour), GitHub l'emporte sur
+   les éléments communs et rien de ce qui n'existe qu'ici n'est perdu. */
+const BUDGET_BASE_KEY = 'budget_sync_base';
+function stableStringify(v){
+  if(Array.isArray(v)) return '['+v.map(stableStringify).join(',')+']';
+  if(v && typeof v==='object') return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+stableStringify(v[k])).join(',')+'}';
+  return JSON.stringify(v);
 }
-function mergeBudget(local, remote, myId){
+function ownedPart(obj){ const out = {}; OWNED_ARRAYS.forEach(k=>{ out[k] = (obj&&obj[k])||[]; }); return out; }
+function loadBudgetBase(){ try{ return JSON.parse(localStorage.getItem(BUDGET_BASE_KEY)||'null'); }catch(e){ return null; } }
+function saveBudgetBase(obj){ try{ localStorage.setItem(BUDGET_BASE_KEY, JSON.stringify(ownedPart(obj))); }catch(e){} }
+function mergeArray3(localArr, remoteArr, baseArr){
+  const keyOf = x=>(x && x.id!=null) ? 'id:'+x.id : 'v:'+stableStringify(x);
+  const index = arr=>{ const m = new Map(); (arr||[]).forEach(x=>m.set(keyOf(x), x)); return m; };
+  const L = index(localArr), R = index(remoteArr), B = baseArr ? index(baseArr) : null;
+  const out = [];
+  new Set([...L.keys(), ...R.keys()]).forEach(k=>{
+    const l = L.get(k), r = R.get(k);
+    let pick;
+    if(!B){ pick = r!==undefined ? r : l; }
+    else{
+      const sb = B.has(k) ? stableStringify(B.get(k)) : undefined;
+      const sl = l!==undefined ? stableStringify(l) : undefined;
+      const sr = r!==undefined ? stableStringify(r) : undefined;
+      pick = (sl===sb && sr!==sb) ? r : l;
+    }
+    if(pick!==undefined) out.push(pick);
+  });
+  return out;
+}
+function mergeBudget(local, remote, base){
   const merged = {...local};
-  OWNED_ARRAYS.forEach(key=>{ merged[key] = mergeOwned(local[key], remote[key], myId); });
+  OWNED_ARRAYS.forEach(key=>{ merged[key] = mergeArray3(local[key], remote[key], base ? (base[key]||[]) : null); });
   return merged;
+}
+function budgetDiffers(a, b){ return stableStringify(ownedPart(a))!==stableStringify(ownedPart(b)); }
+// Réaffiche si une synchro a apporté des changements, sauf pendant une saisie.
+async function renderAfterRemoteChange(){
+  const modal = document.getElementById('modal-root');
+  if(modal && modal.innerHTML) return;
+  if(currentUser()) await render();
+}
+async function ghFetchBudget(cfg){
+  const res = await fetch(ghUrl(cfg, cfg.path||'data.json'), { headers: ghHeaders(cfg.token), cache:'no-store' });
+  if(res.status===404) return { sha:null, remote:null };
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const data = await res.json();
+  const remote = JSON.parse(b64DecodeUnicode(data.content));
+  return { sha:data.sha, remote: (remote && remote.selectedMonth!==undefined) ? remote : null };
 }
 
 async function ghPullBudget(merge){
   const cfg = ghConfig();
   if(!cfg.owner || !cfg.repo || !cfg.token) return false;
   try{
-    const res = await fetch(ghUrl(cfg, cfg.path||'data.json'), { headers: ghHeaders(cfg.token) });
-    if(res.status===404){ ghSha = null; return false; }
-    if(!res.ok){ throw new Error('HTTP '+res.status); }
-    const data = await res.json();
-    ghSha = data.sha;
-    const text = b64DecodeUnicode(data.content);
-    const remote = JSON.parse(text);
-    if(remote && remote.selectedMonth!==undefined){
-      const me = currentUser();
-      state = (merge && me) ? mergeBudget(state, remote, me.id) : remote;
-      localStorage.setItem('budget_store', JSON.stringify(state));
-      ghLastSync = new Date();
-      return true;
-    }
-    return false;
+    const { sha, remote } = await ghFetchBudget(cfg);
+    ghSha = sha;
+    if(!remote) return false;
+    const before = state;
+    state = merge ? mergeBudget(state, remote, loadBudgetBase()) : remote;
+    saveBudgetBase(remote);
+    localStorage.setItem('budget_store', JSON.stringify(state));
+    ghLastSync = new Date();
+    // Des saisies d'ici pas encore sur GitHub (ex. faites hors connexion) : on les envoie.
+    if(budgetDiffers(state, remote)) markDirtyForSync();
+    return budgetDiffers(before, state);
   }catch(e){ console.error('GitHub pull error (budget)', e); return false; }
 }
 // Fusionne les comptes plutôt que d'écraser : un compte créé localement mais
@@ -6522,7 +6561,7 @@ async function ghPullAuth(){
   const cfg = ghConfig();
   if(!cfg.owner || !cfg.repo || !cfg.token) return false;
   try{
-    const res = await fetch(ghUrl(cfg, cfg.authPath||'auth.json'), { headers: ghHeaders(cfg.token) });
+    const res = await fetch(ghUrl(cfg, cfg.authPath||'auth.json'), { headers: ghHeaders(cfg.token), cache:'no-store' });
     if(res.status===404){ ghAuthSha = null; return false; }
     if(!res.ok){ throw new Error('HTTP '+res.status); }
     const data = await res.json();
@@ -6543,7 +6582,7 @@ async function ghPullSocial(merge){
   const cfg = ghConfig();
   if(!cfg.owner || !cfg.repo || !cfg.token) return false;
   try{
-    const res = await fetch(ghUrl(cfg, cfg.socialPath||'social.json'), { headers: ghHeaders(cfg.token) });
+    const res = await fetch(ghUrl(cfg, cfg.socialPath||'social.json'), { headers: ghHeaders(cfg.token), cache:'no-store' });
     if(res.status===404){ ghSocialSha = null; return false; }
     if(!res.ok){ throw new Error('HTTP '+res.status); }
     const data = await res.json();
@@ -6573,7 +6612,7 @@ async function ghPutWithRetry(path, dataObj, message, attempt){
   const cfg = ghConfig();
   if(!cfg.owner || !cfg.repo || !cfg.token) return false;
   try{
-    const check = await fetch(ghUrl(cfg, path), { headers: ghHeaders(cfg.token) });
+    const check = await fetch(ghUrl(cfg, path), { headers: ghHeaders(cfg.token), cache:'no-store' });
     let sha = null;
     if(check.status===200){ const d = await check.json(); sha = d.sha; }
     const body = { message, content: b64EncodeUnicode(JSON.stringify(dataObj, null, 2)) };
@@ -6588,7 +6627,36 @@ async function ghPutWithRetry(path, dataObj, message, attempt){
     return true;
   }catch(e){ console.error('GitHub push error ('+path+')', e); return false; }
 }
-async function ghPushBudget(){ return ghPutWithRetry(ghConfig().path||'data.json', state, 'Mise à jour budget'); }
+/* Envoi du budget : on relit toujours GitHub juste avant et on fusionne, pour
+   ne jamais écraser ce qu'un autre appareil a envoyé entre-temps (ex. un
+   onglet resté ouvert sur le PC pendant qu'on saisit sur le téléphone). */
+async function ghPushBudget(attempt){
+  const cfg = ghConfig();
+  if(!cfg.owner || !cfg.repo || !cfg.token) return false;
+  try{
+    const { sha, remote } = await ghFetchBudget(cfg);
+    let changedHere = false;
+    if(remote){
+      const merged = mergeBudget(state, remote, loadBudgetBase());
+      changedHere = budgetDiffers(state, merged);
+      state = merged;
+      localStorage.setItem('budget_store', JSON.stringify(state));
+      if(!budgetDiffers(state, remote)){ ghSha = sha; saveBudgetBase(remote); ghLastSync = new Date(); if(changedHere) await renderAfterRemoteChange(); return true; }
+    }
+    const snapshot = JSON.parse(JSON.stringify(state));
+    const body = { message:'Mise à jour budget', content: b64EncodeUnicode(JSON.stringify(snapshot, null, 2)) };
+    if(sha) body.sha = sha;
+    const res = await fetch(ghUrl(cfg, cfg.path||'data.json'), { method:'PUT', headers:{...ghHeaders(cfg.token), 'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    if(res.status===409 && !attempt) return ghPushBudget(true); // écrit entre-temps ailleurs : on refusionne
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const out = await res.json().catch(()=>null);
+    ghSha = (out && out.content && out.content.sha) || null;
+    saveBudgetBase(snapshot);
+    ghLastSync = new Date();
+    if(changedHere) await renderAfterRemoteChange();
+    return true;
+  }catch(e){ console.error('GitHub push error (budget)', e); return false; }
+}
 async function ghPushAuth(){ return ghPutWithRetry(ghConfig().authPath||'auth.json', authState, 'Mise à jour comptes'); }
 async function ghPushSocial(){ return ghPutWithRetry(ghConfig().socialPath||'social.json', socialState, 'Mise à jour social'); }
 async function ghTestAndConnect(token){
@@ -6715,6 +6783,12 @@ function startPolling(){
   pollTimer = setInterval(pollNow, 45000);
 }
 function stopPolling(){ if(pollTimer){ clearInterval(pollTimer); pollTimer=null; } }
+// Retour sur l'appli (onglet réaffiché, téléphone déverrouillé) : on récupère
+// tout de suite ce qui a été saisi sur un autre appareil entre-temps.
+document.addEventListener('visibilitychange', async ()=>{
+  if(document.visibilityState!=='visible' || !pollTimer || !ghConfigured()) return;
+  if(await ghPullBudget(true)) await renderAfterRemoteChange();
+});
 async function pollNow(){
   if(document.getElementById('modal-root').innerHTML) return; // ne pas perturber une saisie en cours
   if(!ghConfigured()) return;
