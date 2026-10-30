@@ -6,6 +6,8 @@
    - un dépassement du total bloque la validation et demande de vérifier ;
    - le paiement se clôture quand le total est atteint ;
    - une mensualité non validée n'est jamais validée d'office : elle est reportée ;
+   - import : une mensualité ou un prélèvement déjà validé à la main est mis
+     en « Ne pas importer » ;
    - onglet Échéancier : abonnements et paiements en plusieurs fois ;
    - pas d'erreur console. */
 import { createRequire } from 'node:module';
@@ -69,6 +71,12 @@ const dash = () => page.evaluate(()=>({
 await page.addInitScript(()=>{ window.num = s => Number(String(s||'').replace(/[\s  €]/g,'').replace('−','-').replace(',','.')); });
 const shot = async name => { if(SHOTS) await page.screenshot({path:path.join(SHOTS, name+'.png'), fullPage:true}); };
 
+// Enregistre la modale et attend qu'elle soit fermée (la sauvegarde est terminée).
+async function soumettre(){
+  await page.click('#modal-form button[type=submit]');
+  await page.waitForSelector('#modal-root .modal-overlay', {state:'detached', timeout:5000});
+  await page.waitForTimeout(150);
+}
 try{
   const ppfDeps = async lib => (await mesDeps()).filter(d=>d.libelle===lib);
   const texte = () => page.evaluate(()=>document.getElementById('view').innerText);
@@ -93,8 +101,7 @@ try{
   await page.waitForTimeout(300);
   ok(await page.isVisible('#modal-form') && /dépasse le montant total/.test(await page.evaluate(()=>document.getElementById('modal-form').innerText)), 'mensualité plus grande que le total : vérification demandée');
   await page.fill('#f_montantTotal', '1000');
-  await page.click('#modal-form button[type=submit]');
-  await page.waitForTimeout(400);
+  await soumettre();
   let ppfId;
   {
     const deps = await ppfDeps('Canapé');
@@ -142,8 +149,7 @@ try{
   ok((await ppfDeps('Canapé')).filter(d=>!d.prevu).length===1, 'rien n’est validé tant que les montants ne sont pas vérifiés');
   await page.fill('#f_montant', '350');
   await page.fill('#f_date', '2026-11-10');
-  await page.click('#modal-form button[type=submit]');
-  await page.waitForTimeout(400);
+  await soumettre();
   {
     const deps = await ppfDeps('Canapé');
     ok(deps.filter(d=>!d.prevu).length===2, 'deuxième mensualité validée');
@@ -158,8 +164,7 @@ try{
   await page.fill('#f_montant', '10.99');
   await page.check('#f_abonnement');
   ok(await page.isHidden('#f_plusieursFois'), 'abonnement coché : la case « en plusieurs fois » disparaît');
-  await page.click('#modal-form button[type=submit]');
-  await page.waitForTimeout(400);
+  await soumettre();
   ok(/Spotify/.test(await page.$eval('#ech-abo', h=>h.closest('section').innerText)), 'l’abonnement apparaît dans l’échéancier');
 
   console.log('\n— Import : mensualité attendue, dépassement, nouveau paiement');
@@ -230,8 +235,7 @@ try{
     await page.waitForTimeout(300);
     ok(await page.isVisible('#modal-form'), 'mensualité au-delà du total : vérification demandée');
     await page.fill('#f_montant', '150');
-    await page.click('#modal-form button[type=submit]');
-    await page.waitForTimeout(400);
+    await soumettre();
     const p = (await mesDeps()).find(d=>/fnac/i.test(d.libelle) && d.prevu);
     ok(p && p.montant===150, `la mensualité prévue suit la dernière validée (${p?.montant})`);
   }
@@ -242,10 +246,66 @@ try{
     const f = (await mesDeps()).find(d=>/fnac/i.test(d.libelle) && !d.prevu);
     await page.click(`.ppf-row[data-ppf="${f.ppfId}"] [data-action="ppf-arreter"]`);
     await page.click('#del-yes');
-    await page.waitForTimeout(400);
+    await page.waitForSelector('#modal-root .modal-overlay', {state:'detached', timeout:5000});
+    await page.waitForTimeout(250);
     ok(!(await mesDeps()).some(d=>/fnac/i.test(d.libelle) && d.prevu), 'arrêté : plus de mensualité prévue');
     await ouvrir('2027-02-03', '#echeancier');
     ok(!(await mesDeps()).some(d=>/fnac/i.test(d.libelle) && d.prevu), 'et aucune n’est réannoncée au rechargement');
+  }
+
+  console.log('\n— Import : déjà validé à la main → ne pas importer');
+  await ouvrir('2027-03-05', '#depenses/2027-03');
+  await page.click('[data-action="add-depense"]');
+  await page.fill('#f_date', '2027-03-02');
+  await page.fill('#f_libelle', 'Vélo');
+  await page.fill('#f_montant', '100');
+  await page.check('#f_plusieursFois');
+  await page.fill('#f_montantTotal', '300');
+  await soumettre();
+  await page.click('[data-action="add-depense"]');
+  await page.fill('#f_date', '2027-03-04');
+  await page.fill('#f_libelle', 'Deezer');
+  await page.fill('#f_montant', '11.99');
+  await page.check('#f_abonnement');
+  await soumettre();
+  // En avril, les deux sont validés à la main (Deezer avec un autre montant, à une autre date que le relevé).
+  await ouvrir('2027-04-08', '#echeancier');
+  {
+    const velo = (await mesDeps()).find(d=>d.libelle==='Vélo' && d.prevu);
+    await page.click(`[data-action="ppf-valider"][data-id="${velo.id}"]`);
+    await page.fill('#f_date', '2027-04-02');
+    await soumettre();
+    const deezer = (await mesDeps()).find(d=>d.libelle==='Deezer' && d.prevu);
+    await page.click(`[data-action="abo-valider"][data-id="${deezer.id}"]`);
+    await page.fill('#f_date', '2027-04-01');
+    await page.fill('#f_montant', '12.99');
+    await soumettre();
+    ok((await mesDeps()).filter(d=>['Vélo','Deezer'].includes(d.libelle) && !d.prevu && d.date.startsWith('2027-04')).length===2, 'avril : mensualité et abonnement validés à la main');
+  }
+  const nbAvant = (await mesDeps()).filter(d=>!d.prevu).length;
+  await aller('#releve');
+  // L'import précédent est terminé : on en commence un autre.
+  if(await page.$('[data-action="releve-fermer"]')){ await page.click('[data-action="releve-fermer"]'); await page.waitForTimeout(250); if(await page.$('#del-yes')) await page.click('#del-yes'); await page.waitForTimeout(250); }
+  {
+    const CSV2 = ['Date;Libellé;Montant',
+      '02/04/2027;PRLV SEPA VELO;-100,00',
+      '04/04/2027;PRLV SEPA DEEZER;-12,99',
+      '05/04/2027;CB BOULANGERIE;-5,40'].join('\n');
+    await page.setInputFiles('#releve-file', {name:'releve-avril.csv', mimeType:'text/csv', buffer:Buffer.from(CSV2)});
+    await page.waitForSelector('.rl-row');
+    await page.waitForTimeout(250);
+    const lignes = await page.$$eval('.rl-row', rs=>rs.map(r=>({brut:r.querySelector('.rl-brut').innerText, type:r.querySelector('input[data-rl-champ="type"]').value, ignoree:r.classList.contains('is-ignored'), pill:r.querySelector('.rl-meta .pill').innerText, raison:r.querySelector('.rl-raison')?.innerText||''})));
+    const velo = lignes.find(l=>/VELO/.test(l.brut)), deezer = lignes.find(l=>/DEEZER/.test(l.brut)), boul = lignes.find(l=>/BOULANGERIE/.test(l.brut));
+    ok(velo && velo.type==='ignorer' && velo.ignoree && /Déjà validée à la main : Vélo \(mensualité/.test(velo.raison), `mensualité déjà validée à la main : ligne en « Ne pas importer » (${JSON.stringify(velo)})`);
+    ok(deezer && deezer.type==='ignorer' && deezer.ignoree && /Déjà validé à la main : Deezer \(abonnement/.test(deezer.raison), `abonnement déjà validé à la main, même à un autre jour : ligne en « Ne pas importer » (${JSON.stringify(deezer)})`);
+    ok(boul && boul.type==='depense', 'une autre ligne reste à importer');
+    await shot('import-deja-valide');
+    await page.click('[data-action="releve-valider-tout"]');
+    await page.waitForTimeout(400);
+    const deps = await mesDeps();
+    ok(deps.filter(d=>!d.prevu).length===nbAvant+1, `seule la boulangerie est ajoutée (${deps.filter(d=>!d.prevu).length-nbAvant})`);
+    ok(deps.filter(d=>d.libelle==='Vélo' && !d.prevu).length===2 && deps.filter(d=>d.libelle==='Deezer' && !d.prevu).length===2, 'pas de doublon de la mensualité ni de l’abonnement');
+    ok(deps.some(d=>d.libelle==='Vélo' && d.prevu && d.date==='2027-05-02') && deps.some(d=>d.libelle==='Deezer' && d.prevu && d.date==='2027-05-01'), 'les prévisions de mai restent en attente, non validées');
   }
 
   console.log('\n— 390 px');

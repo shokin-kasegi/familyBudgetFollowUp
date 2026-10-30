@@ -2228,7 +2228,9 @@ function openModal(title, fields, values, onSave, extraHtml){
     if(result===false) return;
     closeModal();
   };
-  setTimeout(()=>{ const first = document.querySelector('#modal-form input:not([type=hidden]),#modal-form select') || document.getElementById('del-yes') || modalFocusables()[0]; if(first) first.focus(); }, 50);
+  // Focus sur le premier champ, sauf si l'utilisateur est déjà dans la modale (saisie rapide) :
+  // lui reprendre le focus enverrait la suite de sa frappe dans un autre champ.
+  setTimeout(()=>{ if(document.querySelector('#modal-root .modal')?.contains(document.activeElement)) return; const first = document.querySelector('#modal-form input:not([type=hidden]),#modal-form select') || document.getElementById('del-yes') || modalFocusables()[0]; if(first) first.focus(); }, 50);
 }
 function fieldHTML(f, values){
   const val = values && values[f.key]!==undefined && values[f.key]!==null ? values[f.key] : (f.default!==undefined?f.default:'');
@@ -4921,6 +4923,23 @@ function relevePpfAttendu(op, cle, libelle, pris){
     .filter(p=>!pris.has(p.id) && (memeCommercant(p) || String(p.libelle||'').trim().toLowerCase()===nom))
     .sort((a,b)=>ecartMois(a)-ecartMois(b) || Math.abs(a.montant-abs)-Math.abs(b.montant-abs))[0] || null;
 }
+// Un prélèvement d'abonnement ou une mensualité déjà validé à la main (pas par un
+// import) pour ce commerçant, dans le même mois ou à quelques jours : la ligne du
+// relevé est le même paiement, elle est mise en « Ne pas importer ». Le montant peut
+// différer (validé avec un autre prix) ; à défaut, la date la plus proche l'emporte.
+function releveSerieDejaValidee(op, cle, libelle, pris){
+  if(op.montant>=0) return '';
+  const nom = String(libelle||'').trim().toLowerCase();
+  const premier = cle.split(' ')[0];
+  const jours = d => Math.abs(new Date(d+'T00:00:00') - new Date(op.date+'T00:00:00')) / 86400000;
+  const memeCommercant = d => { const c = d.cle || releveCle(d.libelle); return c===cle || (premier.length>=4 && c.split(' ')[0]===premier) || String(d.libelle||'').trim().toLowerCase()===nom; };
+  const d = mesSorties()
+    .filter(d=>(d.aboId || d.ppfId) && d.source!=='releve' && d.date && !pris.has(d.id) && memeCommercant(d) && (moisDe(d.date)===moisDe(op.date) || jours(d.date)<=5))
+    .sort((a,b)=>jours(a.date)-jours(b.date))[0];
+  if(!d) return '';
+  pris.add(d.id);
+  return `Déjà validé${d.ppfId ? 'e' : ''} à la main : ${d.libelle} (${d.ppfId ? 'mensualité' : 'abonnement'} du ${fmtDate(d.date)})`;
+}
 function releveCreerLignes(ops){
   const modele = releveModele(false);
   const pris = new Set();
@@ -4928,7 +4947,7 @@ function releveCreerLignes(ops){
     .sort((a,b)=>a.date.localeCompare(b.date))
     .map(o=>{
       const s = releveSuggestion(o, modele);
-      const suivi = releveDejaSuivi(o);
+      const suivi = releveSerieDejaValidee(o, s.cle, s.libelle, pris) || releveDejaSuivi(o);
       const attendu = suivi ? null : releveAboAttendu(o, s.cle, s.libelle, pris);
       const mensualite = suivi || attendu ? null : relevePpfAttendu(o, s.cle, s.libelle, pris);
       if(suivi){ s.type = 'ignorer'; s.abo = false; s.confiance = 'sur'; s.raison = suivi; }
