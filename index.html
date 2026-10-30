@@ -5866,6 +5866,10 @@ function releveSuggestion(op, modele){
   const regle = modele.regles[cle];
   // Un commerçant habituellement en dépense qui crédite le compte : c'est un remboursement.
   if(regle && regle.type!=='ignorer' && regle.type!==sens && !op.signeIncertain){
+    // Ce sens a déjà été validé pour ce commerçant (règle minoritaire) : on la reprend.
+    const inv = regle.inverse;
+    if(inv && inv.type===sens) return {...base, type: sens, libelle: inv.libelle || releveJoli(cle), categorie: inv.categorie || '', compte: inv.compte || 'Compte Perso',
+      confiance: inv.n>=2 ? 'sur' : 'appris', raison: `Reconnue en ${sens==='revenu' ? 'rentrée' : 'dépense'} (${inv.n>1 ? inv.n+' fois' : 'une fois'})`};
     const cats = myCategories(sens==='revenu' ? 'revenus' : 'depenses').map(c=>c.nom);
     const cat = sens==='revenu' && cats.includes('Remboursement') ? 'Remboursement' : releveCategorieDefaut(sens);
     return {...base, type: sens, libelle: (sens==='revenu' ? 'Remboursement ' : '') + (regle.libelle || releveJoli(cle)), categorie: cat, compte: regle.compte || 'Compte Perso', confiance:'devine', raison:'Sens inhabituel pour ce commerçant'};
@@ -6026,11 +6030,20 @@ function releveApprendre(modele, l){
   modele.historique.push(juste ? 1 : 0);
   if(modele.historique.length>300) modele.historique = modele.historique.slice(-300);
   if(l.suivi && v.type==='ignorer') return; // ignorée parce que déjà suivie ailleurs : rien à retenir sur ce commerçant
-  const prev = modele.regles[l.cle];
-  const meme = prev && prev.type===v.type && (v.type==='ignorer' || prev.categorie===v.categorie);
-  modele.regles[l.cle] = v.type==='ignorer'
-    ? {type:'ignorer', n: meme ? prev.n+1 : 1, maj: new Date().toISOString().slice(0,10)}
-    : {type:v.type, libelle:(v.libelle||'').trim(), categorie:v.categorie||'', compte:v.compte||'Compte Perso', n: meme ? prev.n+1 : 1, maj: new Date().toISOString().slice(0,10)};
+  const prev = modele.regles[l.cle], maj = new Date().toISOString().slice(0,10);
+  const decision = v.type==='ignorer' ? {type:'ignorer', maj} : {type:v.type, libelle:(v.libelle||'').trim(), categorie:v.categorie||'', compte:v.compte||'Compte Perso', maj};
+  const memeQue = r => r && r.type===v.type && (v.type==='ignorer' || r.categorie===v.categorie);
+  if(prev && prev.type!=='ignorer' && v.type!=='ignorer' && prev.type!==v.type){
+    // Sens opposé à l'habitude (un remboursement chez un commerçant en dépense,
+    // et inversement) : retenu à part, sans écraser la règle majoritaire. Il ne
+    // prend la place de celle-ci que s'il devient le plus fréquent.
+    const inverse = {...decision, n: memeQue(prev.inverse) ? prev.inverse.n+1 : 1};
+    if(inverse.n > prev.n){ const {inverse: _, ...ancien} = prev; modele.regles[l.cle] = {...inverse, inverse: ancien}; }
+    else prev.inverse = inverse;
+  } else {
+    const garde = v.type!=='ignorer' && prev && prev.inverse ? {inverse: prev.inverse} : {};
+    modele.regles[l.cle] = {...decision, n: memeQue(prev) ? prev.n+1 : 1, ...garde};
+  }
   const lab = v.type==='ignorer' ? 'ignorer|' : `${v.type}|${v.categorie||''}`;
   new Set(releveMots(l.brut)).forEach(w=>{ const e = modele.mots[w] || (modele.mots[w] = {}); e[lab] = (e[lab]||0) + 1; });
 }

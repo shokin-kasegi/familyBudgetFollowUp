@@ -129,6 +129,24 @@ try{
     const t = r.texte;
     ok(t.length===3 && t[0].montant===-45.3 && t[1].montant===2100 && t[2].montant===-19.99 && t[0].date==='2026-10-03' && /FREE MOBILE REF 123456/.test(t[2].libelle) && t[0].libelle==='CB CARREFOUR 02/10',
       `texte collé (colonnes Débit / Crédit, année du solde, libellé sur deux lignes) : ${JSON.stringify(t)}`);
+    // Un remboursement isolé chez un commerçant habituellement en dépense ne doit
+    // pas écraser la règle majoritaire ; chaque sens garde sa propre catégorie.
+    const sens = await page.evaluate(()=>{
+      const m = {regles:{}, mots:{}, formats:{}, historique:[]};
+      const valider = (montant, type, categorie) => releveApprendre(m, {cle:'AMAZON', brut:'CB AMAZON', montant, suivi:false, s:{type, categorie}, v:{type, categorie, libelle:'Amazon'}});
+      const sugg = montant => releveSuggestion({libelle:'CB AMAZON', montant}, m);
+      valider(-30, 'depense', 'Loisirs'); valider(-12, 'depense', 'Loisirs'); valider(-50, 'depense', 'Loisirs');
+      valider(25, 'revenu', 'Remboursement');
+      const apres1 = {neg: sugg(-20), pos: sugg(25), regle: m.regles.AMAZON.type};
+      valider(10, 'revenu', 'Remboursement'); valider(8, 'revenu', 'Remboursement'); valider(5, 'revenu', 'Remboursement');
+      return {apres1, apresMajorite: {regle: m.regles.AMAZON.type, inverse: m.regles.AMAZON.inverse?.type, neg: sugg(-20)}};
+    });
+    ok(sens.apres1.regle==='depense' && sens.apres1.neg.type==='depense' && sens.apres1.neg.categorie==='Loisirs',
+      `sens : un remboursement n'écrase pas la règle « dépense Loisirs » (${JSON.stringify(sens.apres1.neg)})`);
+    ok(sens.apres1.pos.type==='revenu' && sens.apres1.pos.categorie==='Remboursement' && /Reconnue en rentrée/.test(sens.apres1.pos.raison),
+      `sens : une ligne positive reprend la rentrée déjà validée (${JSON.stringify(sens.apres1.pos)})`);
+    ok(sens.apresMajorite.regle==='revenu' && sens.apresMajorite.inverse==='depense' && sens.apresMajorite.neg.categorie==='Loisirs',
+      `sens : le sens le plus fréquent devient la règle, l'autre reste connu (${JSON.stringify(sens.apresMajorite)})`);
     ok(errors.length===0, `erreurs console : ${errors.join(' | ')}`);
     await ctx.close();
   }
