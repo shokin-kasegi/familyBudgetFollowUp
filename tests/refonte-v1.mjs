@@ -4,8 +4,10 @@
    localStorage, puis vérifie sur chaque vue et à 1440 / 768 / 390 px :
    - aucune erreur JS ni console.assert en échec ;
    - aucun « undefined », « null » ou « NaN » à l'écran ;
-   - totaux = somme des lignes affichées (tableau de bord, Dépenses, Charges,
-     Vue annuelle, Compte joint) ;
+   - totaux = somme des lignes affichées (tableau de bord, Revenus, Dépenses,
+     Vue annuelle) ;
+   - les vues de l'ancien modèle (Échéances, Objectifs, Charges, Compte joint)
+     ont disparu, et leurs données sont ignorées ;
    - pas de défilement horizontal de la page à 390 px ;
    - critères du système de design (police unique, pas de flou ni de dégradé
      décoratif hors verre liquide, un seul bouton plein par écran) ;
@@ -67,7 +69,7 @@ async function gotoView(page, hash){
 }
 async function visibleText(page){ return page.evaluate(()=>document.getElementById('view').innerText); }
 
-const VIEWS = ['#dashboard/2026-09','#revenus/2026-09','#depenses/2026-09','#releve','#echeances/2026-09','#objectifs/2026-09','#charges/2026-09','#compteJoint/2026-09','#annuelle/2026','#analyse','#parametres'];
+const VIEWS = ['#dashboard/2026-09','#revenus/2026-09','#depenses/2026-09','#releve','#annuelle/2026','#analyse','#parametres'];
 
 const browser = await chromium.launch();
 try{
@@ -96,7 +98,7 @@ try{
   console.log('\n— Données (phase 0)');
   {
     const {ctx, page, errors} = await openApp(browser, {width:1440, height:900});
-    // Tableau de bord : 5 postes + reste = revenu, sur 12 mois (console.assert).
+    // Tableau de bord : postes + reste = revenu, sur 12 mois (console.assert).
     for(let m=1;m<=12;m++){ await gotoView(page, `#dashboard/2026-${String(m).padStart(2,'0')}`); }
     await page.waitForTimeout(900);
     ok(errors.length===0, `tableau de bord sur 12 mois : erreurs console\n    ${errors.join('\n    ')}`);
@@ -108,7 +110,10 @@ try{
       postes: [...document.querySelectorAll('.poste .val')].map(e=>e.innerText),
     }));
     const sumPostes = dash.postes.reduce((s,v)=>s+num(v),0);
-    ok(dash.postes.length===5, `tableau de bord : 5 postes attendus, ${dash.postes.length} trouvés`);
+    ok(dash.postes.length===1, `tableau de bord : 1 poste (Dépenses) attendu, ${dash.postes.length} trouvés`);
+    // Septembre : 3 200 + 64,20 de revenus, 474,10 de dépenses datées ; abonnements, échéances,
+    // charges, objectifs et compte joint ne comptent plus.
+    ok(Math.abs(num(dash.postes[0]) - 474.10) < 0.005, `dépenses de septembre : 474,10 € attendus, reçu « ${dash.postes[0]} »`);
     ok(Math.abs(sumPostes + num((dash.reste||'').replace(/\n/g,'')) - num(dash.revenu)) < 0.005, `tableau de bord : postes (${sumPostes}) + reste (${dash.reste}) ≠ revenu (${dash.revenu})`);
     ok(/3 264,20 €/.test(dash.revenu), `revenu de septembre : séparateur de milliers visible (« 3 264,20 € ») — reçu « ${dash.revenu} »`);
 
@@ -129,26 +134,17 @@ try{
       });
     };
     await checkTables('#depenses/2026-09', 'Dépenses');
-    await checkTables('#charges/2026-09', 'Charges');
     await checkTables('#annuelle/2026', 'Vue annuelle');
-    await checkTables('#compteJoint/2026-09', 'Compte joint');
     await checkTables('#revenus/2026-09', 'Revenus');
 
-    // Compte joint : chacun vire sa part ; l'encart donne les deux virements (septembre : 828,15 € / 659,63 €).
-    for(const hash of ['#dashboard/2026-09','#compteJoint/2026-09']){
-      await gotoView(page, hash);
-      await page.waitForTimeout(900);
-      const vir = await page.evaluate(()=>[...document.querySelectorAll('#view .balance dd')].map(e=>e.innerText));
-      ok(vir.length===2 && num(vir[0])===828.15 && num(vir[1])===659.63, `${hash} : virements 828,15 € / 659,63 € attendus, reçu ${JSON.stringify(vir)}`);
+    // Les anciennes vues ne sont plus routées : l'adresse retombe sur la vue courante.
+    for(const v of ['#echeances/2026-09','#objectifs/2026-09','#charges/2026-09','#compteJoint/2026-09']){
+      await gotoView(page, '#depenses/2026-09');
+      await gotoView(page, v);
+      ok(await page.evaluate(()=>location.hash==='#depenses/2026-09'), `${v} : vue supprimée, l'adresse doit revenir à #depenses/2026-09 (reçu ${await page.evaluate(()=>location.hash)})`);
     }
-
-    // Échéances : le reste à payer diminue quand une mensualité est échue.
-    await gotoView(page, '#echeances/2026-09');
-    const resteSep = await page.evaluate(()=>document.querySelector('[data-ech="reste"]')?.innerText);
-    await gotoView(page, '#echeances/2026-10');
-    const resteOct = await page.evaluate(()=>document.querySelector('[data-ech="reste"]')?.innerText);
-    ok(resteSep && num(resteSep)===540, `Échéances septembre : reste à payer 540,00 € attendu, reçu « ${resteSep} »`);
-    ok(resteOct && num(resteOct)===360, `Échéances octobre : reste à payer 360,00 € attendu, reçu « ${resteOct} »`);
+    ok(!(await page.evaluate(()=>NAV_FINANCE.some(n=>['echeances','objectifs','charges','compteJoint'].includes(n.id)))), 'menu : plus d’onglet Échéances, Objectifs, Charges ni Compte joint');
+    ok(errors.length===0, `données : erreurs console\n    ${errors.join('\n    ')}`);
     await ctx.close();
   }
 
@@ -184,10 +180,10 @@ try{
     ok(await page.evaluate(()=>document.activeElement?.dataset.islandNav==='dashboard'), `focus sur l'onglet actif à l'ouverture @${w}`);
     const ih = await page.evaluate(()=>document.getElementById('island').getBoundingClientRect().height);
     ok(ih>200, `l'île s'agrandit en panneau @${w} (${ih}px)`);
-    await page.click('[data-island-nav="charges"]'); await page.waitForTimeout(1200);
-    ok(await page.evaluate(()=>location.hash.startsWith('#charges')), `sélection dans l'île → vue Charges @${w}`);
+    await page.click('[data-island-nav="analyse"]'); await page.waitForTimeout(1200);
+    ok(await page.evaluate(()=>location.hash.startsWith('#analyse')), `sélection dans l'île → vue Analyse @${w}`);
     ok(await page.getAttribute('#isl-toggle','aria-expanded')==='false', `l'île se referme après sélection @${w}`);
-    ok((await page.innerText('#isl-toggle')).includes('Charges'), `l'île affiche la nouvelle vue @${w}`);
+    ok((await page.innerText('#isl-toggle')).includes('Analyse'), `l'île affiche la nouvelle vue @${w}`);
     // Clavier : Échap referme et rend le focus au bouton.
     await page.click('#isl-toggle'); await page.waitForTimeout(500);
     await page.keyboard.press('ArrowRight');
@@ -208,7 +204,7 @@ try{
     // Réduire les animations : tout est affiché tout de suite, valeurs finales.
     const {ctx, page, errors} = await openApp(browser, {width:1440, height:900, reducedMotion:'reduce'});
     const reste = await page.evaluate(()=>document.querySelector('[data-dash="reste"]')?.innerText);
-    ok(reste && Math.abs(num(reste.replace(/\n/g,'')) - 1567.27) < 0.005, `réduire les animations : reste affiché immédiatement (1 567,27 € attendu, reçu « ${reste} »)`);
+    ok(reste && Math.abs(num(reste.replace(/\n/g,'')) - 2790.10) < 0.005, `réduire les animations : reste affiché immédiatement (2 790,10 € attendu, reçu « ${reste} »)`);
     // Clavier : ← → changent de mois.
     await page.keyboard.press('ArrowRight');
     await page.waitForTimeout(100);

@@ -5,6 +5,8 @@
    - parcours complet : import d'un CSV, doublon reconnu, correction d'une
      catégorie, validation, puis deuxième et troisième relevés où Solde
      reconnaît le format et les commerçants appris ;
+   - chaque ligne devient une entrée ou une sortie datée, en une fois (plus de
+     compte joint, d'abonnement ni de paiement en plusieurs fois) ;
    - pas de défilement horizontal à 390 px, pas d'erreur console. */
 import { createRequire } from 'node:module';
 import http from 'node:http';
@@ -201,7 +203,7 @@ try{
     ok(await page.evaluate(id=>!!document.querySelector(`.rl-row[data-rl-row="${id}"] .cat-select.open`), edfId), 'relevé 1 : le menu reste ouvert après suppression');
     await page.keyboard.press('Escape');
     await choisirCat(edfId, 'Maison');
-    // Type, compte et paiement : même liste déroulante que la catégorie.
+    // Type : même liste déroulante que la catégorie.
     const choisir = async (id, champ, value) => {
       await page.click(`.rl-row[data-rl-row="${id}"] .rl-${champ} [data-cat-toggle]`);
       await page.click(`.rl-row[data-rl-row="${id}"] .rl-${champ} .cat-select.open [data-rl-pick="${value}"]`);
@@ -235,14 +237,11 @@ try{
     await page.click(`.rl-row[data-rl-row="${boulId}"] .rl-date`);
     ok((await lignes(page)).find(l=>l.id===boulId)?.amt==='−7,30', 'relevé 1 : saisie invalide → montant précédent remis');
     await choisirCat(boulId, 'Alimentation');
-    // SNCF : compte joint, en 3 fois, avec un commentaire.
+    // SNCF : avec un commentaire. Plus de choix de compte ni de paiement.
     const sncfId = (await lignes(page)).find(l=>l.lib.toLowerCase().includes('sncf')).id;
-    await choisir(sncfId, 'compte', 'Compte Joint');
-    await choisir(sncfId, 'paiement', 'Echelonne');
-    await page.fill(`[data-rl-id="${sncfId}"][data-rl-champ="nbMensualites"]`, '3');
+    ok(!(await page.$(`.rl-row[data-rl-row="${sncfId}"] .rl-compte`)) && !(await page.$(`.rl-row[data-rl-row="${sncfId}"] .rl-paiement`)), 'relevé 1 : ni compte ni mode de paiement à choisir');
     await page.fill(`[data-rl-id="${sncfId}"][data-rl-champ="notes"]`, 'Billets pour Lyon');
     await page.click(`.rl-row[data-rl-row="${sncfId}"] .rl-date`);
-    ok(/au total/.test(await page.innerText(`.rl-row[data-rl-row="${sncfId}"] .rl-nb-total`)), 'relevé 1 : total des mensualités affiché');
     // Le retrait : ne pas importer (bouton ×).
     const retraitId = (await lignes(page)).find(l=>l.lib.toLowerCase().includes('retrait')).id;
     await page.click(`[data-action="releve-ignorer"][data-id="${retraitId}"]`);
@@ -261,7 +260,7 @@ try{
     ok(after1.deps.length===4, `relevé 1 : 4 dépenses ajoutées (doublon et retrait exclus), reçu ${JSON.stringify(after1.deps)}`);
     ok(after1.deps.some(d=>d[1]==='Alimentation' && d[2]===54.2 && d[3]==='2026-09-02' && d[4]==='Unique'), 'relevé 1 : dépense Carrefour Market du 02/09 enregistrée en Alimentation');
     const sn = after1.sncf;
-    ok(sn && sn.compte==='Compte Joint' && sn.modePaiement==='Echelonne' && sn.nbMensualites===3 && sn.dateDebut && !sn.date && sn.notes==='Billets pour Lyon', `relevé 1 : SNCF en compte joint, en 3 fois, avec commentaire (${JSON.stringify(sn)})`);
+    ok(sn && sn.modePaiement==='Unique' && sn.date==='2026-09-12' && sn.montant===86 && sn.compte===undefined && sn.notes==='Billets pour Lyon', `relevé 1 : SNCF en dépense datée, avec commentaire (${JSON.stringify(sn)})`);
     ok(after1.revs.length===1 && after1.revs[0][0]==='Salaire Acme' && after1.revs[0][1]==='Salaire' && after1.revs[0][2]===2300, `relevé 1 : rentrée Salaire Acme, reçu ${JSON.stringify(after1.revs)}`);
     ok(after1.regles && after1.regles['RETRAIT DAB']?.type==='ignorer' && after1.regles['CARREFOUR MARKET']?.categorie==='Alimentation' && !after1.regles['CARREFOUR'], `relevé 1 : règles apprises (doublon non appris) ${JSON.stringify(after1.regles)}`);
     ok(after1.formats===1, 'relevé 1 : format du fichier retenu');
@@ -351,91 +350,23 @@ try{
     await ctx.close();
   }
 
-  console.log('\n— Abonnement et rattachement à une échéance');
+  console.log('\n— Ancien modèle ignoré : prélèvements et mensualités');
   {
+    // Le jeu de démo garde un abonnement Netflix (13,49 €) et une échéance Canapé (180 €/mois) :
+    // ils ne comptent plus, un prélèvement du même montant est une nouvelle sortie.
     const {ctx, page, errors} = await openApp(browser, {width:1440, height:900});
-    await importer(page, 'releve-paiements.csv', [
+    await importer(page, 'releve-prelevements.csv', [
       'Date;Libellé;Débit euros;Crédit euros;',
-      '04/10/2026;"PRLV SEPA DEEZER SA";10,99;;',
-      '06/10/2026;"CB MAISON DU CANAPE";300,00;;',
-      '08/10/2026;"CB FNAC PARIS";450,00;;',
+      '05/10/2026;"PRLV SEPA NETFLIX.COM";13,49;;',
+      '06/10/2026;"CB MAISON DU CANAPE";180,00;;',
     ].join('\r\n'));
-    const choisir = async (id, champ, value) => {
-      await page.click(`.rl-row[data-rl-row="${id}"] .rl-${champ} [data-cat-toggle]`);
-      await page.click(`.rl-row[data-rl-row="${id}"] .rl-${champ} .cat-select.open [data-rl-pick="${value}"]`);
-      await page.waitForTimeout(150);
-    };
-    const idDe = async s => (await lignes(page)).find(l=>l.lib.toLowerCase().includes(s)).id;
-    const spotify = await idDe('deezer'), canape = await idDe('canape'), fnac = await idDe('fnac');
-    await choisir(spotify, 'paiement', 'Recurrent');
-    ok(!!await page.$(`.rl-row[data-rl-row="${spotify}"] .rl-frequence`), 'paiements : un abonnement propose sa fréquence');
-    await choisir(spotify, 'frequence', 'Annuel');
-    await choisir(canape, 'paiement', 'Echelonne');
-    ok(await page.$$eval(`.rl-row[data-rl-row="${canape}"] .rl-echeanceId [data-rl-pick]`, b=>b.map(x=>x.dataset.rlPick)).then(v=>v[0]==='' && v.includes('dep-canape')), 'paiements : les échéances en cours sont proposées, après « Nouvelle échéance »');
-    await choisir(canape, 'echeanceId', 'dep-canape');
-    ok(!await page.$(`.rl-row[data-rl-row="${canape}"] .rl-nb`) && /Versement sur cette échéance/.test(await page.innerText(`.rl-row[data-rl-row="${canape}"] .rl-paie`)), 'paiements : échéance choisie → versement, sans nombre de mensualités');
-    await choisir(fnac, 'paiement', 'Echelonne');
-    await page.fill(`[data-rl-id="${fnac}"][data-rl-champ="nbMensualites"]`, '3');
-    await page.click(`.rl-row[data-rl-row="${fnac}"] .rl-date`);
+    const L = await lignes(page);
+    ok(L.length===2 && L.every(l=>l.type==='depense' && !/déjà suivi/i.test(l.raison)), `prélèvements : proposés en dépenses, pas « déjà suivis » (${JSON.stringify(L)})`);
     await page.click('[data-action="releve-valider-tout"]');
     await page.waitForTimeout(400);
-    const r = await page.evaluate(()=>{
-      const me = currentUser().id;
-      const deps = state.depenses.filter(d=>d.ownerId===me && d.source==='releve');
-      return {
-        spotify: deps.find(d=>/deezer/i.test(d.libelle)),
-        fnac: deps.find(d=>/fnac/i.test(d.libelle)),
-        canapeDep: deps.find(d=>/canape/i.test(d.libelle)),
-        vers: state.echVersements.filter(v=>v.echeanceId==='dep-canape' && v.source==='releve'),
-        regleFnac: state.importApprentissage.find(x=>x.ownerId===me).regles['FNAC PARIS'],
-      };
-    });
-    ok(r.spotify && r.spotify.modePaiement==='Recurrent' && r.spotify.frequence==='Annuel' && r.spotify.statut==='Actif' && r.spotify.montant===10.99 && !r.spotify.date, `paiements : abonnement Deezer créé (${JSON.stringify(r.spotify)})`);
-    ok(!r.canapeDep && r.vers.length===1 && r.vers[0].montant===300 && r.vers[0].date==='2026-10-06', `paiements : versement de 300 € sur l'échéance Canapé (${JSON.stringify(r.vers)})`);
-    ok(r.fnac && r.fnac.modePaiement==='Echelonne' && r.fnac.montant===1350 && r.fnac.nbMensualites===3, `paiements : nouvelle échéance Fnac (${JSON.stringify(r.fnac)})`);
-    ok(r.regleFnac && r.regleFnac.echeanceId===r.fnac?.id, 'paiements : le commerçant retient son échéance');
-    // Le mois suivant, un paiement Fnac d'un autre montant est proposé en versement sur cette échéance.
-    await page.click('[data-action="releve-fermer"]');
-    await page.waitForTimeout(250);
-    await importer(page, 'releve-paiements-2.csv', ['Date;Libellé;Débit euros;Crédit euros;', '08/11/2026;"CB FNAC PARIS";200,00;;'].join('\r\n'));
-    const l2 = (await lignes(page))[0];
-    ok(/Versement sur cette échéance/.test(await page.innerText(`.rl-row[data-rl-row="${l2.id}"] .rl-paie`)), 'paiements : le paiement suivant est rattaché à la même échéance');
-    ok(errors.length===0, `erreurs console : ${errors.join(' | ')}`);
-    await ctx.close();
-  }
-
-  console.log('\n— Changement de tarif d’un abonnement');
-  {
-    const {ctx, page, errors} = await openApp(browser, {width:1440, height:900});
-    // Saisi à la main depuis Dépenses : « Nouveau tarif » à partir d'une date.
-    await page.evaluate(()=>{ location.hash = '#depenses'; });
-    await page.waitForTimeout(400);
-    const netflixId = await page.evaluate(()=>mine(state.depenses).find(d=>d.libelle==='Netflix').id);
-    await page.click(`[data-action="abo-tarif"][data-id="${netflixId}"]`);
-    await page.fill('#f_montant', '15,99').catch(()=>page.fill('#f_montant', '15.99'));
-    await page.fill('#f_depuis', '2026-10-01');
-    await page.click('.modal [type="submit"], .modal .btn-primary');
-    await page.waitForTimeout(300);
-    const t1 = await page.evaluate(id=>{ const n = state.depenses.find(d=>d.id===id); return {sep: monthlyCost(n,'2026-09'), oct: monthlyCost(n,'2026-10'), montant: n.montant, tarifs: n.tarifs}; }, netflixId);
-    ok(t1.sep===13.49 && t1.oct===15.99 && t1.montant===15.99, `tarif : septembre garde 13,49 €, octobre passe à 15,99 € (${JSON.stringify(t1)})`);
-    ok(/Passe à 15,99/.test(await page.innerText('#view')), 'tarif : le tableau (septembre) annonce le prochain tarif');
-    // Import : prélèvement Netflix à un autre tarif → reconnu comme changement de tarif.
-    await page.evaluate(()=>{ location.hash = '#releve'; });
-    await page.waitForTimeout(400);
-    await importer(page, 'releve-netflix.csv', ['Date;Libellé;Débit euros;Crédit euros;', '05/10/2026;"PRLV SEPA NETFLIX.COM";15,99;;', '05/11/2026;"PRLV SEPA NETFLIX.COM";17,99;;'].join('\r\n'));
-    let L = await lignes(page);
-    const oct = L.find(l=>/15,99/.test(l.amt)), nov = L.find(l=>/17,99/.test(l.amt));
-    ok(oct && oct.type==='ignorer' && /Abonnement déjà suivi/.test(oct.raison), `tarif : octobre au nouveau tarif = déjà suivi (${JSON.stringify(oct)})`);
-    ok(nov && nov.type==='depense' && /Nouveau tarif pour Netflix/.test(nov.raison), `tarif : novembre à 17,99 € reconnu comme nouveau tarif (${JSON.stringify(nov)})`);
-    ok(/Nouveau tarif à partir du/.test(await page.innerText(`.rl-row[data-rl-row="${nov.id}"] .rl-paie`)), 'tarif : la ligne annonce le nouveau tarif');
-    const nbDeps = await page.evaluate(()=>state.depenses.length);
-    await page.click(`[data-action="releve-valider"][data-id="${nov.id}"]`);
-    await page.waitForTimeout(300);
-    const t2 = await page.evaluate(id=>{ const n = state.depenses.find(d=>d.id===id); return {oct: monthlyCost(n,'2026-10'), nov: monthlyCost(n,'2026-11'), montant: n.montant, nb: state.depenses.length}; }, netflixId);
-    ok(t2.oct===15.99 && t2.nov===17.99 && t2.montant===17.99 && t2.nb===nbDeps, `tarif : validé → 17,99 € à partir de novembre, sans nouvelle dépense (${JSON.stringify(t2)})`);
-    // Un achat ponctuel au montant sans rapport n'est pas pris pour un changement de tarif.
-    const achat = await page.evaluate(()=>releveAbonnementProche({libelle:'CB NETFLIX SHOP', montant:-89, date:'2026-11-10'}));
-    ok(!achat, 'tarif : un montant sans rapport (89 €) n’est pas rattaché à l’abonnement');
+    const deps = await page.evaluate(()=>state.depenses.filter(d=>d.source==='releve').map(d=>[d.modePaiement, d.date, d.montant]));
+    ok(deps.length===2 && deps.every(d=>d[0]==='Unique' && d[1]), `prélèvements : enregistrés en dépenses datées en une fois (${JSON.stringify(deps)})`);
+    ok(await page.evaluate(()=>!state.echVersements || state.echVersements.every(v=>v.source!=='releve')), 'prélèvements : aucun versement d’échéance créé');
     ok(errors.length===0, `erreurs console : ${errors.join(' | ')}`);
     await ctx.close();
   }
