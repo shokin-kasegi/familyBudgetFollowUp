@@ -758,6 +758,54 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
   --island:rgba(8,8,10,0.72); --island-ink:#f5f5f7; --island-blob:rgba(255,255,255,0.14);
   --spring:cubic-bezier(.34,1.42,.64,1);
 }
+
+/* Import de relevé : zone de dépôt, lignes à valider, règles apprises. */
+.rl-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:150px;padding:24px 16px;border:1.5px dashed var(--line-strong);border-radius:var(--r-card);text-align:center;cursor:pointer;transition:background-color .15s ease,border-color .15s ease;}
+.rl-drop svg{width:28px;height:28px;stroke:var(--muted);fill:none;stroke-width:1.6;}
+.rl-drop-t{font-weight:600;font-size:15px;}
+.rl-drop.is-over,#releve-file:focus-visible + .rl-drop{border-color:var(--text);background:var(--raised);}
+@media (hover:hover){ .rl-drop:hover{background:var(--raised);} }
+.rl-paste{margin-top:14px;}
+.rl-paste summary,.rl-cols summary{cursor:pointer;font-size:14px;color:var(--muted);font-weight:500;}
+.rl-paste textarea{display:block;width:100%;margin:10px 0;padding:11px 14px;border-radius:12px;background:var(--bg);border:1px solid var(--line-strong);font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--text);resize:vertical;}
+.rl-cols{margin-bottom:16px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;}
+.rl-cols-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:0 12px;margin-top:12px;}
+.rl-cols .field{margin-bottom:10px;}
+.rl-file{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:32ch;}
+.section-head h2 > svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;flex-shrink:0;}
+.rl-list{list-style:none;margin:0;padding:0;}
+.rl-row{display:grid;grid-template-columns:96px minmax(0,1fr) 160px 150px 150px 110px;grid-template-areas:"date lib type cat compte amt" "date meta meta meta actions actions";gap:6px 10px;align-items:center;padding:12px 0;border-top:1px solid var(--line);}
+.rl-row:first-child{border-top:none;}
+.rl-date{grid-area:date;align-self:start;padding-top:9px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;}
+.rl-lib{grid-area:lib;min-width:0;display:flex;flex-direction:column;gap:3px;}
+.rl-brut{font-size:12px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.rl-type{grid-area:type;} .rl-cat{grid-area:cat;} .rl-compte{grid-area:compte;}
+.rl-amt{grid-area:amt;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.rl-amt.pos{color:var(--c-reste);}
+.rl-meta{grid-area:meta;display:flex;align-items:center;gap:8px;min-width:0;}
+.rl-raison{font-size:12px;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.rl-actions{grid-area:actions;display:flex;justify-content:flex-end;align-items:center;gap:4px;}
+.rl-ctl{width:100%;min-width:0;height:36px;padding:0 10px;border-radius:10px;background:var(--bg);border:1px solid var(--line-strong);font-size:14px;color:var(--text);color-scheme:dark;}
+.rl-ctl:focus{outline:none;border-color:var(--text);}
+.rl-ctl:focus-visible{box-shadow:0 0 0 3px rgba(255,255,255,0.18);}
+.rl-ctl:disabled{opacity:.55;}
+select.rl-ctl option{background:var(--surface);color:var(--text);}
+.rl-row.is-ignored .rl-amt,.rl-row.is-ignored .rl-lib{opacity:.55;}
+.rl-rules{list-style:none;margin:0;padding:0;}
+.rl-rules li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) auto 32px;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:14px;}
+.rl-rule-key{font-size:12px;color:var(--muted);letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.rl-rule-val{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+@media(max-width:1100px){
+  .rl-row{grid-template-columns:88px minmax(0,1fr) minmax(0,1fr) 110px;grid-template-areas:"date lib lib amt" "date type cat compte" "date meta meta actions";}
+}
+@media(max-width:640px){
+  .rl-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"date amt" "lib lib" "type cat" "compte compte" "meta actions";}
+  .rl-date{padding-top:0;}
+  .rl-compte:empty{display:none;}
+  .rl-raison{white-space:normal;}
+  .rl-rules li{grid-template-columns:minmax(0,1fr) auto 32px;}
+  .rl-rule-key{display:none;}
+}
 :root[data-theme="givre"]{
   color-scheme:light;
   --bg:#e8ecf2; --surface:#f5f7fa; --raised:#ffffff; --line:rgba(16,24,40,0.09); --line-strong:rgba(16,24,40,0.17);
@@ -789,7 +837,7 @@ button,a,[role="button"],.ld-row{touch-action:manipulation;-webkit-tap-highlight
   --island:rgba(2,22,26,0.74); --island-ink:#ecfdff; --island-blob:rgba(120,240,240,0.18);
 }
 :root[data-theme="givre"] body{background:var(--bg);}
-:root[data-theme="givre"] .field input,:root[data-theme="givre"] .field select{color-scheme:light;}
+:root[data-theme="givre"] .field input,:root[data-theme="givre"] .field select,:root[data-theme="givre"] .rl-ctl{color-scheme:light;}
 :root[data-theme="givre"] ::-webkit-scrollbar-thumb{background:rgba(16,24,40,0.18);}
 :root[data-theme="givre"] ::selection{background:rgba(10,111,224,0.2);}
 /* Lagon : titres condensés, en capitales d'affiche, contrôles carrés. */
@@ -1053,6 +1101,7 @@ const ICONS = {
   bell:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
   eye:'<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/>',
   eyeOff:'<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.9 19.9 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a19.9 19.9 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
+  fileIn:'<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><polyline points="14 3 14 8 19 8"/><line x1="12" y1="18" x2="12" y2="11"/><polyline points="9 14 12 11 15 14"/>',
   message:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>'
 };
 function icon(name){ return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${ICONS[name]||''}</svg>`; }
@@ -1098,7 +1147,8 @@ function defaultState(){
     categoriesDepenses: [],
     categoriesRevenus: [],
     categoriesObjectifs: [],
-    categoriesCharges: []
+    categoriesCharges: [],
+    importApprentissage: []
   };
 }
 
@@ -1304,12 +1354,17 @@ async function loadState(){
     state.echVersements = [];
     needsPersist = true;
   }
+  // Apprentissage de l'import de relevé (formats, commerçants) : vide au départ.
+  if(!Array.isArray(state.importApprentissage)){
+    state.importApprentissage = [];
+    needsPersist = true;
+  }
 
   if(needsPersist) await persist();
   if(needsPersistAuth) await persistAuth();
   if(needsPersistSocial) await persistSocial();
 }
-const OWNED_ARRAYS = ['revenusRecurrents','revenusExceptionnels','depenses','objectifs','versements','echVersements','charges','categoriesDepenses','categoriesRevenus','categoriesObjectifs','categoriesCharges'];
+const OWNED_ARRAYS = ['revenusRecurrents','revenusExceptionnels','depenses','objectifs','versements','echVersements','charges','categoriesDepenses','categoriesRevenus','categoriesObjectifs','categoriesCharges','importApprentissage'];
 function mine(arr){
   const me = currentUser();
   return me ? (arr||[]).filter(e=>e.ownerId===me.id) : [];
@@ -1847,6 +1902,7 @@ const NAV_FINANCE = [
   {id:'dashboard', label:'Tableau de bord', icon:'dashboard'},
   {id:'revenus', label:'Revenus', icon:'income'},
   {id:'depenses', label:'Dépenses', icon:'wallet'},
+  {id:'releve', label:'Import relevé', icon:'fileIn'},
   {id:'echeances', label:'Échéances', icon:'calendar'},
   {id:'objectifs', label:'Objectifs', icon:'target'},
   {id:'charges', label:'Charges', icon:'home'},
@@ -2480,7 +2536,7 @@ async function render(){
   const renderers = {
     dashboard: renderDashboard, revenus: renderRevenus,
     depenses: renderDepenses, echeances: renderEcheances, objectifs: renderObjectifs, charges: renderCharges,
-    compteJoint: renderCompteJoint, annuelle: renderAnnuelle, analyse: renderAnalyse, parametres: renderParametres,
+    compteJoint: renderCompteJoint, annuelle: renderAnnuelle, analyse: renderAnalyse, parametres: renderParametres, releve: renderReleve,
     groupesListe: renderGroupesListe,
   };
   view.innerHTML = renderers[currentView] ? renderers[currentView]() : '';
@@ -2492,7 +2548,7 @@ async function render(){
 // La vue affichée (et son mois / son année) est reflétée dans l'adresse :
 // #depenses/2026-10, #annuelle/2026, #parametres… — un rechargement ramène au même
 // endroit, un lien peut être partagé et le bouton Retour revient à la vue précédente.
-const ROUTE_VIEWS = ['dashboard','revenus','depenses','echeances','objectifs','charges','compteJoint','annuelle','analyse','parametres','groupesListe'];
+const ROUTE_VIEWS = ['dashboard','revenus','depenses','releve','echeances','objectifs','charges','compteJoint','annuelle','analyse','parametres','groupesListe'];
 const MONTH_VIEWS = new Set(['dashboard','revenus','depenses','echeances','objectifs','charges','compteJoint']);
 let lastRoutedView = null;
 function routeHash(){
@@ -3956,6 +4012,7 @@ function afterRender(){
   try{
     updateTableScrollHints();
     if(currentView==='dashboard') dashAfterRender();
+    if(currentView==='releve') releveAfterRender();
     else animateView();
     redrawCurrentCharts();
     if(currentView==='analyse'){
@@ -3994,6 +4051,30 @@ document.addEventListener('input', (e)=>{
 });
 document.addEventListener('change', async (e)=>{
   if(e.target.id==='import-file-input' && e.target.files[0]){ importDataFile(e.target.files[0]); }
+  if(e.target.id==='releve-file' && e.target.files[0]){ const f = e.target.files[0]; e.target.value = ''; await releveOuvrirFichier(f); }
+  if(e.target.dataset && e.target.dataset.rlChamp){ releveChangerChamp(e.target); }
+  if(e.target.dataset && e.target.dataset.rlCol){ await releveChangerColonne(e.target); }
+});
+// Import de relevé : le fichier peut aussi être glissé sur la zone de dépôt.
+document.addEventListener('dragover', (e)=>{
+  const zone = e.target.closest && e.target.closest('.rl-drop');
+  if(!zone) return;
+  e.preventDefault(); zone.classList.add('is-over');
+});
+document.addEventListener('dragleave', (e)=>{ const zone = e.target.closest && e.target.closest('.rl-drop'); if(zone && !zone.contains(e.relatedTarget)) zone.classList.remove('is-over'); });
+document.addEventListener('drop', async (e)=>{
+  const zone = e.target.closest && e.target.closest('.rl-drop');
+  if(!zone) return;
+  e.preventDefault(); zone.classList.remove('is-over');
+  const f = e.dataTransfer && e.dataTransfer.files[0];
+  if(f) await releveOuvrirFichier(f);
+});
+// Entrée dans le libellé d'une ligne du relevé : valide cette ligne.
+document.addEventListener('keydown', (e)=>{
+  if(e.key!=='Enter' || e.isComposing || !e.target.matches || !e.target.matches('.rl-row input[data-rl-champ]')) return;
+  e.preventDefault();
+  releveChangerChamp(e.target);
+  e.target.closest('.rl-row').querySelector('[data-action="releve-valider"]')?.click();
 });
 // Lignes de tableau et notifications cliquables : activables au clavier (Entrée / Espace),
 // et le focus est rendu à l'élément équivalent une fois la vue redessinée.
@@ -4445,6 +4526,39 @@ async function handleAction(action, id, el){
       if(reportFieldErrors(chargeDateErrors(data))) return false;
       Object.assign(find(mine(state.charges)), data); await persist(); await render(); toast('Charge mise à jour'); }); break;
     case 'del-charge': { const item=find(mine(state.charges)); confirmDelete(item.categorie, async ()=>{ state.charges = state.charges.filter(x=>x.id!==id); await persist(); await render(); toast('Charge supprimée'); }); break; }
+
+    /* Import de relevé */
+    case 'releve-valider': releveFocusApres = releveIndexLigne(id); await releveValider([id]); break;
+    case 'releve-ignorer': {
+      const l = releveSession && releveSession.lignes.find(x=>x.id===id);
+      if(l){ l.v.type = 'ignorer'; releveFocusApres = releveIndexLigne(id); await releveValider([id]); }
+      break;
+    }
+    case 'releve-valider-surs': await releveValider((releveSession?.lignes||[]).filter(l=>l.etat==='attente' && l.confiance==='sur').map(l=>l.id)); break;
+    case 'releve-valider-tout': await releveValider((releveSession?.lignes||[]).filter(l=>l.etat==='attente').map(l=>l.id)); break;
+    case 'releve-fermer': {
+      const reste = releveSession ? releveSession.lignes.filter(l=>l.etat==='attente').length : 0;
+      const fermer = async ()=>{ releveSession = null; releveSauverSession(); await render(); };
+      if(reste) confirmDelete('', fermer, {title:'Abandonner cet import ?', consequence:`${fmtCount(reste, 'ligne non validée est', 'lignes non validées sont')} laissée${reste>1?'s':''} de côté. Les opérations déjà validées restent dans ton budget.`, confirmLabel:'Abandonner'});
+      else await fermer();
+      break;
+    }
+    case 'releve-coller': {
+      const texte = (document.getElementById('releve-texte')?.value||'').trim();
+      if(!texte){ toast('Colle d’abord le texte du relevé'); break; }
+      await releveDemarrer('Texte collé', releveAnalyserTexte(texte, releveModele(false)));
+      break;
+    }
+    case 'releve-oublier': {
+      const m = releveModele(false), cle = el.dataset.cle;
+      if(m.regles && m.regles[cle]){ delete m.regles[cle]; await persist(); await render(); toast('Règle oubliée'); }
+      break;
+    }
+    case 'releve-oublier-tout': confirmDelete('', async ()=>{
+      const me = currentUser();
+      state.importApprentissage = (state.importApprentissage||[]).filter(x=>x.ownerId!==me.id);
+      await persist(); await render(); toast('Apprentissage remis à zéro');
+    }, {title:'Tout oublier ?', consequence:'Les formats de fichier, commerçants et catégories appris pour l’import de relevé seront effacés. Tes saisies ne changent pas.', confirmLabel:'Tout oublier'}); break;
 
     /* Compte joint */
     case 'goto-parametres-comptes': currentView = 'parametres'; await render(); break;
@@ -5153,6 +5267,698 @@ function drawAnalyseChart(){
   });
   host.innerHTML = svg + '</svg>';
 }
+
+/* ============================== IMPORT DE RELEVÉ ============================== */
+/* Le relevé de compte (CSV, OFX/QFX, QIF, PDF ou texte collé) est analysé dans
+   le navigateur : rien n'est envoyé nulle part. Chaque opération devient une
+   ligne pré-remplie (type, libellé, catégorie) que l'utilisateur valide ou
+   ignore. Chaque décision enrichit l'apprentissage, propre à chaque compte et
+   synchronisé avec le reste du budget (state.importApprentissage, un objet par
+   utilisateur) :
+   - formats : pour un CSV, quelles colonnes portent la date, le libellé et le
+     montant — reconnues ensuite à l'en-tête du fichier, sans rien redemander ;
+     pour un PDF, où se trouvent les colonnes Débit / Crédit ;
+   - regles : pour un commerçant (libellé bancaire normalisé), ce que
+     l'utilisateur en a fait et combien de fois de suite ;
+   - mots : les mots des libellés comptés par type et catégorie, pour deviner
+     un commerçant jamais vu à partir de ceux qui lui ressemblent ;
+   - historique : suggestion juste (1) ou corrigée (0), pour mesurer les progrès. */
+let releveSession = null;        // import en cours (null = aucun) ; recopié dans le localStorage de l'appareil
+let releveSessionOwner = null;   // utilisateur auquel appartient releveSession chargée
+let releveFocusApres = null;     // index de la ligne à focaliser après un re-render (validation au clavier)
+
+function releveModele(creer){
+  const me = currentUser();
+  if(!Array.isArray(state.importApprentissage)) state.importApprentissage = [];
+  let m = state.importApprentissage.find(x=>x.ownerId===me.id);
+  if(!m){
+    if(!creer) return {formats:{}, regles:{}, mots:{}, historique:[]};
+    m = {id:uid(), ownerId:me.id, formats:{}, regles:{}, mots:{}, historique:[]};
+    state.importApprentissage.push(m);
+  }
+  ['formats','regles','mots'].forEach(k=>{ if(!m[k] || typeof m[k]!=='object') m[k] = {}; });
+  if(!Array.isArray(m.historique)) m.historique = [];
+  return m;
+}
+
+/* ---------- Lecture des valeurs : libellés, montants, dates ---------- */
+// Mots sans valeur pour reconnaître un commerçant : moyens de paiement,
+// mentions SEPA, articles… « CB CARREFOUR 12/10 » et « CARTE X1234 CARREFOUR »
+// donnent tous deux la clé « CARREFOUR » (les deux premiers mots qui restent).
+const RELEVE_BRUIT = new Set(['CB','CARTE','CARTES','PAIEMENT','PAIEMT','PAI','PAR','PRLV','PRELEVEMENT','PRELEVT','PREL','SEPA','VIR','VIREMENT','VIRT','RECU','EMIS','INST','INSTANTANE','FACTURE','FACT','ACHAT','DU','LE','LA','LES','DE','DES','ET','EN','AU','AUX','SUR','POUR','CHEZ','REF','REFERENCE','MOTIF','ECH','ECHEANCE','MANDAT','ID','EMETTEUR','NUM','NO','DONNEUR','ORDRE','BENEF','BENEFICIAIRE','TPE','CONTACTLESS','SANS','CONTACT','EUR','EUROS','FR','SAS','SARL','SA','WWW','COM','HTTPS','HTTP','DATE','OPERATION','OPE','TRANSACTION','RUM','ICS','LIB']);
+const RELEVE_HORS_OPS = /^(nouveau |ancien )?solde|^total|^sous[- ]total|^report|^montant (total|net)/i;
+function releveSansAccents(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,''); }
+function releveMots(lib){
+  return releveSansAccents(lib).toUpperCase()
+    .replace(/\b\d{1,2}[\/.-]\d{1,2}(?:[\/.-]\d{2,4})?\b/g,' ')
+    .split(/[^A-Z0-9]+/)
+    .filter(w=>w.length>=2 && !/\d/.test(w) && !RELEVE_BRUIT.has(w));
+}
+function releveCle(lib){
+  const mots = releveMots(lib);
+  if(mots.length) return mots.slice(0,2).join(' '); // deux mots : la ville ou le n° de magasin qui suivent varient d'un paiement à l'autre
+  return releveSansAccents(lib).toUpperCase().replace(/[^A-Z]+/g,' ').trim().split(' ').slice(0,2).join(' ') || '?';
+}
+function releveJoli(cle){ return String(cle||'').toLowerCase().replace(/(^|\s)\S/g, c=>c.toUpperCase()); }
+// « 1 234,56 », « -12,30 », « 1,234.56 », « 12.30- », « (12,30) », « 45,00 € » → nombre signé.
+function releveMontant(s){
+  if(s==null) return NaN;
+  let t = String(s).replace(/[\s  €]|EUR/gi,'');
+  if(!t) return NaN;
+  let neg = false;
+  if(/^\(.*\)$/.test(t)){ neg = true; t = t.slice(1,-1); }
+  if(/[-−–]$/.test(t)){ neg = true; t = t.slice(0,-1); }
+  if(/^[-−–]/.test(t)){ neg = true; t = t.slice(1); }
+  else if(t[0]==='+') t = t.slice(1);
+  if(!/^\d[\d.,']*$/.test(t)) return NaN;
+  t = t.replace(/'/g,'');
+  const lc = t.lastIndexOf(','), ld = t.lastIndexOf('.');
+  if(lc>-1 && ld>-1) t = lc>ld ? t.replace(/\./g,'').replace(',','.') : t.replace(/,/g,'');
+  else if(lc>-1) t = t.split(',').length>2 ? t.replace(/,/g,'') : t.replace(',','.');
+  else if(ld>-1 && t.split('.').length>2) t = t.replace(/\./g,'');
+  const n = parseFloat(t);
+  return isNaN(n) ? NaN : (neg ? -n : n);
+}
+const RELEVE_MOIS = {JAN:1,JANV:1,JANVIER:1,FEB:2,FEV:2,FEVR:2,FEVRIER:2,MAR:3,MARS:3,APR:4,AVR:4,AVRIL:4,MAY:5,MAI:5,JUN:6,JUIN:6,JUL:7,JUIL:7,JUILLET:7,AUG:8,AOU:8,AOUT:8,SEP:9,SEPT:9,SEPTEMBRE:9,OCT:10,OCTOBRE:10,NOV:11,NOVEMBRE:11,DEC:12,DECEMBRE:12};
+function releveIso(y,m,d){
+  if(!(m>=1 && m<=12 && d>=1 && d<=31 && y>=1990 && y<=2100)) return null;
+  const dt = new Date(y, m-1, d);
+  if(dt.getMonth()!==m-1) return null;
+  return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+// ordre : 'dmy' (France) ou 'mdy'. anneeDefaut permet les dates sans année
+// (« 12/10 » dans un PDF) ; sans elle, une date doit être complète — sinon un
+// montant « 12.50 » passerait pour le 12 mai.
+function releveDate(s, ordre, anneeDefaut){
+  const t = String(s||'').trim();
+  let m = /^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})(?!\d)/.exec(t);
+  if(m) return releveIso(+m[1], +m[2], +m[3]);
+  m = /^(\d{1,2})[-\/.](\d{1,2})(?:[-\/.](\d{2,4}))?(?![\d.,])/.exec(t);
+  if(m && (m[3] || anneeDefaut)){
+    let y = m[3] ? +m[3] : anneeDefaut;
+    if(y<100) y += 2000;
+    return ordre==='mdy' ? releveIso(y, +m[1], +m[2]) : releveIso(y, +m[2], +m[1]);
+  }
+  m = /^(\d{1,2})[\s-]+([A-Za-zÀ-ÿ]{3,9})\.?(?:[\s-]+(\d{2,4}))?/.exec(t);
+  if(m){
+    const mo = RELEVE_MOIS[releveSansAccents(m[2]).toUpperCase()];
+    let y = m[3] ? +m[3] : anneeDefaut;
+    if(mo && y){ if(y<100) y += 2000; return releveIso(y, mo, +m[1]); }
+  }
+  return null;
+}
+// Jour/mois ou mois/jour ? Un premier nombre > 12 tranche pour jour/mois, un
+// second > 12 pour mois/jour ; à défaut, l'usage français.
+function releveOrdre(valeurs){
+  let dmy = 0, mdy = 0;
+  valeurs.forEach(v=>{
+    const m = /^(\d{1,2})[-\/.](\d{1,2})/.exec(String(v||'').trim());
+    if(!m || /^\d{4}/.test(String(v).trim())) return;
+    if(+m[1]>12) dmy++;
+    if(+m[2]>12) mdy++;
+  });
+  return mdy>dmy ? 'mdy' : 'dmy';
+}
+
+/* ---------- Formats de fichier ---------- */
+function releveDecoder(buffer){
+  let texte;
+  try{ texte = new TextDecoder('utf-8', {fatal:true}).decode(buffer); }
+  catch(e){ texte = new TextDecoder('windows-1252').decode(buffer); } // exports bancaires « Excel » en Latin-1
+  return texte.replace(/^﻿/, '');
+}
+function releveCsvDecoupe(ligne, sep){
+  const out = []; let cur = '', q = false;
+  for(let i=0;i<ligne.length;i++){
+    const c = ligne[i];
+    if(q){ if(c==='"'){ if(ligne[i+1]==='"'){ cur+='"'; i++; } else q = false; } else cur += c; }
+    else if(c==='"') q = true;
+    else if(c===sep){ out.push(cur); cur = ''; }
+    else cur += c;
+  }
+  out.push(cur);
+  return out.map(c=>c.trim());
+}
+// Séparateur : celui qui donne le plus souvent le même nombre de colonnes.
+function releveCsvLignes(texte){
+  const lignes = texte.split(/\r\n|\n|\r/).filter(l=>l.trim());
+  let best = ';', bestScore = -1;
+  [';', '\t', ',', '|'].forEach(sep=>{
+    const freq = {};
+    lignes.slice(0, 60).forEach(l=>{ const n = releveCsvDecoupe(l, sep).length; if(n>1) freq[n] = (freq[n]||0)+1; });
+    const top = Object.entries(freq).sort((a,b)=>b[1]-a[1] || b[0]-a[0])[0];
+    const score = top ? top[1]*100 + Number(top[0]) : 0;
+    if(score>bestScore){ bestScore = score; best = sep; }
+  });
+  return lignes.map(l=>releveCsvDecoupe(l, best));
+}
+const releveEstDateCsv = c => !!releveDate(c, 'dmy');
+const releveEstMontant = c => c!=='' && !releveEstDateCsv(c) && !isNaN(releveMontant(c));
+function releveNormEntete(h){ return releveSansAccents(h).toLowerCase().replace(/\s+/g,' ').trim(); }
+// Repère l'en-tête et les lignes d'opérations (les banques ajoutent souvent
+// quelques lignes d'informations sur le compte avant le tableau), puis la
+// signature du format, qui sert à retrouver les colonnes apprises.
+function releveCsvStructure(texte){
+  const rows = releveCsvLignes(texte);
+  const estDonnee = r => r.some(releveEstDateCsv) && r.some(releveEstMontant);
+  // Une ligne « Date ; … Libellé / Montant / Débit » annonce le tableau ; à défaut, la première ligne d'opération.
+  const iEntete = rows.findIndex((r,i)=>r.some(c=>/^date/.test(releveNormEntete(c))) && r.some(c=>/libelle|label|montant|amount|debit|credit|description/.test(releveNormEntete(c))) && rows.slice(i+1).some(estDonnee));
+  const premiere = iEntete>=0 ? rows.findIndex((r,i)=>i>iEntete && estDonnee(r)) : rows.findIndex(estDonnee);
+  if(premiere<0) return null;
+  const donnees = rows.slice(premiere).filter(r=>r.some(releveEstDateCsv));
+  const freq = {}; donnees.forEach(r=>{ freq[r.length] = (freq[r.length]||0)+1; });
+  const nbCol = Number(Object.entries(freq).sort((a,b)=>b[1]-a[1])[0][0]);
+  let entete = iEntete>=0 ? rows[iEntete] : null;
+  for(let i=premiere-1;i>=0 && !entete;i--){
+    if(!rows[i].some(releveEstDateCsv) && Math.abs(rows[i].length-nbCol)<=1 && rows[i].filter(Boolean).length>=2){ entete = rows[i]; break; }
+  }
+  const sig = entete ? 'csv:'+entete.map(releveNormEntete).join('|') : 'csv:sans-entete:'+nbCol;
+  return {rows: donnees, entete, nbCol, sig};
+}
+// Devine les colonnes : d'abord par les noms d'en-tête, puis par le contenu.
+function releveCsvDeviner(st){
+  const {rows, entete, nbCol} = st;
+  const col = {date:-1, libelle:-1, libelle2:-1, montant:-1, debit:-1, credit:-1};
+  (entete||[]).forEach((h,i)=>{
+    const n = releveNormEntete(h);
+    if(/date/.test(n)){ if(col.date<0 && !/valeur/.test(n)) col.date = i; }
+    else if(/^type|categor|devise|currency|solde|balance/.test(n)){ /* ni libellé ni montant de l'opération */ }
+    else if(/debit|sortie|depense/.test(n)){ if(col.debit<0) col.debit = i; }
+    else if(/credit|entree|recette/.test(n)){ if(col.credit<0) col.credit = i; }
+    else if(/montant|amount|somme|^eur|euros?$|valeur/.test(n)){ if(col.montant<0) col.montant = i; }
+    else if(/libelle|label|description|intitule|detail|operation|nature|beneficiaire|tiers|payee|memo|communication|commentaire/.test(n)){
+      if(col.libelle<0) col.libelle = i; else if(col.libelle2<0) col.libelle2 = i;
+    }
+  });
+  const part = (i, test) => rows.filter(r=>test(r[i]||'')).length / Math.max(rows.length,1);
+  const idx = [...Array(nbCol).keys()];
+  if(col.date<0) col.date = idx.sort((a,b)=>part(b,releveEstDateCsv)-part(a,releveEstDateCsv))[0];
+  if(col.montant<0 && (col.debit<0 || col.credit<0)){
+    const nums = [...Array(nbCol).keys()].filter(i=>i!==col.date && part(i, releveEstMontant)>0.15);
+    // Deux colonnes numériques qui ne sont presque jamais remplies ensemble : Débit / Crédit.
+    const exclusives = nums.length>=2 && rows.filter(r=>releveEstMontant(r[nums[0]]||'') && releveEstMontant(r[nums[1]]||'')).length < rows.length*0.1;
+    if(col.debit>=0 || col.credit>=0){ /* une seule des deux nommée : on garde la colonne Montant devinée ci-dessous */ col.debit = col.credit = -1; }
+    if(exclusives){ col.debit = nums[0]; col.credit = nums[1]; }
+    else if(nums.length) col.montant = nums.sort((a,b)=>part(b,releveEstMontant)-part(a,releveEstMontant))[0];
+  }
+  if(col.montant>=0){ col.debit = col.credit = -1; }
+  if(col.libelle<0){
+    const longueur = i => rows.reduce((s,r)=>s+((r[i]||'').length),0);
+    col.libelle = [...Array(nbCol).keys()].filter(i=>![col.date,col.montant,col.debit,col.credit].includes(i) && part(i, releveEstMontant)<0.5)
+      .sort((a,b)=>longueur(b)-longueur(a))[0] ?? -1;
+  }
+  return col;
+}
+function releveCsvOps(st, col){
+  const ordre = releveOrdre(st.rows.map(r=>r[col.date]));
+  return st.rows.map(r=>{
+    const lib = [r[col.libelle], col.libelle2>=0 ? r[col.libelle2] : ''].filter(Boolean).join(' ').replace(/\s+/g,' ').trim();
+    let montant;
+    if(col.montant>=0) montant = releveMontant(r[col.montant]);
+    else{
+      const d = releveMontant(r[col.debit]), c = releveMontant(r[col.credit]);
+      montant = !isNaN(d) && d!==0 ? -Math.abs(d) : (!isNaN(c) ? Math.abs(c) : NaN);
+    }
+    return {date: releveDate(r[col.date], ordre), libelle: lib, montant};
+  });
+}
+function releveHtmlEntites(s){ return String(s||'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;|&#39;/g,"'"); }
+function releveOfx(texte){
+  return texte.split(/<STMTTRN>/i).slice(1).map(b=>{
+    const champ = n => { const m = new RegExp('<'+n+'>([^<\\r\\n]*)','i').exec(b); return m ? releveHtmlEntites(m[1].trim()) : ''; };
+    const d = /^(\d{4})(\d{2})(\d{2})/.exec(champ('DTPOSTED'));
+    const nom = champ('NAME'), memo = champ('MEMO');
+    return {date: d ? releveIso(+d[1], +d[2], +d[3]) : null, libelle: [nom, memo && memo!==nom ? memo : ''].filter(Boolean).join(' '), montant: releveMontant(champ('TRNAMT'))};
+  });
+}
+function releveQif(texte){
+  const ops = []; let cur = {};
+  texte.split(/\r\n|\n|\r/).forEach(l=>{
+    const k = l[0], v = l.slice(1).trim();
+    if(k==='^'){ if(cur.dateBrute) ops.push(cur); cur = {}; }
+    else if(k==='D') cur.dateBrute = v.replace(/'/g,'/').replace(/\s/g,'');
+    else if(k==='T' || k==='U'){ if(cur.montant===undefined) cur.montant = releveMontant(v); }
+    else if(k==='P') cur.libelle = v + (cur.libelle ? ' '+cur.libelle : '');
+    else if(k==='M') cur.libelle = (cur.libelle ? cur.libelle+' ' : '') + v;
+  });
+  const ordre = releveOrdre(ops.map(o=>o.dateBrute));
+  return ops.map(o=>({date: releveDate(o.dateBrute, ordre), libelle: o.libelle||'', montant: o.montant}));
+}
+
+/* ---------- PDF et texte collé : lignes « date … libellé … montant » ---------- */
+let relevePdfJs = null;
+function releveChargerPdfJs(){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if(!relevePdfJs) relevePdfJs = new Promise((resolve, reject)=>{
+    const base = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+    const s = document.createElement('script');
+    s.src = base+'pdf.min.js';
+    s.onload = ()=>{ window.pdfjsLib.GlobalWorkerOptions.workerSrc = base+'pdf.worker.min.js'; resolve(window.pdfjsLib); };
+    s.onerror = ()=>{ relevePdfJs = null; s.remove(); reject(new Error('pdf.js indisponible')); };
+    document.head.appendChild(s);
+  });
+  return relevePdfJs;
+}
+// Une ligne = la liste de ses morceaux de texte avec leur position (x, largeur),
+// pour savoir sous quelle colonne (Débit, Crédit, Solde) tombe un montant.
+async function releveLirePdf(buffer){
+  const pdfjs = await releveChargerPdfJs();
+  const doc = await pdfjs.getDocument({data: buffer}).promise;
+  const lignes = [];
+  for(let p=1;p<=doc.numPages;p++){
+    const page = await doc.getPage(p);
+    const rows = [];
+    (await page.getTextContent()).items.forEach(it=>{
+      if(!it.str || !it.str.trim()) return;
+      const x = it.transform[4], y = it.transform[5];
+      let row = rows.find(r=>Math.abs(r.y-y)<3);
+      if(!row){ row = {y, items:[]}; rows.push(row); }
+      row.items.push({str: it.str.trim(), x, w: it.width||0});
+    });
+    rows.sort((a,b)=>b.y-a.y).forEach(r=>lignes.push(r.items.sort((a,b)=>a.x-b.x)));
+  }
+  return lignes;
+}
+// Texte collé : les morceaux sont séparés par une tabulation ou au moins deux espaces ;
+// leur position est le numéro de caractère, ce qui garde l'alignement des colonnes.
+function releveTexteEnLignes(texte){
+  return texte.split(/\r\n|\n|\r/).map(l=>{
+    const items = []; const re = /[^\t]+?(?=\t| {2,}|$)/g; let m;
+    while((m = re.exec(l))){ const str = m[0].trim(); if(str) items.push({str, x: m.index + m[0].indexOf(str), w: str.length}); if(re.lastIndex===m.index) re.lastIndex++; }
+    return items;
+  }).filter(items=>items.length);
+}
+const RELEVE_ARGENT = /^[-+−]?\d{1,3}(?:[\s  .]\d{3})*,\d{2}\s?€?-?$|^[-+−]?\d+\.\d{2}\s?€?-?$|^[-+−]?\d{1,3}(?:,\d{3})+\.\d{2}\s?€?-?$/;
+const RELEVE_DATE_DEBUT = /^(\d{1,2}[\/.-]\d{1,2}(?:[\/.-]\d{2,4})?|\d{1,2} [A-Za-zÀ-ÿ]{3,9}\.?(?: \d{4})?)\s+/;
+const RELEVE_ENTREE = /\b(VIR(EMENT)?S? (SEPA )?(RECU|DE|INST RECU)|REMBOURSEMENT|REMB|SALAIRE|AVOIR|ALLOCATION|CAF|POLE EMPLOI|FRANCE TRAVAIL|PRIME|INTERETS)\b/i;
+function releveSigTexte(lignes){
+  return 'pdf:' + releveSansAccents(lignes.slice(0,3).map(l=>l.map(i=>i.str).join(' ')).join(' ')).toUpperCase().replace(/[^A-Z]+/g,' ').trim().slice(0,60);
+}
+function releveDepuisLignes(lignes, format, colonnesApprises){
+  // Année des dates sans année : la plus récente trouvée en toutes lettres dans le document.
+  const datesCompletes = [];
+  lignes.forEach(l=>l.forEach(i=>{ const m = i.str.match(/\b\d{1,2}[\/.-]\d{1,2}[\/.-](\d{4}|\d{2})\b/g); (m||[]).forEach(x=>{ const d = releveDate(x,'dmy'); if(d) datesCompletes.push(d); }); }));
+  const fin = datesCompletes.sort().pop();
+  const anneeFin = fin ? Number(fin.slice(0,4)) : new Date().getFullYear(), moisFin = fin ? Number(fin.slice(5,7)) : 12;
+  const ordre = releveOrdre(lignes.map(l=>(l[0]||{}).str));
+  let colonnes = colonnesApprises || null, colonnesVues = null;
+  const ops = [];
+  let dernier = null, dernierIndex = -2;
+  lignes.forEach((items, idx)=>{
+    const texte = items.map(i=>i.str).join(' ').replace(/\s+/g,' ').trim();
+    const norm = releveNormEntete(texte);
+    if(/debit/.test(norm) && /credit/.test(norm)){
+      colonnes = {};
+      items.forEach(i=>{ const n = releveNormEntete(i.str); const k = /debit/.test(n) ? 'debit' : /credit/.test(n) ? 'credit' : /solde/.test(n) ? 'solde' : null; if(k) colonnes[k] = i.x + i.w; });
+      colonnesVues = colonnes;
+      return;
+    }
+    const md = RELEVE_DATE_DEBUT.exec(texte + ' ');
+    const argent = items.filter(i=>RELEVE_ARGENT.test(i.str));
+    if(!md){
+      // Suite du libellé de l'opération précédente (libellés sur deux lignes).
+      if(dernier && dernierIndex===idx-1 && !argent.length && texte.length<70 && !RELEVE_HORS_OPS.test(texte)){ dernier.libelle += ' ' + texte; }
+      return;
+    }
+    const brut = md[1];
+    let date = releveDate(brut, ordre, anneeFin);
+    const sansAnnee = /^\d{1,2}[\/.-]\d{1,2}$|^\d{1,2} [A-Za-zÀ-ÿ]{3,9}\.?$/.test(brut);
+    if(date && sansAnnee && Number(date.slice(5,7)) > moisFin + 1) date = releveDate(brut, ordre, anneeFin-1); // relevé à cheval sur deux années
+    if(!date || !argent.length) return;
+    let choisi = null, signe = 0;
+    if(colonnes && (colonnes.debit!==undefined || colonnes.credit!==undefined)){
+      // Montants alignés à droite : on compare le bord droit de chaque montant à celui des en-têtes.
+      const proche = i => Object.entries(colonnes).sort((a,b)=>Math.abs(a[1]-(i.x+i.w)) - Math.abs(b[1]-(i.x+i.w)))[0][0];
+      choisi = argent.find(i=>proche(i)!=='solde');
+      if(choisi) signe = proche(choisi)==='debit' ? -1 : 1;
+    }
+    if(!choisi){ choisi = argent[0]; } // sans colonnes : le premier montant après le libellé (le solde, s'il y en a un, vient après)
+    let montant = releveMontant(choisi.str);
+    if(isNaN(montant) || montant===0) return;
+    const explicite = /^[-+−]|-$/.test(choisi.str.trim());
+    const signeIncertain = !signe && !explicite;
+    if(signe) montant = signe * Math.abs(montant);
+    else if(signeIncertain) montant = RELEVE_ENTREE.test(texte) ? Math.abs(montant) : -Math.abs(montant);
+    let libelle = texte.slice(md[0].length);
+    libelle = libelle.replace(RELEVE_DATE_DEBUT, ''); // date de valeur juste après la date d'opération
+    argent.forEach(i=>{ const a = i.str.replace(/\s+/g,' '), k = libelle.lastIndexOf(a); if(k>=0) libelle = libelle.slice(0,k) + libelle.slice(k+a.length); });
+    libelle = libelle.replace(/\s+/g,' ').trim();
+    if(!libelle || RELEVE_HORS_OPS.test(libelle)) return;
+    dernier = {date, libelle, montant, signeIncertain}; dernierIndex = idx;
+    ops.push(dernier);
+  });
+  return {format, ops, sig: releveSigTexte(lignes), colonnes: colonnesVues};
+}
+
+/* ---------- Suggestions ---------- */
+function releveCategorieDefaut(type){
+  const cats = myCategories(type==='revenu' ? 'revenus' : 'depenses');
+  return (cats.find(c=>c.nom==='Autre') || cats[0] || {}).nom || '';
+}
+// Ce qui est déjà suivi ailleurs dans Solde n'est pas à ressaisir : une dépense
+// déjà notée (même montant, à 3 jours près), un abonnement, une mensualité,
+// une charge ou un revenu récurrent du même montant.
+function releveDejaSuivi(op){
+  const abs = Math.abs(op.montant), key = op.date.slice(0,7);
+  const egal = v => Math.abs((Number(v)||0) - abs) < 0.006;
+  const proche = d => d && Math.abs(new Date(d+'T00:00:00') - new Date(op.date+'T00:00:00')) <= 3*86400000;
+  if(op.montant<0){
+    const deps = mine(state.depenses);
+    const d = deps.find(x=>x.modePaiement==='Unique' && egal(x.montant) && proche(x.date));
+    if(d) return `Déjà saisie : ${d.libelle}`;
+    const ab = deps.find(x=>x.modePaiement==='Recurrent' && x.statut==='Actif' && egal(x.montant));
+    if(ab) return `Abonnement déjà suivi : ${ab.libelle}`;
+    const ech = deps.find(x=>x.modePaiement==='Echelonne' && egal(depenseMensualiteDuMois(x, key)));
+    if(ech) return `Mensualité déjà suivie : ${ech.libelle}`;
+    const ch = chargesActivesMois(key).find(c=>egal(c.budget));
+    if(ch) return `Charge déjà suivie : ${ch.categorie}`;
+  } else {
+    const r = mine(state.revenusExceptionnels).find(x=>egal(x.montant) && proche(x.date));
+    if(r) return `Déjà saisie : ${r.libelle}`;
+    const rr = mine(state.revenusRecurrents).find(x=>egal(x.montant) && inRangeMonth(key, x.dateDebut, x.dateFin));
+    if(rr) return `Revenu récurrent déjà suivi : ${rr.libelle}`;
+  }
+  return '';
+}
+// Ordre de confiance : la règle apprise pour ce commerçant ; sinon un commerçant
+// proche déjà vu (même premier mot : « CARREFOUR CITY » ↔ « CARREFOUR MARKET ») ;
+// sinon les mots du libellé ; sinon le sens du montant.
+function releveSuggestion(op, modele){
+  const cle = releveCle(op.libelle);
+  const sens = op.montant<0 ? 'depense' : 'revenu';
+  const base = {cle, compte:'Compte Perso'};
+  const regle = modele.regles[cle];
+  // Un commerçant habituellement en dépense qui crédite le compte : c'est un remboursement.
+  if(regle && regle.type!=='ignorer' && regle.type!==sens && !op.signeIncertain){
+    const cats = myCategories(sens==='revenu' ? 'revenus' : 'depenses').map(c=>c.nom);
+    const cat = sens==='revenu' && cats.includes('Remboursement') ? 'Remboursement' : releveCategorieDefaut(sens);
+    return {...base, type: sens, libelle: (sens==='revenu' ? 'Remboursement ' : '') + (regle.libelle || releveJoli(cle)), categorie: cat, compte: regle.compte || 'Compte Perso', confiance:'devine', raison:'Sens inhabituel pour ce commerçant'};
+  }
+  if(regle){
+    return {...base, type: regle.type, libelle: regle.libelle || releveJoli(cle), categorie: regle.categorie || '', compte: regle.compte || 'Compte Perso',
+      confiance: regle.n>=2 ? 'sur' : 'appris', raison: regle.type==='ignorer' ? `Déjà ignorée ${regle.n>1?regle.n+' fois':'une fois'}` : `Reconnue (${regle.n>1?regle.n+' fois':'une fois'})`};
+  }
+  const premier = cle.split(' ')[0];
+  if(premier.length>=4){
+    const voisin = Object.entries(modele.regles).filter(([k,r])=>k.split(' ')[0]===premier && (r.type===sens || op.signeIncertain && r.type!=='ignorer')).sort((a,b)=>b[1].n-a[1].n)[0];
+    // Le libellé du voisin n'est repris que si l'utilisateur l'a renommé (« Courses ») ; sinon chacun garde le sien.
+    if(voisin){ const r = voisin[1]; const renomme = r.libelle && r.libelle!==releveJoli(voisin[0]); return {...base, type: r.type, libelle: renomme ? r.libelle : releveJoli(cle), categorie: r.categorie||'', compte: r.compte||'Compte Perso', confiance:'appris', raison:`Proche de « ${r.libelle || releveJoli(voisin[0])} »`}; }
+  }
+  const scores = {}; let total = 0;
+  releveMots(op.libelle).forEach(w=>{
+    Object.entries(modele.mots[w]||{}).forEach(([lab,n])=>{
+      const t = lab.split('|')[0];
+      if(t!==sens && !(op.signeIncertain && t!=='ignorer')) return; // une catégorie de dépense ne s'applique pas à une rentrée, et inversement
+      scores[lab] = (scores[lab]||0) + n; total += n;
+    });
+  });
+  const best = Object.entries(scores).sort((a,b)=>b[1]-a[1])[0];
+  if(best && best[1]>=2 && best[1]/total>=0.6){
+    const [type, categorie] = best[0].split('|');
+    return {...base, type, libelle: releveJoli(cle), categorie, confiance:'devine', raison:`Catégorie devinée d’après le libellé`};
+  }
+  return {...base, type: sens, libelle: releveJoli(cle), categorie: releveCategorieDefaut(sens), confiance:'nouveau', raison:'Nouvelle opération'};
+}
+function releveCreerLignes(ops){
+  const modele = releveModele(false);
+  return ops.filter(o=>o.date && isFinite(o.montant) && Math.abs(o.montant)>=0.005 && (o.libelle||'').trim())
+    .sort((a,b)=>a.date.localeCompare(b.date))
+    .map(o=>{
+      const s = releveSuggestion(o, modele);
+      const suivi = releveDejaSuivi(o);
+      if(suivi){ s.type = 'ignorer'; s.confiance = 'sur'; s.raison = suivi; }
+      const {cle, confiance, raison, ...valeurs} = s;
+      return {id: uid(), date: o.date, brut: o.libelle.trim(), montant: r2(o.montant), cle, suivi: !!suivi, confiance, raison, etat:'attente', s:{...valeurs}, v:{...valeurs}};
+    });
+}
+
+/* ---------- Session d'import ---------- */
+function releveCleStockage(){ const me = currentUser(); return me ? 'releve_en_cours_'+me.id : null; }
+function releveChargerSession(){
+  const me = currentUser();
+  if(!me || releveSessionOwner===me.id) return;
+  releveSessionOwner = me.id; releveSession = null;
+  try{ const raw = localStorage.getItem(releveCleStockage()); if(raw) releveSession = JSON.parse(raw); }catch(e){ releveSession = null; }
+}
+function releveSauverSession(){
+  try{
+    const k = releveCleStockage(); if(!k) return;
+    if(releveSession) localStorage.setItem(k, JSON.stringify(releveSession)); else localStorage.removeItem(k);
+  }catch(e){}
+}
+async function releveOuvrirFichier(file){
+  const nom = file.name || 'relevé';
+  const ext = (nom.split('.').pop()||'').toLowerCase();
+  const modele = releveModele(false);
+  let res = null;
+  try{
+    if(ext==='pdf' || file.type==='application/pdf'){
+      toast('Lecture du PDF…');
+      let lignes;
+      try{ lignes = await releveLirePdf(await file.arrayBuffer()); }
+      catch(e){ console.error(e); toast('Impossible de lire ce PDF — essaie l’export CSV ou OFX de ta banque'); return; }
+      const appris = modele.formats[releveSigTexte(lignes)];
+      res = releveDepuisLignes(lignes, 'pdf', appris && appris.colonnes);
+    } else {
+      const texte = releveDecoder(await file.arrayBuffer());
+      res = releveAnalyserTexte(texte, modele);
+    }
+  }catch(e){ console.error(e); toast('Ce fichier n’a pas pu être lu'); return; }
+  await releveDemarrer(nom, res);
+}
+function releveAnalyserTexte(texte, modele){
+  if(/<STMTTRN>/i.test(texte)) return {format:'ofx', ops: releveOfx(texte)};
+  if(/^\s*!Type:/im.test(texte)) return {format:'qif', ops: releveQif(texte)};
+  const st = releveCsvStructure(texte);
+  if(st && st.nbCol>=3){
+    const appris = modele.formats[st.sig];
+    const col = appris && appris.colonnes ? {...appris.colonnes} : releveCsvDeviner(st);
+    return {format:'csv', ops: releveCsvOps(st, col), sig: st.sig, csv:{rows: st.rows, entete: st.entete, nbCol: st.nbCol, col}, formatConnu: !!appris};
+  }
+  const lignes = releveTexteEnLignes(texte);
+  const appris = modele.formats[releveSigTexte(lignes)];
+  return releveDepuisLignes(lignes, 'texte', appris && appris.colonnes);
+}
+async function releveDemarrer(nom, res){
+  const lignes = res ? releveCreerLignes(res.ops||[]) : [];
+  if(!lignes.length){ toast('Aucune opération trouvée — essaie l’export CSV ou OFX de ta banque'); return; }
+  const modele = releveModele(false);
+  releveSession = {nom, format: res.format, sig: res.sig||null, csv: res.csv||null, colonnes: res.colonnes||null,
+    formatConnu: !!(res.sig && modele.formats[res.sig]), lignes, debut: new Date().toISOString()};
+  releveSauverSession();
+  await render();
+  toast(`${lignes.length} opération${lignes.length>1?'s':''} à vérifier`);
+}
+// L'utilisateur corrige une colonne du CSV : on relit le fichier avec ce choix,
+// et on le retient tout de suite pour les prochains relevés de même format.
+async function releveChangerColonne(el){
+  const s = releveSession; if(!s || !s.csv) return;
+  const champ = el.dataset.rlCol, val = Number(el.value);
+  const col = {...s.csv.col};
+  if(champ==='montantMode'){
+    if(el.value==='un'){ col.montant = col.debit>=0 ? col.debit : 0; col.debit = col.credit = -1; }
+    else{ col.debit = col.montant>=0 ? col.montant : 0; col.credit = Math.min(col.debit+1, s.csv.nbCol-1); col.montant = -1; }
+  } else col[champ] = val;
+  s.csv.col = col;
+  const traitees = s.lignes.filter(l=>l.etat!=='attente');
+  s.lignes = [...traitees, ...releveCreerLignes(releveCsvOps(s.csv, col))];
+  const modele = releveModele(true);
+  modele.formats[s.sig] = {...(modele.formats[s.sig]||{}), colonnes: col, nom: s.nom, maj: new Date().toISOString().slice(0,10)};
+  s.formatConnu = true;
+  releveSauverSession(); await persist(); await render();
+}
+function releveChangerChamp(el){
+  const s = releveSession; if(!s) return;
+  const l = s.lignes.find(x=>x.id===el.dataset.rlId); if(!l) return;
+  const champ = el.dataset.rlChamp;
+  l.v[champ] = el.value;
+  if(champ==='type' && el.value!=='ignorer'){
+    const cats = myCategories(el.value==='revenu' ? 'revenus' : 'depenses').map(c=>c.nom);
+    if(!cats.includes(l.v.categorie)){
+      const regle = releveModele(false).regles[l.cle];
+      l.v.categorie = regle && regle.type===el.value && regle.categorie ? regle.categorie : releveCategorieDefaut(el.value);
+    }
+  }
+  releveSauverSession();
+  if(champ==='type') render();
+}
+// Retient la décision de l'utilisateur : règle du commerçant, mots du libellé,
+// format du fichier, et si la suggestion était juste.
+function releveApprendre(modele, l){
+  const v = l.v, s = l.s;
+  const juste = v.type===s.type && (v.type==='ignorer' || v.categorie===s.categorie);
+  modele.historique.push(juste ? 1 : 0);
+  if(modele.historique.length>300) modele.historique = modele.historique.slice(-300);
+  if(l.suivi && v.type==='ignorer') return; // ignorée parce que déjà suivie ailleurs : rien à retenir sur ce commerçant
+  const prev = modele.regles[l.cle];
+  const meme = prev && prev.type===v.type && (v.type==='ignorer' || prev.categorie===v.categorie);
+  modele.regles[l.cle] = v.type==='ignorer'
+    ? {type:'ignorer', n: meme ? prev.n+1 : 1, maj: new Date().toISOString().slice(0,10)}
+    : {type:v.type, libelle:(v.libelle||'').trim(), categorie:v.categorie||'', compte:v.compte||'Compte Perso', n: meme ? prev.n+1 : 1, maj: new Date().toISOString().slice(0,10)};
+  const lab = v.type==='ignorer' ? 'ignorer|' : `${v.type}|${v.categorie||''}`;
+  new Set(releveMots(l.brut)).forEach(w=>{ const e = modele.mots[w] || (modele.mots[w] = {}); e[lab] = (e[lab]||0) + 1; });
+}
+async function releveValider(ids){
+  const s = releveSession; if(!s) return;
+  const me = currentUser(), modele = releveModele(true);
+  let ajoutees = 0, ignorees = 0;
+  ids.forEach(id=>{
+    const l = s.lignes.find(x=>x.id===id && x.etat==='attente'); if(!l) return;
+    const v = l.v, montant = r2(Math.abs(l.montant)), libelle = (v.libelle||'').trim() || releveJoli(l.cle);
+    if(v.type==='depense'){
+      state.depenses.push({id:uid(), ownerId:me.id, libelle, categorie:v.categorie||'', compte:v.compte||'Compte Perso', montant, modePaiement:'Unique', date:l.date, notes:'', source:'releve'});
+      ajoutees++;
+    } else if(v.type==='revenu'){
+      state.revenusExceptionnels.push({id:uid(), ownerId:me.id, date:l.date, libelle, categorie:v.categorie||releveCategorieDefaut('revenu'), montant, source:'releve'});
+      ajoutees++;
+    } else ignorees++;
+    l.etat = v.type==='ignorer' ? 'ignoree' : 'validee';
+    releveApprendre(modele, l);
+  });
+  if(ajoutees+ignorees===0) return;
+  // Le format du fichier est retenu dès la première ligne acceptée.
+  if(s.sig && (s.csv || s.colonnes)){
+    const f = modele.formats[s.sig] || {};
+    if(!s.formatRetenu){ f.imports = (f.imports||0) + 1; s.formatRetenu = true; }
+    modele.formats[s.sig] = {...f, colonnes: s.csv ? s.csv.col : (s.colonnes || f.colonnes), nom: s.nom, maj: new Date().toISOString().slice(0,10)};
+  }
+  releveSauverSession();
+  await persist(); await render();
+  toast(ajoutees && ignorees ? `${ajoutees} ajoutée${ajoutees>1?'s':''}, ${ignorees} ignorée${ignorees>1?'s':''}` : ajoutees ? (ajoutees>1 ? `${ajoutees} opérations ajoutées` : 'Opération ajoutée') : (ignorees>1 ? `${ignorees} lignes ignorées` : 'Ligne ignorée'));
+}
+function relevePrecision(historique, n){
+  const h = historique.slice(-n);
+  return h.length ? h.reduce((a,b)=>a+b,0)/h.length : null;
+}
+
+/* ---------- Vue ---------- */
+const RELEVE_BADGES = {sur:['pill-teal','Reconnue'], appris:['pill-amber','Apprise'], devine:['pill-dim','Devinée'], nouveau:['pill-dim','Nouvelle']};
+function releveLigneHTML(l, partner){
+  const cats = l.v.type==='ignorer' ? [] : myCategories(l.v.type==='revenu' ? 'revenus' : 'depenses').map(c=>c.nom);
+  if(l.v.categorie && l.v.type!=='ignorer' && !cats.includes(l.v.categorie)) cats.unshift(l.v.categorie);
+  const [cls, lbl] = l.suivi ? ['pill-dim','Déjà suivie'] : RELEVE_BADGES[l.confiance] || RELEVE_BADGES.nouveau;
+  const ign = l.v.type==='ignorer';
+  const nomLigne = attrEsc(l.v.libelle || l.brut);
+  return `<li class="rl-row${ign?' is-ignored':''}" data-rl-row="${l.id}">
+    <div class="rl-date">${fmtDate(l.date)}</div>
+    <div class="rl-lib">
+      <input class="rl-ctl" data-rl-id="${l.id}" data-rl-champ="libelle" value="${attrEsc(l.v.libelle)}" aria-label="Libellé" ${ign?'disabled':''}>
+      <span class="rl-brut" title="${attrEsc(l.brut)}">${esc(l.brut)}</span>
+    </div>
+    <select class="rl-ctl rl-type" data-rl-id="${l.id}" data-rl-champ="type" aria-label="Type de l’opération ${nomLigne}">
+      <option value="depense"${l.v.type==='depense'?' selected':''}>Dépense</option>
+      <option value="revenu"${l.v.type==='revenu'?' selected':''}>Rentrée</option>
+      <option value="ignorer"${ign?' selected':''}>Ne pas importer</option>
+    </select>
+    ${ign ? '<span class="rl-cat"></span>' : `<select class="rl-ctl rl-cat" data-rl-id="${l.id}" data-rl-champ="categorie" aria-label="Catégorie">
+      ${cats.length ? '' : '<option value="">Sans catégorie</option>'}${cats.map(c=>`<option value="${attrEsc(c)}"${c===l.v.categorie?' selected':''}>${esc(c)}</option>`).join('')}
+    </select>`}
+    ${partner && l.v.type==='depense' ? `<select class="rl-ctl rl-compte" data-rl-id="${l.id}" data-rl-champ="compte" aria-label="Compte">${COMPTES.map(c=>`<option${c===l.v.compte?' selected':''}>${c}</option>`).join('')}</select>` : '<span class="rl-compte"></span>'}
+    <div class="rl-amt num${l.montant>0?' pos':''}">${l.montant>0?'+':''}${fmtEUR(l.montant)}</div>
+    <div class="rl-meta"><span class="pill ${cls}">${lbl}</span>${l.confiance==='nouveau' && !l.suivi ? '' : `<span class="rl-raison">${esc(l.raison)}</span>`}</div>
+    <div class="rl-actions">
+      <button class="btn btn-ghost btn-sm" data-action="releve-valider" data-id="${l.id}">${icon('check')}${ign?'Confirmer':'Valider'}</button>
+      ${ign ? '' : `<button class="icon-btn del" data-action="releve-ignorer" data-id="${l.id}" aria-label="Ne pas importer ${nomLigne}">${icon('x')}</button>`}
+    </div>
+  </li>`;
+}
+function releveColonnesHTML(s){
+  const {entete, nbCol, rows, col} = s.csv;
+  const nomCol = i => entete && entete[i] ? entete[i] : `Colonne ${i+1}${rows[0] && rows[0][i] ? ` (${String(rows[0][i]).slice(0,18)})` : ''}`;
+  const sel = (champ, val, label, vide) => `<div class="field"><label for="rl-col-${champ}">${label}</label><select id="rl-col-${champ}" data-rl-col="${champ}">${vide?`<option value="-1"${val<0?' selected':''}>Aucune</option>`:''}${[...Array(nbCol).keys()].map(i=>`<option value="${i}"${i===val?' selected':''}>${esc(nomCol(i))}</option>`).join('')}</select></div>`;
+  const deux = col.montant<0;
+  return `<details class="rl-cols"${s.formatConnu?'':' open'}>
+    <summary>${s.formatConnu ? 'Format reconnu — colonnes utilisées' : 'Nouveau format : vérifie les colonnes'}</summary>
+    <div class="rl-cols-grid">
+      ${sel('date', col.date, 'Date')}
+      ${sel('libelle', col.libelle, 'Libellé')}
+      ${sel('libelle2', col.libelle2, 'Complément de libellé', true)}
+      <div class="field"><label for="rl-col-montantMode">Montant</label><select id="rl-col-montantMode" data-rl-col="montantMode"><option value="un"${deux?'':' selected'}>Une colonne (signée)</option><option value="deux"${deux?' selected':''}>Débit et Crédit séparés</option></select></div>
+      ${deux ? sel('debit', col.debit, 'Débit') + sel('credit', col.credit, 'Crédit') : sel('montant', col.montant, 'Colonne du montant')}
+    </div>
+    <div class="field-note">Ton choix est retenu : les prochains relevés de ce format seront lus directement.</div>
+  </details>`;
+}
+function releveApprentissageHTML(modele){
+  const regles = Object.entries(modele.regles).sort((a,b)=>(b[1].maj||'').localeCompare(a[1].maj||'') || b[1].n-a[1].n);
+  const nbFormats = Object.keys(modele.formats).length;
+  const h = modele.historique;
+  const recente = relevePrecision(h, 30), debut = h.length>=60 ? h.slice(0,30).reduce((a,b)=>a+b,0)/30 : null;
+  if(!regles.length && !nbFormats) return `<div class="card"><div class="section-head"><h2>Ce que Solde apprend</h2></div>
+    <p class="field-note" style="margin:0;">À chaque ligne validée, Solde retient comment lire le fichier de ta banque, le nom et la catégorie que tu donnes à chaque commerçant, et les lignes que tu préfères ne pas importer. Au fil des relevés, il y a de moins en moins à corriger.</p></div>`;
+  return `<div class="card">
+    <div class="section-head"><h2>Ce que Solde a appris</h2>
+      <button class="btn btn-text btn-sm danger" data-action="releve-oublier-tout">Tout oublier</button></div>
+    <dl class="kv" style="max-width:520px;margin-bottom:16px;">
+      <dt>Commerçants reconnus</dt><dd>${regles.filter(([,r])=>r.type!=='ignorer').length}</dd>
+      <dt>Lignes ignorées d’office</dt><dd>${regles.filter(([,r])=>r.type==='ignorer').length}</dd>
+      <dt>Formats de fichier</dt><dd>${nbFormats}</dd>
+      ${recente!==null ? `<dt>Suggestions justes</dt><dd>${Math.round(recente*100)} %${debut!==null ? ` <span class="side-note">(${Math.round(debut*100)} % au début)</span>` : ''}</dd>` : ''}
+    </dl>
+    ${regles.length ? `<ul class="rl-rules">${regles.slice(0,60).map(([cle,r])=>`<li>
+      <span class="rl-rule-key">${esc(cle)}</span>
+      <span class="rl-rule-val">${r.type==='ignorer' ? '<span class="nil">ne pas importer</span>' : `${esc(r.libelle||releveJoli(cle))} · ${esc(r.categorie||'sans catégorie')}${r.type==='revenu'?' · rentrée':''}`}</span>
+      <span class="side-note">${r.n>1 ? r.n+' fois' : '1 fois'}</span>
+      <button class="icon-btn del" data-action="releve-oublier" data-cle="${attrEsc(cle)}" aria-label="Oublier ${attrEsc(cle)}">${icon('trash')}</button>
+    </li>`).join('')}</ul>${regles.length>60 ? `<div class="field-note">Et ${regles.length-60} autres.</div>` : ''}` : ''}
+  </div>`;
+}
+function renderReleve(){
+  releveChargerSession();
+  const s = releveSession;
+  const modele = releveModele(false);
+  if(!s){
+    return `
+      ${pageHeadHTML({title:'Import de relevé', finding:'Dépose le relevé de ta banque : chaque opération est pré-remplie, tu n’as plus qu’à valider.'})}
+      <div class="card mb16">
+        <input type="file" id="releve-file" class="sr-only" accept=".csv,.txt,.tsv,.ofx,.qfx,.qif,.pdf,text/csv,application/pdf">
+        <label class="rl-drop" for="releve-file">
+          ${icon('fileIn')}
+          <span class="rl-drop-t">Choisir ou déposer un relevé</span>
+          <span class="field-note">CSV, OFX, QIF ou PDF — le fichier est lu sur ton appareil, il n’est envoyé nulle part.</span>
+        </label>
+        <details class="rl-paste">
+          <summary>Ou coller le texte du relevé</summary>
+          <textarea id="releve-texte" rows="6" placeholder="12/10/2026  CB CARREFOUR 10/10   -45,30"></textarea>
+          <button class="btn btn-ghost btn-sm" data-action="releve-coller">${icon('search')}Analyser le texte</button>
+        </details>
+      </div>
+      ${releveApprentissageHTML(modele)}`;
+  }
+  const attente = s.lignes.filter(l=>l.etat==='attente');
+  const validees = s.lignes.filter(l=>l.etat==='validee').length, ignorees = s.lignes.filter(l=>l.etat==='ignoree').length;
+  const surs = attente.filter(l=>l.confiance==='sur');
+  const partner = jointPartner();
+  const FORMATS = {csv:'CSV', ofx:'OFX', qif:'QIF', pdf:'PDF', texte:'texte collé'};
+  const finding = attente.length
+    ? `${fmtCount(attente.length, 'ligne à vérifier', 'lignes à vérifier')}${surs.length ? ` · <strong>${surs.length}</strong> reconnue${surs.length>1?'s':''} d’après tes saisies précédentes` : ''}.`
+    : `Import terminé : ${fmtCount(validees, 'opération ajoutée', 'opérations ajoutées')}${ignorees ? `, ${fmtCount(ignorees, 'ignorée', 'ignorées')}` : ''}.`;
+  return `
+    ${pageHeadHTML({title:'Import de relevé', finding,
+      action: surs.length ? `<button class="btn btn-primary" data-action="releve-valider-surs">${icon('check')}${surs.length>1 ? `Valider les ${surs.length} reconnues` : 'Valider la ligne reconnue'}</button>` : ''})}
+    <div class="card mb16">
+      <div class="section-head">
+        <h2>${icon('fileIn')}<span class="rl-file">${esc(s.nom)}</span><span class="side-note">${FORMATS[s.format]||''}</span></h2>
+        <div class="row-actions">
+          ${attente.length>1 ? `<button class="btn btn-ghost btn-sm" data-action="releve-valider-tout">Tout valider (${attente.length})</button>` : ''}
+          <button class="btn btn-text btn-sm" data-action="releve-fermer">${attente.length ? 'Abandonner' : 'Importer un autre relevé'}</button>
+        </div>
+      </div>
+      ${validees+ignorees ? `<div class="field-note" style="margin:-4px 0 12px;">${fmtCount(validees, 'ajoutée', 'ajoutées')} · ${fmtCount(ignorees, 'ignorée', 'ignorées')}</div>` : ''}
+      ${s.csv ? releveColonnesHTML(s) : ''}
+      ${attente.length ? `<ul class="rl-list">${attente.map(l=>releveLigneHTML(l, partner)).join('')}</ul>`
+        : emptyRow('Toutes les lignes ont été traitées.', 'releve-fermer', 'Importer un autre relevé')}
+    </div>
+    ${releveApprentissageHTML(modele)}`;
+}
+function releveAfterRender(){
+  if(releveFocusApres===null) return;
+  const btns = [...document.querySelectorAll('.rl-row [data-action="releve-valider"]')];
+  const b = btns[Math.min(releveFocusApres, btns.length-1)];
+  releveFocusApres = null;
+  if(b) b.focus({preventScroll:false});
+}
+function releveIndexLigne(id){ return [...document.querySelectorAll('.rl-row')].findIndex(r=>r.dataset.rlRow===id); }
 
 function renderGroupesListe(){
   return `
