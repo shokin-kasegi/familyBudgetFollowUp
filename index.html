@@ -194,17 +194,18 @@ main{flex:1;min-width:0;padding-block:32px 64px;padding-left:max(40px, env(safe-
 .ratio{text-align:right;}
 .ratio .pct{font-size:40px;}
 .ratio small{display:block;color:var(--muted);font-size:13px;margin-top:4px;}
-.hero-hors{margin-top:6px;font-size:13px;color:var(--muted);}
-.hero-hors b{color:var(--text);font-weight:600;}
+.hero-hors,.hero-solde{margin-top:6px;font-size:13px;color:var(--muted);}
+.hero-hors b,.hero-solde b{color:var(--text);font-weight:600;}
 .hors-revenu{margin-top:16px;}
 .hero-norev{margin-top:12px;color:var(--muted);}
 
 .flow{position:relative;height:28px;margin:28px 0 22px;display:flex;gap:3px;border-radius:10px;overflow:hidden;}
 .seg{height:100%;flex:0 0 auto;width:0;transition:width .7s var(--ease-out),filter .15s ease;position:relative;}
 .seg[data-k="reste"]{background:color-mix(in srgb, var(--c-reste) 22%, var(--surface));flex:1 1 auto;width:auto;}
+.seg[data-k="avenir"]{background:repeating-linear-gradient(135deg,var(--muted) 0 6px,color-mix(in srgb,var(--muted) 45%,var(--surface)) 6px 12px);}
 /* Dépassement : hachures (un motif qui porte un sens, pas un effet). */
 .seg[data-k="reste"].over,.hatch-over{background:repeating-linear-gradient(135deg,var(--c-over) 0 6px,color-mix(in srgb,var(--c-over) 55%,var(--surface)) 6px 12px);}
-.flow.has-focus .seg:not(.hl):not([data-k="reste"]){filter:brightness(.55);}
+.flow.has-focus .seg:not(.hl):not([data-k="reste"]):not([data-k="avenir"]){filter:brightness(.55);}
 .seg.hl{filter:brightness(1.15);}
 
 .postes{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px;}
@@ -1198,7 +1199,8 @@ function defaultState(){
     categoriesDepenses: [],
     categoriesRevenus: [],
     importApprentissage: [],
-    abonnementsAlertes: []
+    abonnementsAlertes: [],
+    soldesCompte: []
   };
 }
 
@@ -1317,13 +1319,19 @@ async function loadState(){
     needsPersist = true;
   }
 
+  // Soldes du compte (fin de relevé importé, ou saisis) : vide au départ.
+  if(!Array.isArray(state.soldesCompte)){
+    state.soldesCompte = [];
+    needsPersist = true;
+  }
+
   if(needsPersist) await persist();
   if(needsPersistAuth) await persistAuth();
   if(needsPersistSocial) await persistSocial();
 }
 // Les anciennes données (revenus récurrents, échéances, objectifs, charges…) restent
 // dans le stockage, intactes mais ignorées, en attendant la refonte du modèle.
-const OWNED_ARRAYS = ['revenusExceptionnels','depenses','categoriesDepenses','categoriesRevenus','importApprentissage','abonnementsAlertes'];
+const OWNED_ARRAYS = ['revenusExceptionnels','depenses','categoriesDepenses','categoriesRevenus','importApprentissage','abonnementsAlertes','soldesCompte'];
 function mine(arr){
   const me = currentUser();
   return me ? (arr||[]).filter(e=>e.ownerId===me.id) : [];
@@ -1553,8 +1561,77 @@ function estHorsRevenu(r, hors){ return !!r.categorie && (hors||categoriesHorsRe
 function depensesDuMois(key){ return mesSorties().filter(d=>dansLeMois(d, key)); }
 function depenseMontantDuMois(dep, key){ return estSortie(dep) && dansLeMois(dep, key) ? (Number(dep.montant)||0) : 0; }
 
+/* ---------- Dépenses à venir ---------- */
+/* Les charges, abonnements et mensualités en cours se répètent : chaque série
+   prévue (prevu:true) est prolongée sur les mois suivants — chaque mois pour un
+   abonnement, selon sa périodicité pour une charge, jusqu'au total pour un
+   paiement en plusieurs fois. Seules les échéances datées après aujourd'hui sont
+   « à venir » et déduites du reste à vivre : une prévision passée non validée
+   (déjà réglée sans être rattachée, ou arrêtée) ne l'est pas. */
+function dateDuJour(){ const n = new Date(); return `${monthKey(n.getFullYear(), n.getMonth()+1)}-${String(n.getDate()).padStart(2,'0')}`; }
+function ecartMois(de, a){ const [y1,m1] = de.split('-').map(Number), [y2,m2] = a.split('-').map(Number); return (y2-y1)*12 + (m2-m1); }
+function jourDe(date){ return Number(String(date).slice(8,10)); }
+// Échéances du mois `key` : [{genre, libelle, categorie, montant, date, aVenir}].
+function echeancesDuMois(key){
+  const auj = dateDuJour(), out = [];
+  const ajoute = (genre, p, montant) => {
+    const date = dateDansMois(key, jourDe(p.date));
+    out.push({genre, libelle:p.libelle||'', categorie:p.categorie||'', montant:r2(montant), date, aVenir: date > auj});
+  };
+  aboPrevisions().forEach(p=>{ if(ecartMois(moisDe(p.date), key) >= 0) ajoute('abo', p, p.montant); });
+  chgPrevisions().forEach(p=>{ const k = ecartMois(moisDe(p.date), key); if(k >= 0 && k % chgPeriode(p) === 0) ajoute('chg', p, p.montant); });
+  ppfPrevisions().forEach(p=>{
+    const k = ecartMois(moisDe(p.date), key); if(k < 0) return;
+    const e = ppfEtat(p.ppfId), m = r2(p.montant), deja = r2(k*m);
+    if(!(m > 0) || e.total <= 0 || deja >= e.reste - PPF_EPS) return;
+    ajoute('ppf', p, Math.min(m, r2(e.reste - deja)));
+  });
+  return out.sort((a,b)=>a.date.localeCompare(b.date));
+}
+function aVenirDuMois(key){ return echeancesDuMois(key).filter(e=>e.aVenir); }
+
+/* ---------- Solde du compte ---------- */
+/* Le reste à vivre suit le compte : il part de ce qui restait à la fin du mois
+   précédent (solde reporté). Ce report se déduit d'un solde connu (ancre), celui
+   de fin d'un relevé importé ou saisi à la main : le plus récent sert de
+   référence. Solde à la fin d'un jour J = ancre + entrées − sorties − échéances à
+   venir entre l'ancre et J (comptées à rebours si J est avant l'ancre). Le mois
+   de l'ancre retombe ainsi exactement sur le solde de la banque, sans ligne de
+   régularisation qui fausserait revenus et dépenses. */
+function soldesCompte(){ return mine(state.soldesCompte).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x.date||'') && Number.isFinite(Number(x.montant))).sort((a,b)=>a.date.localeCompare(b.date)); }
+function soldeAncre(){ const l = soldesCompte(); return l.length ? l[l.length-1] : null; }
+// Retient un solde : remplace celui de même identifiant ou de même date.
+function soldeCompteFixer(date, montant, source, id){
+  const me = currentUser(); if(!me) return null;
+  if(!Array.isArray(state.soldesCompte)) state.soldesCompte = [];
+  const s = mine(state.soldesCompte).find(x=>(id && x.id===id) || x.date===date);
+  if(s){ Object.assign(s, {date, montant:r2(montant), source}); return s; }
+  const n = {id:uid(), ownerId:me.id, date, montant:r2(montant), source};
+  state.soldesCompte.push(n);
+  return n;
+}
+// Mouvement net du compte sur ]de, a] (dates AAAA-MM-JJ ; « a » peut être un 31 fictif pour « fin du mois »).
+function mouvementEntre(de, a){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(a) || a <= de) return 0;
+  const dans = x => !!x.date && x.date > de && x.date <= a;
+  let net = r2(sumR2(mine(state.revenusExceptionnels).filter(dans), r=>r.montant) - sumR2(mesSorties().filter(dans), d=>d.montant));
+  const auj = dateDuJour();
+  if(a > auj){
+    for(let k = moisDe(de > auj ? de : auj); k <= moisDe(a); k = addMonths(k, 1)) net = r2(net - sumR2(aVenirDuMois(k).filter(dans), e=>e.montant));
+  }
+  return net;
+}
+// Solde à la fin du jour `date`, ou null si aucun solde n'est connu.
+function soldeAu(date){
+  const a = soldeAncre(); if(!a) return null;
+  const m = Number(a.montant);
+  return date >= a.date ? r2(m + mouvementEntre(a.date, date)) : r2(m - mouvementEntre(date, a.date));
+}
+function soldeReporte(key){ return soldeAu(`${addMonths(key,-1)}-31`); }
+
 /* Chaque partie est arrondie au centime avant d'être additionnée : le total et
-   le solde correspondent toujours aux montants affichés. */
+   le solde correspondent toujours aux montants affichés. Le solde du mois déduit
+   les échéances à venir ; le reste à vivre y ajoute le solde reporté. */
 function dashboardData(key, hors){
   hors = hors || categoriesHorsRevenu();
   const rentrees = revenusDuMoisListe(key);
@@ -1565,11 +1642,15 @@ function dashboardData(key, hors){
   const achats = sumR2(liste, d=>d.montant);
   const parts = { achats };
   const totalDepenses = achats;
+  const echeances = aVenirDuMois(key);
+  const aVenir = sumR2(echeances, e=>e.montant);
   // Le reste à vivre compte toutes les entrées, y compris celles hors revenu total.
-  const solde = r2(entrees - totalDepenses);
+  const solde = r2(entrees - totalDepenses - aVenir);
+  const report = soldeReporte(key);
+  const reste = report==null ? solde : r2(report + solde);
   const parCat = new Map();
   liste.forEach(d=>{ const c = catLabel(d); parCat.set(c, r2((parCat.get(c)||0) + r2(d.montant))); });
-  return {key, revenu, entrees, horsRevenu, parts, totalDepenses, solde, parCat};
+  return {key, revenu, entrees, horsRevenu, parts, totalDepenses, echeances, aVenir, solde, report, reste, parCat};
 }
 
 /* ---------- Catégories dans les graphiques ---------- */
@@ -2964,16 +3045,16 @@ function dashYear(){ return Number(state.selectedMonth.slice(0,4)); }
 // Phrase de constat, calculée depuis les chiffres du mois (jamais écrite en dur).
 function dashFinding(key, d){
   const mois = monthName(key);
-  if(d.entrees<=0.01) return `Aucun revenu saisi pour ${monthLabel(key)}. <button class="link" data-action="add-revexc">Ajouter un revenu</button>`;
+  if(d.entrees<=0.01 && d.report==null) return `Aucun revenu saisi pour ${monthLabel(key)}. <button class="link" data-action="add-revexc">Ajouter un revenu</button>`;
   const resteTxt = v => v<0 ? `<strong>${fmtEUR0(-v)}</strong> de dépassement` : `<strong>${fmtEUR0(v)}</strong> de reste à vivre`;
-  if(isFutureMonth(key)) return `Prévision pour ${mois} : ${resteTxt(d.solde)} si rien d’autre n’est ajouté.`;
+  if(isFutureMonth(key)) return `Prévision pour ${mois} : ${resteTxt(d.reste)} si rien d’autre n’est ajouté.`;
   const prev = [1,2,3].map(i=>dashboardData(addMonths(key,-i)));
   const avg = prev.reduce((s,p)=>s+p.totalDepenses,0)/3;
-  if(avg<=0.01) return `${ucfirst(mois)} : ${resteTxt(d.solde)}.`;
+  if(avg<=0.01) return `${ucfirst(mois)} : ${resteTxt(d.reste)}.`;
   const diff = d.totalDepenses - avg;
   if(diff > avg*0.15) return `${ucfirst(mois)} : <strong>${fmtEUR0(diff)} de dépenses en plus</strong> que la moyenne des trois mois précédents.`;
   if(diff < -avg*0.15) return `${ucfirst(mois)} : <strong>${fmtEUR0(-diff)} de dépenses en moins</strong> que la moyenne des trois mois précédents.`;
-  return `Mois dans la moyenne : ${resteTxt(d.solde)}.`;
+  return `Mois dans la moyenne : ${resteTxt(d.reste)}.`;
 }
 
 function dashPosteSubs(key, d){
@@ -2989,20 +3070,28 @@ function renderDashboard(){
   const pal = catPalette(dashYear());
   // Du plus gros poste du mois au plus petit, « Autres » en dernier ; chaque catégorie garde sa couleur de l'année.
   const groupes = catGroupesDuMois(d.parCat, pal).sort((a,b)=>(a.label===CAT_AUTRES)-(b.label===CAT_AUTRES) || b.value-a.value);
-  // Contrôle : les catégories plus le reste redonnent exactement les entrées du mois.
-  console.assert(Math.abs(sumR2(groupes, g=>g.value) + d.solde - d.entrees) < 0.005, 'Tableau de bord : catégories + reste ≠ entrées', key, d);
+  // Contrôle : les catégories, les échéances à venir et le solde du mois redonnent exactement les entrées du mois.
+  console.assert(Math.abs(sumR2(groupes, g=>g.value) + d.aVenir + d.solde - d.entrees) < 0.005, 'Tableau de bord : catégories + à venir + solde ≠ entrées', key, d);
 
-  const noRev = d.entrees<=0.01;
-  const base = Math.max(d.entrees, d.totalDepenses) || 1;
+  // Sans revenu ni solde du compte connu, il n'y a pas de reste à vivre à montrer.
+  const noRev = d.entrees<=0.01 && d.report==null;
+  const ressources = Math.max(0, d.report||0) + d.entrees;
+  const base = Math.max(ressources, d.totalDepenses + d.aVenir) || 1;
   const horsNote = d.horsRevenu>0.004 ? `<div class="hero-hors">+ <b class="num">${fmtEUR(d.horsRevenu)}</b> hors revenu total (${esc([...new Set(revenusDuMoisListe(key).filter(r=>estHorsRevenu(r)).map(r=>r.categorie))].join(', '))}), inclus dans le reste à vivre</div>` : '';
   const mois = monthName(key);
   const nbDe = g => depensesDuMois(key).filter(x=>pal.groupeDe(catLabel(x))===g.label).length;
   const kOf = g => 'cat:'+g.label;
   const widthOf = g => motionOff() || !dashPrevWidths.has(kOf(g)) ? g.value/base : dashPrevWidths.get(kOf(g));
-  const n = groupes.length;
+  const n = groupes.length + (d.aVenir>0.004 ? 1 : 0);
   const segs = groupes.map((g,i)=>`<div class="seg${dashFocusPoste===kOf(g)?' hl':''}" data-k="${attrEsc(kOf(g))}" data-w="${g.value/base}" style="background:${pal.couleur(g.label)};width:calc((100% - ${n*3}px) * ${widthOf(g)||0});transition-delay:${motionOff()?0:i*45}ms" title="${attrEsc(g.label)} : ${fmtEUR(g.value)}"></div>`).join('')
-    + `<div class="seg${d.solde<0?' over':''}" data-k="reste" title="${d.solde<0?'Dépassement':'Reste à vivre'} : ${fmtEUR(Math.abs(d.solde))}"></div>`;
-  const flowLabel = `Répartition du revenu de ${mois} : ${groupes.length ? groupes.map(g=>`${g.label} ${fmtEUR(g.value)}`).join(', ') : 'aucune dépense'}, ${d.solde<0?'dépassement':'reste'} ${fmtEUR(Math.abs(d.solde))}`;
+    + (d.aVenir>0.004 ? `<div class="seg" data-k="avenir" data-w="${d.aVenir/base}" style="width:calc((100% - ${n*3}px) * ${motionOff() || !dashPrevWidths.has('avenir') ? d.aVenir/base : dashPrevWidths.get('avenir')})" title="À venir : ${fmtEUR(d.aVenir)}"></div>` : '')
+    + `<div class="seg${d.reste<0?' over':''}" data-k="reste" title="${d.reste<0?'Dépassement':'Reste à vivre'} : ${fmtEUR(Math.abs(d.reste))}"></div>`;
+  const flowLabel = `Répartition ${d.report==null ? 'du revenu' : 'du compte'} en ${mois} : ${groupes.length ? groupes.map(g=>`${g.label} ${fmtEUR(g.value)}`).join(', ') : 'aucune dépense'}${d.aVenir>0.004 ? `, à venir ${fmtEUR(d.aVenir)}` : ''}, ${d.reste<0?'dépassement':'reste'} ${fmtEUR(Math.abs(d.reste))}`;
+  // Solde reporté du mois précédent (solde du compte), ou invitation à l'indiquer.
+  const moisPrec = monthName(addMonths(key,-1));
+  const soldeNote = d.report!=null
+    ? `<div class="hero-solde">${d.report<0?'−':'+'} <b class="num" data-dash="report">${fmtEUR(Math.abs(d.report))}</b> ${d.report<0?'de découvert':'restant'} fin ${moisPrec} sur le compte, inclus dans le reste à vivre. <button class="link" data-action="solde-compte">Corriger le solde</button></div>`
+    : `<div class="hero-solde">Seules les opérations de ${mois} sont comptées. <button class="link" data-action="solde-compte">Indiquer le solde du compte</button> pour que le reste à vivre corresponde à ta banque.</div>`;
 
   const postes = groupes.length ? groupes.map(g=>{
     const nb = nbDe(g);
@@ -3017,13 +3106,20 @@ function renderDashboard(){
     ${catColorBtnHTML(g.label, dashYear())}
     </div>`; }).join('') : `<div class="empty-line">Aucune dépense en ${monthLabel(key)}. <button class="link" data-action="add-depense">Ajouter une dépense</button></div>`;
 
-  const prevus = aboPrevisionsDuMois(key);
-  const noteAbos = prevus.length ? `<div class="hero-note">${icon('repeat').replace('<svg','<svg style="width:14px;height:14px;vertical-align:-2px;stroke:currentColor;fill:none;stroke-width:1.8;margin-right:6px"')}${fmtCount(prevus.length,'abonnement prévu','abonnements prévus')} (${fmtEUR(sumR2(prevus,x=>x.montant))}), compté${prevus.length>1?'s':''} une fois validé${prevus.length>1?'s':''}. <button class="link" data-nav="depenses">Voir</button></div>` : '';
-  const prevusPpf = ppfPrevisionsDuMois(key);
-  const notePpf = prevusPpf.length ? `<div class="hero-note">${icon('calendar').replace('<svg','<svg style="width:14px;height:14px;vertical-align:-2px;stroke:currentColor;fill:none;stroke-width:1.8;margin-right:6px"')}${fmtCount(prevusPpf.length,'mensualité prévue','mensualités prévues')} (${fmtEUR(sumR2(prevusPpf,x=>x.montant))}), compté${prevusPpf.length>1?'es':'e'} une fois validée${prevusPpf.length>1?'s':''}. <button class="link" data-nav="echeancier">Voir</button></div>` : '';
-
-  const prevusChg = chgPrevisionsDuMois(key);
-  const noteChg = prevusChg.length ? `<div class="hero-note">${icon('home').replace('<svg','<svg style="width:14px;height:14px;vertical-align:-2px;stroke:currentColor;fill:none;stroke-width:1.8;margin-right:6px"')}${fmtCount(prevusChg.length,'charge prévue','charges prévues')} (${fmtEUR(sumR2(prevusChg,x=>x.montant))}), compté${prevusChg.length>1?'es':'e'} une fois validée${prevusChg.length>1?'s':''}. <button class="link" data-nav="echeancier">Voir</button></div>` : '';
+  // Échéances du mois (abonnements, mensualités, charges) : celles à venir sont
+  // déduites du reste à vivre ; une prévision passée non validée ne l'est pas.
+  const echeances = echeancesDuMois(key);
+  const noteEch = (genre, ic, un, plusieurs, fem, nav) => {
+    const l = echeances.filter(e=>e.genre===genre); if(!l.length) return '';
+    const v = l.filter(e=>e.aVenir), pl = l.length>1 ? 's' : '', e_ = fem ? 'e' : '';
+    const compte = !v.length ? `compté${e_}${pl} une fois validé${e_}${pl}`
+      : v.length===l.length ? `déduit${e_}${pl} du reste à vivre`
+      : `${fmtEUR(sumR2(v,x=>x.montant))} à venir déduits du reste à vivre, le reste compté une fois validé`;
+    return `<div class="hero-note">${icon(ic).replace('<svg','<svg style="width:14px;height:14px;vertical-align:-2px;stroke:currentColor;fill:none;stroke-width:1.8;margin-right:6px"')}${fmtCount(l.length,un,plusieurs)} (${fmtEUR(sumR2(l,x=>x.montant))}), ${compte}. <button class="link" data-nav="${nav}">Voir</button></div>`;
+  };
+  const noteAbos = noteEch('abo', 'repeat', 'abonnement prévu', 'abonnements prévus', false, 'depenses');
+  const notePpf = noteEch('ppf', 'calendar', 'mensualité prévue', 'mensualités prévues', true, 'echeancier');
+  const noteChg = noteEch('chg', 'home', 'charge prévue', 'charges prévues', true, 'echeancier');
 
   return `
     <div class="dash">
@@ -3036,14 +3132,14 @@ function renderDashboard(){
       <section class="card hero mb16${enter}" aria-labelledby="hero-l">
         <div class="hero-top">
           <div>
-            <div class="hero-label" id="hero-l">${d.solde<0 && !noRev ? 'Reste à vivre · dépassé' : 'Reste à vivre'}</div>
+            <div class="hero-label" id="hero-l">${d.reste<0 && !noRev ? 'Reste à vivre · dépassé' : 'Reste à vivre'}</div>
             ${noRev
               ? `<div class="big fig none" data-dash="reste" aria-label="Aucun revenu">—</div>
-                 <div class="hero-norev">Aucun revenu saisi pour ${monthLabel(key)}. <button class="link" data-action="add-revexc">Ajouter un revenu</button></div>`
-              : `<div class="big fig${d.solde<0?' over':''}" data-dash="reste" data-tween="reste" data-v="${d.solde}">${bigFmt(motionOff()||!tweenValues.has('reste') ? d.solde : tweenValues.get('reste'))}</div>
-                 <div class="hero-of">sur <b class="num" data-dash="revenu">${fmtEUR(d.revenu)}</b> de revenu en ${mois}</div>${horsNote}`}
+                 <div class="hero-norev">Aucun revenu saisi pour ${monthLabel(key)}. <button class="link" data-action="add-revexc">Ajouter un revenu</button></div>${soldeNote}`
+              : `<div class="big fig${d.reste<0?' over':''}" data-dash="reste" data-tween="reste" data-v="${d.reste}">${bigFmt(motionOff()||!tweenValues.has('reste') ? d.reste : tweenValues.get('reste'))}</div>
+                 ${d.entrees>0.01 ? `<div class="hero-of">sur <b class="num" data-dash="revenu">${fmtEUR(d.revenu)}</b> de revenu en ${mois}</div>` : `<div class="hero-of">Aucun revenu saisi en ${mois} pour l’instant. <button class="link" data-action="add-revexc">Ajouter un revenu</button></div>`}${horsNote}${soldeNote}`}
           </div>
-          ${noRev || d.revenu<=0.01 ? '' : `<div class="ratio"><div class="pct fig" data-tween="pct" data-v="${d.totalDepenses/d.revenu}">${pctFmt(motionOff()||!tweenValues.has('pct') ? d.totalDepenses/d.revenu : tweenValues.get('pct'))}</div><small>${d.solde<0?'du revenu, dépassé':'du revenu engagé'}</small></div>`}
+          ${noRev || d.revenu<=0.01 ? '' : `<div class="ratio"><div class="pct fig" data-tween="pct" data-v="${(d.totalDepenses+d.aVenir)/d.revenu}">${pctFmt(motionOff()||!tweenValues.has('pct') ? (d.totalDepenses+d.aVenir)/d.revenu : tweenValues.get('pct'))}</div><small>${d.totalDepenses+d.aVenir>d.revenu?'du revenu, dépassé':'du revenu engagé'}</small></div>`}
         </div>
         <div class="flow${dashFocusPoste?' has-focus':''}" data-n="${n}" role="img" aria-label="${attrEsc(flowLabel)}">${segs}</div>
         <h2 class="sr-only">Dépenses par catégorie</h2>
@@ -3333,11 +3429,15 @@ function renderAnnuelle(){
   const lastPast = past.length ? past[past.length-1].key : null;
   const pastRev = sumR2(past,m=>m.revenu), pastDep = sumR2(past,m=>m.totalDepenses), pastSolde = sumR2(past,m=>m.solde);
   const allFuture = past.length===0, allPast = past.length===12;
-  const label = allPast ? `Solde de l’année ${year}` : allFuture ? `Prévision ${year}` : `Solde à fin ${monthName(lastPast)}`;
-  const shown = allFuture ? totals.solde : pastSolde;
+  // Solde du compte connu : les soldes affichés sont ceux du compte (report compris),
+  // sinon la somme des soldes mensuels de l'année.
+  const compte = !!soldeAncre();
+  const finAnnee = compte ? soldeAu(`${year}-12-31`) : totals.solde;
+  const label = allPast ? (compte ? `Solde du compte fin ${year}` : `Solde de l’année ${year}`) : allFuture ? `Prévision ${year}` : `Solde ${compte?'du compte ':''}à fin ${monthName(lastPast)}`;
+  const shown = allFuture ? finAnnee : compte ? soldeAu(`${lastPast}-31`) : pastSolde;
   const finding = allPast ? `${fmtEUR0(totals.revenu)} de revenus et ${fmtEUR0(totals.depenses)} de dépenses sur l’année.`
-    : allFuture ? `Année entièrement prévisionnelle, d’après les revenus et dépenses déjà saisis.`
-    : `Prévision fin d’année : <strong>${fmtEUR0(totals.solde)}</strong>, si rien d’autre n’est ajouté.`;
+    : allFuture ? `Année entièrement prévisionnelle, d’après les revenus, dépenses et échéances déjà saisis.`
+    : `Prévision fin d’année : <strong>${fmtEUR0(finAnnee)}</strong>${compte?' sur le compte':''}, si rien d’autre n’est ajouté.`;
   return `
     ${pageHeadHTML({title:'Vue annuelle', finding, stepper:yearStepperHTML(year)})}
     <section class="card hero mb16" aria-labelledby="an-l">
@@ -3349,7 +3449,7 @@ function renderAnnuelle(){
         <dl class="kv" style="min-width:min(100%,300px);font-size:15px;">
           <dt>Revenus${allFuture||allPast?'':` à fin ${monthName(lastPast)}`}</dt><dd>${fmtEUR(allFuture?totals.revenu:pastRev)}</dd>
           <dt>Dépenses${allFuture||allPast?'':` à fin ${monthName(lastPast)}`}</dt><dd>${fmtEUR(allFuture?totals.depenses:pastDep)}</dd>
-          ${allFuture||allPast ? '' : `<dt>Prévision fin d’année</dt><dd>${fmtEUR(totals.solde)}</dd>`}
+          ${allFuture||allPast ? '' : `<dt>Prévision fin d’année</dt><dd>${fmtEUR(finAnnee)}</dd>`}
         </dl>
       </div>
     </section>
@@ -4196,6 +4296,21 @@ async function handleAction(action, id, el){
       if(Number(data.montant)<0){ markFieldError('montant','Un revenu ne peut pas être négatif'); toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense.'); return false; }
       if(reportFieldErrors(fieldRequiredErrors(revexcFields(), data))) return false;
       Object.assign(find(mine(state.revenusExceptionnels)), data); await persist(); await render(); toast('Revenu mis à jour'); }); break;
+    /* Solde du compte : l'ancre du reste à vivre */
+    case 'solde-compte': {
+      const a = soldeAncre();
+      openModal('Solde du compte', [
+        {key:'date', label:'Date', type:'date'},
+        {key:'montant', label:'Solde à la fin de ce jour (€)', type:'number', step:'0.01'},
+      ], {date: a ? a.date : dateDuJour(), montant: a ? a.montant : ''}, async (data)=>{
+        const saisi = (document.getElementById('f_montant')?.value||'').trim();
+        if(reportFieldErrors([...(!data.date ? [['date','Renseigne une date']] : []), ...(!saisi || !Number.isFinite(data.montant) ? [['montant','Renseigne le solde (négatif si découvert)']] : [])])) return false;
+        soldeCompteFixer(data.date, data.montant, 'saisie');
+        await persist(); await render();
+        toast('Solde du compte enregistré');
+      }, `<p class="field-note">Le solde affiché par ta banque ce jour-là. Le reste à vivre s’aligne dessus, et le solde reporté des autres mois en découle. Le solde le plus récent fait foi ; un import de relevé retient aussi son solde de fin.</p>`);
+      break;
+    }
     case 'toggle-hors-revenu': { const cat = mine(state.categoriesRevenus).find(c=>c.id===id); if(!cat) break;
       if(cat.horsRevenu) delete cat.horsRevenu; else cat.horsRevenu = true;
       await persist(); await render(); toast(cat.horsRevenu ? `${cat.nom} : exclu du revenu total` : `${cat.nom} : compté dans le revenu total`); break; }
@@ -4519,14 +4634,6 @@ async function handleAction(action, id, el){
     case 'releve-valider-groupe': await releveValider(releveLignesFiltrees((releveSession?.lignes||[]).filter(l=>l.etat==='attente')).filter(l=>releveGroupeDe(l)===el.dataset.groupe).map(l=>l.id)); break;
     case 'releve-valider-surs': await releveValider((releveSession?.lignes||[]).filter(l=>l.etat==='attente' && l.confiance==='sur').map(l=>l.id)); break;
     case 'releve-valider-tout': await releveValider((releveSession?.lignes||[]).filter(l=>l.etat==='attente').map(l=>l.id)); break;
-    case 'releve-regul': {
-      const l = releveAjouterRegul(releveSession);
-      if(!l) break;
-      releveSauverSession(); await render();
-      document.querySelector(`.rl-row[data-rl-row="${l.id}"] [data-action="releve-valider"]`)?.focus();
-      toast('Ligne de régulation ajoutée : vérifie-la puis valide');
-      break;
-    }
     case 'releve-plus': {
       releveAffichees += RELEVE_TRANCHE;
       releveFocusApres = releveAffichees - RELEVE_TRANCHE; // le focus va sur la première ligne ajoutée
@@ -6060,6 +6167,7 @@ async function releveValider(ids){
     }
   }
   if(ajoutees+ignorees===0) return;
+  releveRetenirSolde(s);
   // Le format du fichier est retenu dès la première ligne acceptée.
   if(s.sig && (s.csv || s.colonnes)){
     const f = modele.formats[s.sig] || {};
@@ -6102,25 +6210,25 @@ function releveControleSoldes(s){
   const ecart = r2(s.soldes.fin - s.soldes.debut - somme);
   return {somme, ecart, ok: Math.abs(ecart)<0.005};
 }
-// Ligne de régularisation : l'écart, à valider (ou non) comme les autres lignes.
-function releveAjouterRegul(s){
-  const c = releveControleSoldes(s); if(!c || c.ok) return null;
-  const type = c.ecart<0 ? 'depense' : 'revenu';
-  const valeurs = {type, libelle:'Régularisation de solde', categorie: releveCategorieDefaut(type), abo:false, ppf:false, chg:false,
-    notes:`Écart entre les soldes du relevé (${fmtEUR(s.soldes.debut)} → ${fmtEUR(s.soldes.fin)}) et ses opérations`};
-  const l = {id: uid(), date: s.soldes.dateFin || s.lignes.map(x=>x.date).sort().pop(), brut:'Régularisation de solde', montant: c.ecart, cle:'', suivi:false, incertain:false,
-    regul:true, confiance:'sur', raison:'Proposée pour que les soldes du relevé concordent', etat:'attente', s:{...valeurs}, v:{...valeurs}};
-  s.lignes.push(l);
-  return l;
+// Solde de fin du relevé : retenu comme solde du compte dès qu'une ligne est
+// validée (et mis à jour s'il est corrigé ensuite). Le reste à vivre s'aligne
+// dessus : un écart entre les soldes et les opérations ne devient plus une ligne
+// de régularisation, qui faussait revenus et dépenses du mois.
+function releveDateSoldeFin(s){ return s.soldes.dateFin || s.lignes.map(x=>x.date).filter(Boolean).sort().pop() || null; }
+function releveRetenirSolde(s){
+  const sl = s && s.soldes; if(!sl || !Number.isFinite(sl.fin)) return null;
+  const date = releveDateSoldeFin(s); if(!date) return null;
+  const r = soldeCompteFixer(date, sl.fin, 'releve', s.soldeId);
+  if(r) s.soldeId = r.id;
+  return r;
 }
 function releveSoldesHTML(s){
   const c = releveControleSoldes(s); if(!c) return '';
   const {debut, fin} = s.soldes;
-  if(c.ok) return `<p class="rl-soldes is-ok">${icon('check')}<span>Soldes cohérents : ${fmtEUR(debut)} au début, ${c.somme<0?'−':'+'}&nbsp;${fmtEUR(Math.abs(c.somme))} d’opérations, ${fmtEUR(fin)} à la fin.</span></p>`;
-  const refusee = s.lignes.some(l=>l.regul && l.etat==='ignoree');
+  if(c.ok) return `<p class="rl-soldes is-ok">${icon('check')}<span>Soldes cohérents : ${fmtEUR(debut)} au début, ${c.somme<0?'−':'+'}&nbsp;${fmtEUR(Math.abs(c.somme))} d’opérations, ${fmtEUR(fin)} à la fin, retenu comme solde du compte.</span></p>`;
+  const date = releveDateSoldeFin(s);
   return `<div class="rl-soldes" role="status">
-    <p><strong>Les soldes ne concordent pas.</strong> Le relevé passe de ${fmtEUR(debut)} à ${fmtEUR(fin)}, soit ${fmtEUR(r2(fin-debut))}, mais ses opérations font ${fmtEUR(c.somme)} : il manque <strong>${c.ecart<0?'−':'+'}&nbsp;${fmtEUR(Math.abs(c.ecart))}</strong>.</p>
-    ${refusee ? '' : `<button class="btn btn-ghost btn-sm" data-action="releve-regul">${icon('plus')}Ajouter une ligne de régulation</button>`}
+    <p><strong>Les soldes ne concordent pas.</strong> Le relevé passe de ${fmtEUR(debut)} à ${fmtEUR(fin)}, soit ${fmtEUR(r2(fin-debut))}, mais ses opérations font ${fmtEUR(c.somme)} : écart de <strong>${c.ecart<0?'−':'+'}&nbsp;${fmtEUR(Math.abs(c.ecart))}</strong>. Une opération manque ou est mal lue : vérifie les montants et leur sens. Le solde de fin (${fmtEUR(fin)}${date ? ` au ${fmtDate(date)}` : ''}) sera retenu comme solde du compte : ton reste à vivre le reprendra tel quel.</p>
   </div>`;
 }
 // Soldes de début et de fin : pré-remplis avec ceux lus sur le relevé, modifiables
@@ -6142,6 +6250,8 @@ function releveChangerSolde(el){
   // Un solde saisi ne sera plus recalculé depuis la colonne Solde du CSV.
   s.soldes = {...(s.soldes||{}), [k]: t ? r2(n) : null, colonne: false};
   el.value = releveSoldeSaisie(s.soldes[k]);
+  // Solde déjà retenu (lignes validées) : il suit la correction.
+  if(k==='fin' && s.soldeId && releveRetenirSolde(s)) persist();
   releveSauverSession();
   const ctl = document.getElementById('rl-controle');
   if(ctl) ctl.innerHTML = releveSoldesHTML(s);
@@ -7231,7 +7341,7 @@ function escapeHTML(s){ const d=document.createElement('div'); d.textContent=s; 
 function budgetContextSummary(){
   const key = state.selectedMonth;
   const d = dashboardData(key);
-  return `Contexte budget (${monthLabel(key)}) : revenus ${fmtEUR(d.revenu)}, dépenses ${fmtEUR(d.totalDepenses)}, solde ${fmtEUR(d.solde)}. `+
+  return `Contexte budget (${monthLabel(key)}) : revenus ${fmtEUR(d.revenu)}, dépenses ${fmtEUR(d.totalDepenses)}, reste à vivre ${fmtEUR(d.reste)}. `+
     `Le site gère des entrées et des sorties datées ; les abonnements prévus (${fmtEUR(sumR2(aboPrevisionsDuMois(key),x=>x.montant))} ce mois) et les charges prévues (${fmtEUR(sumR2(chgPrevisionsDuMois(key),x=>x.montant))} ce mois) ne comptent qu'une fois validés.`;
 }
 async function sendChatMessage(){
