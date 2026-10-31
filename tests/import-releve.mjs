@@ -559,6 +559,8 @@ try{
     await importer(page, 'soldes.csv', ['Solde au 30/09/2026;1 000,00;;', 'Date;Libellé;Débit;Crédit',
       '02/10/2026;CB LIBRAIRIE MOLIERE;50,00;', '05/10/2026;VIR SEPA RECU REMBOURSEMENT MUTUELLE;;200,00', 'Solde au 31/10/2026;1 137,50;;'].join('\n'));
     ok(await page.locator('.rl-soldes').count()===0, 'pas de contrôle tant que des lignes attendent');
+    const saisis = await page.evaluate(()=>[document.getElementById('rl-solde-debut').value, document.getElementById('rl-solde-fin').value]);
+    ok(saisis[0]==='1000,00' && saisis[1]==='1137,50', `soldes pré-saisis depuis le relevé (${saisis})`);
     await page.click('[data-action="releve-valider-tout"]'); await page.waitForTimeout(300);
     const alerte = await page.locator('.rl-soldes').innerText();
     ok(/ne concordent pas/.test(alerte) && /12,50/.test(alerte), `écart signalé en fin d'import (${alerte})`);
@@ -571,6 +573,22 @@ try{
     ok(dep && dep.montant===12.5 && dep.date==='2026-10-31', `régulation enregistrée en dépense (${JSON.stringify(dep)})`);
     const regle = await page.evaluate(()=>Object.keys(releveModele(false).regles).some(k=>/REGUL/.test(k)));
     ok(!regle, 'la régulation n’est pas apprise comme un commerçant');
+    // Solde de fin corrigé à la main : le contrôle suit tout de suite.
+    await page.fill('#rl-solde-fin', '1 150'); await page.press('#rl-solde-fin', 'Tab'); await page.waitForTimeout(200);
+    ok(await page.inputValue('#rl-solde-fin')==='1150,00', 'solde saisi remis en forme');
+    ok(/ne concordent pas/.test(await page.locator('.rl-soldes').innerText()) && await page.evaluate(()=>document.activeElement && document.activeElement.id)!=='rl-solde-fin',
+      'contrôle mis à jour après correction du solde de fin');
+    await page.click('[data-action="releve-fermer"]'); await page.waitForTimeout(300);
+
+    // Relevé sans soldes : champs vides, à saisir avant de valider.
+    await importer(page, 'sans-soldes.csv', ['Date;Libellé;Montant', '02/10/2026;CB PAPETERIE;-20,00', '04/10/2026;CB FLEURISTE;-15,00'].join('\n'));
+    ok(/Pas trouvés/.test(await page.locator('.rl-soldes-saisie').innerText()) && await page.inputValue('#rl-solde-debut')==='', 'soldes absents : champs vides');
+    await page.fill('#rl-solde-debut', '500'); await page.press('#rl-solde-debut', 'Tab');
+    await page.fill('#rl-solde-fin', 'abc'); await page.press('#rl-solde-fin', 'Tab'); await page.waitForTimeout(150);
+    ok(await page.inputValue('#rl-solde-fin')==='', 'montant illisible refusé');
+    await page.fill('#rl-solde-fin', '465,00'); await page.press('#rl-solde-fin', 'Tab'); await page.waitForTimeout(150);
+    await page.click('[data-action="releve-valider-tout"]'); await page.waitForTimeout(300);
+    ok(/Soldes cohérents/.test(await page.locator('.rl-soldes').innerText()), 'soldes saisis à la main : contrôle fait en fin d’import');
     ok(errors.length===0, `erreurs console : ${errors.join(' | ')}`);
     await ctx.close();
   }

@@ -775,6 +775,11 @@ button,a,[role="button"]{touch-action:manipulation;-webkit-tap-highlight-color:t
 /* Import de relevé : zone de dépôt, lignes à valider, règles apprises. */
 .rl-soldes{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:0 0 14px;padding:12px 14px;border:1px solid var(--c-over);border-radius:12px;font-size:14px;}
 .rl-soldes p{margin:0;flex:1 1 280px;}
+.rl-soldes-saisie{display:grid;grid-template-columns:repeat(2,minmax(0,180px));gap:0 12px;margin-bottom:14px;}
+.rl-soldes-saisie .field{margin-bottom:0;}
+.rl-soldes-saisie .field-note{grid-column:1/-1;margin-top:6px;}
+.rl-solde-ctl{display:flex;align-items:center;gap:6px;color:var(--faint);}
+.rl-solde-ctl input{text-align:right;font-variant-numeric:tabular-nums;}
 .rl-soldes.is-ok{gap:8px;flex-wrap:nowrap;border-color:var(--line);color:var(--muted);}
 .rl-soldes.is-ok svg{width:16px;height:16px;flex:none;stroke:var(--c-reste);fill:none;stroke-width:2;}
 .rl-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:150px;padding:24px 16px;border:1.5px dashed var(--line-strong);border-radius:var(--r-card);text-align:center;cursor:pointer;transition:background-color .15s ease,border-color .15s ease;}
@@ -3896,6 +3901,7 @@ document.addEventListener('change', async (e)=>{
   if(e.target.id==='import-file-input' && e.target.files[0]){ importDataFile(e.target.files[0]); }
   if(e.target.id==='releve-file' && e.target.files[0]){ const f = e.target.files[0]; e.target.value = ''; await releveOuvrirFichier(f); }
   if(e.target.dataset && e.target.dataset.rlChamp){ releveChangerChamp(e.target); }
+  if(e.target.dataset && e.target.dataset.rlSolde){ releveChangerSolde(e.target); }
   if(e.target.dataset && e.target.dataset.rlCol){ await releveChangerColonne(e.target); }
 });
 // Import de relevé : le fichier peut aussi être glissé sur la zone de dépôt.
@@ -5800,7 +5806,7 @@ async function releveDemarrer(nom, res){
   const lignes = res ? releveCreerLignes(res.ops||[]) : [];
   if(!lignes.length){ toast('Aucune opération trouvée — essaie l’export CSV ou OFX de ta banque'); return; }
   const modele = releveModele(false);
-  releveSession = {nom, format: res.format, sig: res.sig||null, csv: res.csv||null, colonnes: res.colonnes||null, soldes: res.soldes||null,
+  releveSession = {nom, format: res.format, sig: res.sig||null, csv: res.csv||null, colonnes: res.colonnes||null, soldes: res.soldes||null, soldesLus: !!res.soldes,
     formatConnu: !!(res.sig && modele.formats[res.sig]), lignes, debut: new Date().toISOString()};
   releveAffichees = RELEVE_TRANCHE;
   releveFiltre = {q:'', conf:'', tri:''};
@@ -6091,7 +6097,7 @@ function releveRafraichirAttente(s){
 // celles qu'on n'importe pas : elles ont bien eu lieu sur le compte) = solde de
 // fin. Une régularisation refusée ne compte pas.
 function releveControleSoldes(s){
-  if(!s || !s.soldes) return null;
+  if(!s || !s.soldes || !Number.isFinite(s.soldes.debut) || !Number.isFinite(s.soldes.fin)) return null;
   const somme = sumR2(s.lignes.filter(l=>!(l.regul && l.etat==='ignoree')), l=>l.montant);
   const ecart = r2(s.soldes.fin - s.soldes.debut - somme);
   return {somme, ecart, ok: Math.abs(ecart)<0.005};
@@ -6116,6 +6122,29 @@ function releveSoldesHTML(s){
     <p><strong>Les soldes ne concordent pas.</strong> Le relevé passe de ${fmtEUR(debut)} à ${fmtEUR(fin)}, soit ${fmtEUR(r2(fin-debut))}, mais ses opérations font ${fmtEUR(c.somme)} : il manque <strong>${c.ecart<0?'−':'+'}&nbsp;${fmtEUR(Math.abs(c.ecart))}</strong>.</p>
     ${refusee ? '' : `<button class="btn btn-ghost btn-sm" data-action="releve-regul">${icon('plus')}Ajouter une ligne de régulation</button>`}
   </div>`;
+}
+// Soldes de début et de fin : pré-remplis avec ceux lus sur le relevé, modifiables
+// tant que l'import est ouvert (relevé mal lu, ou soldes absents du fichier).
+function releveSoldeSaisie(n){ return Number.isFinite(n) ? n.toFixed(2).replace('.', ',') : ''; }
+function releveSaisieSoldesHTML(s){
+  const sl = s.soldes || {};
+  const champ = (k, label) => `<div class="field"><label for="rl-solde-${k}">${label}</label>
+    <span class="rl-solde-ctl"><input class="rl-ctl" id="rl-solde-${k}" data-rl-solde="${k}" value="${releveSoldeSaisie(sl[k])}" placeholder="Non trouvé" autocomplete="off"><span aria-hidden="true">€</span></span></div>`;
+  return `<div class="rl-soldes-saisie">
+    ${champ('debut', 'Solde au début')}${champ('fin', 'Solde à la fin')}
+    <p class="field-note">${s.soldesLus ? 'Lus sur le relevé : corrige-les si besoin.' : 'Pas trouvés sur le relevé : saisis-les pour vérifier l’import.'} En fin d’import, le solde de début plus les opérations doit donner celui de fin.</p>
+  </div>`;
+}
+function releveChangerSolde(el){
+  const s = releveSession; if(!s) return;
+  const k = el.dataset.rlSolde, t = el.value.trim(), n = t ? releveMontant(t) : NaN;
+  if(t && isNaN(n)){ toast('Montant non reconnu'); el.value = releveSoldeSaisie((s.soldes||{})[k]); return; }
+  // Un solde saisi ne sera plus recalculé depuis la colonne Solde du CSV.
+  s.soldes = {...(s.soldes||{}), [k]: t ? r2(n) : null, colonne: false};
+  el.value = releveSoldeSaisie(s.soldes[k]);
+  releveSauverSession();
+  const ctl = document.getElementById('rl-controle');
+  if(ctl) ctl.innerHTML = releveSoldesHTML(s);
 }
 function releveRetirerCategorie(type, nom){
   if(!releveSession) return;
@@ -6391,8 +6420,9 @@ function renderReleve(){
       </div>
       ${validees+ignorees ? `<div class="field-note" style="margin:-4px 0 12px;">${fmtCount(validees, 'ajoutée', 'ajoutées')} · ${fmtCount(ignorees, 'ignorée', 'ignorées')}</div>` : ''}
       ${s.csv ? releveColonnesHTML(s) : ''}
+      ${releveSaisieSoldesHTML(s)}
       ${attente.length ? `${releveFiltresHTML(attente)}<div id="rl-lignes">${releveLignesHTML(attente)}</div>`
-        : releveSoldesHTML(s) + emptyRow('Toutes les lignes ont été traitées.', 'releve-fermer', 'Importer un autre relevé')}
+        : `<div id="rl-controle">${releveSoldesHTML(s)}</div>` + emptyRow('Toutes les lignes ont été traitées.', 'releve-fermer', 'Importer un autre relevé')}
     </div>
     ${releveApprentissageHTML(modele)}`;
 }
