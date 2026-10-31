@@ -564,20 +564,17 @@ try{
     await page.click('[data-action="releve-valider-tout"]'); await page.waitForTimeout(300);
     const alerte = await page.locator('.rl-soldes').innerText();
     ok(/ne concordent pas/.test(alerte) && /12,50/.test(alerte), `écart signalé en fin d'import (${alerte})`);
-    await page.click('[data-action="releve-regul"]'); await page.waitForTimeout(300);
-    const [regul] = await lignes(page);
-    ok(regul && regul.lib==='Régularisation de solde' && regul.type==='depense' && regul.amt==='−12,50', `ligne de régulation proposée (${JSON.stringify(regul)})`);
-    await page.click(`[data-action="releve-valider"][data-id="${regul.id}"]`); await page.waitForTimeout(300);
-    ok(/Soldes cohérents/.test(await page.locator('.rl-soldes').innerText()), 'soldes cohérents après la régulation');
-    const dep = await page.evaluate(()=>mine(state.depenses).find(d=>d.libelle==='Régularisation de solde'));
-    ok(dep && dep.montant===12.5 && dep.date==='2026-10-31', `régulation enregistrée en dépense (${JSON.stringify(dep)})`);
-    const regle = await page.evaluate(()=>Object.keys(releveModele(false).regles).some(k=>/REGUL/.test(k)));
-    ok(!regle, 'la régulation n’est pas apprise comme un commerçant');
-    // Solde de fin corrigé à la main : le contrôle suit tout de suite.
+    ok(/retenu comme solde du compte/.test(alerte) && await page.locator('[data-action="releve-regul"]').count()===0, 'pas de ligne de régulation : le solde de fin est retenu tel quel');
+    const regul = await page.evaluate(()=>mine(state.depenses).concat(mine(state.revenusExceptionnels)).some(x=>/Régularisation/.test(x.libelle)));
+    ok(!regul, 'aucune régularisation dans les dépenses ni les revenus');
+    const ancre = await page.evaluate(()=>soldesCompte().map(x=>[x.date, x.montant, x.source]));
+    ok(JSON.stringify(ancre)==='[["2026-10-31",1137.5,"releve"]]', `solde de fin retenu comme solde du compte (${JSON.stringify(ancre)})`);
+    // Solde de fin corrigé à la main (il avait été mal lu) : le contrôle suit tout de suite.
     await page.fill('#rl-solde-fin', '1 150'); await page.press('#rl-solde-fin', 'Tab'); await page.waitForTimeout(200);
     ok(await page.inputValue('#rl-solde-fin')==='1150,00', 'solde saisi remis en forme');
-    ok(/ne concordent pas/.test(await page.locator('.rl-soldes').innerText()) && await page.evaluate(()=>document.activeElement && document.activeElement.id)!=='rl-solde-fin',
+    ok(/Soldes cohérents/.test(await page.locator('.rl-soldes').innerText()) && await page.evaluate(()=>document.activeElement && document.activeElement.id)!=='rl-solde-fin',
       'contrôle mis à jour après correction du solde de fin');
+    ok(await page.evaluate(()=>JSON.stringify(soldesCompte().map(x=>[x.date, x.montant])))==='[["2026-10-31",1150]]', 'le solde retenu suit la correction');
     await page.click('[data-action="releve-fermer"]'); await page.waitForTimeout(300);
 
     // Relevé sans soldes : champs vides, à saisir avant de valider.
