@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Banc break-ui</title>
+<!--
+  BANC D'ESSAI « break-ui » — toute l'application. DEV UNIQUEMENT.
+  ⚠ À OUVRIR EN LOCAL SEULEMENT (dépôt servi en HTTP) : ce banc ÉCRASE le
+  localStorage de l'origine où il tourne (comptes, budget, import de relevé,
+  configuration de synchro GitHub). Ne jamais le lier depuis le site.
+  Il charge la vraie application (../index.html) dans un cadre, après avoir
+  posé dans le localStorage le jeu choisi : les données entrent par la même
+  porte que d'habitude, l'application n'est pas copiée.
+  Usage : tests/break-ui-app.html?data=demo|worst|empty|one|huge#depenses/2026-11
+  Le choix et la vue courante restent dans l'URL : un rechargement les garde.
+-->
+<style>
+  html,body{margin:0;height:100%;background:#050506;}
+  iframe{display:block;border:0;width:100%;height:100%;}
+  .bu{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:2;display:flex;gap:2px;padding:3px;
+    background:#e5e5e5;border-radius:999px;font:12px/1 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.4);max-width:calc(100vw - 32px);overflow-x:auto;}
+  .bu button{border:0;background:none;padding:6px 12px;border-radius:999px;color:#222;font:inherit;white-space:nowrap;cursor:pointer;}
+  .bu button[aria-pressed="true"]{background:#fff;font-weight:600;}
+</style>
+</head>
+<body>
+<iframe id="app" title="Application"></iframe>
+<div class="bu" role="group" aria-label="Jeu de données"></div>
+<script src="fixtures/demo-solde.js"></script>
+<script src="fixtures/break-ui-donnees.js"></script>
+<script>
+(function(){
+  var JEUX = [['demo','Demo data'],['worst','Worst case'],['empty','Empty'],['one','One'],['huge','1 000 lignes']];
+  var MOIS = {demo:'2026-09'};
+  function donnees(m){ return m==='demo' ? SOLDE_DEMO : SOLDE_BREAK[m]; }
+  var frame = document.getElementById('app'), bar = document.querySelector('.bu');
+  var mode = new URLSearchParams(location.search).get('data');
+  if(!donnees(mode)) mode = 'demo';
+
+  function semer(m){
+    var d = donnees(m), theme = null;
+    try{ theme = localStorage.getItem('solde_theme'); }catch(e){}
+    localStorage.clear();                                  // aucune synchro GitHub : rien ne part sur le dépôt de données
+    if(theme) localStorage.setItem('solde_theme', theme);
+    localStorage.setItem('force_reset_version', '2');
+    localStorage.setItem('budget_auth', JSON.stringify({users:d.users, setupCodeUsed:true}));
+    localStorage.setItem('budget_store', JSON.stringify(d.store));
+    localStorage.setItem('budget_session_remember', JSON.stringify({userId:d.me, expiresAt:Date.now()+864e5}));
+  }
+  function charger(m, hash){
+    mode = m; semer(m);
+    history.replaceState(null, '', '?data='+m+(hash||''));
+    bar.querySelectorAll('button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.m===m)); });
+    frame.src = '../index.html' + (hash || '#dashboard/' + (MOIS[m] || '2026-11'));
+  }
+  // La vue ouverte dans l'app est recopiée dans l'URL du banc, pour la garder au changement de jeu.
+  frame.addEventListener('load', function(){
+    try{ frame.contentWindow.addEventListener('hashchange', function(){ history.replaceState(null, '', '?data='+mode+frame.contentWindow.location.hash); }); }catch(e){}
+  });
+  JEUX.forEach(function(j){
+    var b = document.createElement('button'); b.type = 'button'; b.dataset.m = j[0]; b.textContent = j[1];
+    b.onclick = function(){
+      var h = ''; try{ h = frame.contentWindow.location.hash; }catch(e){}
+      charger(j[0], h.replace(/\/\d{4}-\d{2}$/, '/' + (MOIS[j[0]] || '2026-11')));   // chaque jeu a son mois
+    };
+    bar.appendChild(b);
+  });
+  charger(mode, location.hash);
+})();
+</script>
+</body>
+</html>
