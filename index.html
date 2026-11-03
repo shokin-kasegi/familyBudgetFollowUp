@@ -1942,7 +1942,6 @@ function currentMonthKey(){ const n = new Date(); return monthKey(n.getFullYear(
 function isFutureMonth(key){ return key > currentMonthKey(); }
 function monthName(key){ return MONTH_NAMES[Number(key.split('-')[1])-1]; }
 function ucfirst(t){ return t ? t.charAt(0).toUpperCase()+t.slice(1) : t; }
-function shortMonthLabel(key){ const [y,m]=key.split('-').map(Number); return new Date(y,m-1,1).toLocaleDateString('fr-FR',{month:'short',year:'numeric'}); }
 
 /* ============================== COMPUTATIONS ============================== */
 /* Le budget connaît des entrées (revenus) et des sorties (dépenses), chacune datée
@@ -1955,7 +1954,6 @@ function dansLeMois(x, key){ return !!x.date && x.date.slice(0,7)===key; }
 function forOwner(arr, ownerId){ return (arr||[]).filter(e=>e.ownerId===ownerId); }
 function mesSorties(){ return mine(state.depenses).filter(estSortie); }
 function revenusDuMoisListe(key){ return mine(state.revenusExceptionnels).filter(r=>dansLeMois(r, key)); }
-function revenusDuMois(key){ return sumR2(revenusDuMoisListe(key), r=>r.montant); }
 // Catégories de revenus mises « hors revenu total » (ex. Remboursement) : leurs
 // entrées restent dans le reste à vivre, mais pas dans le revenu affiché, la part
 // du revenu engagée ni le repère du revenu des graphiques.
@@ -3460,10 +3458,6 @@ function dashFinding(key, d){
   return `Mois dans la moyenne : ${resteTxt(d.reste)}.`;
 }
 
-function dashPosteSubs(key, d){
-  const nb = depensesDuMois(key).length;
-  return { achats: nb ? `${fmtCount(nb,'dépense','dépenses')} ce mois` : 'aucune dépense' };
-}
 function fmtCount(n, singular, plural){ return `${n} ${n>1 ? plural : singular}`; }
 
 function renderDashboard(){
@@ -6970,7 +6964,6 @@ function ghConfig(){
   return { owner:GH_OWNER, repo:GH_REPO, token, path:'data.json', authPath:'auth.json', socialPath:'social.json' };
 }
 function ghSaveToken(token){ localStorage.setItem('github_sync_config', JSON.stringify({token})); }
-function ghClearConfig(){ localStorage.removeItem('github_sync_config'); }
 function ghConfigured(){ return !!ghConfig().token; }
 let ghLastSync = null, ghLastError = null, ghErrorToastAt = 0, ghSha = null, ghAuthSha = null, ghSocialSha = null;
 // Synchro réussie / ratée : l'échec n'est plus silencieux (avant, chaque appareil
