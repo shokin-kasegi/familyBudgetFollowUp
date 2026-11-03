@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
+import { exposerModules } from './outils/exposer-modules.mjs';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -74,6 +75,7 @@ async function fakeGithub(route){
 
 async function device(browser, store, me=DEMO.me){
   const ctx = await browser.newContext({viewport:{width:390, height:844}});
+  await exposerModules(ctx);
   await ctx.route('https://api.github.com/**', fakeGithub);
   const page = await ctx.newPage();
   const errors = [];
@@ -89,7 +91,7 @@ async function device(browser, store, me=DEMO.me){
     sessionStorage.setItem('seeded','1');
   }, {users:DEMO.users, store, me});
   await page.goto(BASE + '/index.html#depenses/2026-09');
-  await page.waitForSelector('#view > *', {timeout:10000});
+  await page.waitForSelector('#view > *', {timeout:10000}); await page.evaluate(()=>window.__modulesExposes);
   await page.waitForTimeout(300);
   return {ctx, page, errors};
 }
@@ -162,7 +164,7 @@ try{
   ok(await lina.page.evaluate(()=>!currentUser() && !!document.getElementById('login-form')), 'sur l\'appareil de Lina, la session est fermée : écran de connexion');
   ok(/mot de passe a été modifié/.test(await lina.page.textContent('#auth-root')), 'Lina voit pourquoi elle doit se reconnecter');
   await lina.page.evaluate(()=>{ document.getElementById('li-username').value='lina'; document.getElementById('li-pass').value='nouveau-mdp'; document.getElementById('login-form').requestSubmit(); });
-  await lina.page.waitForSelector('#view > *', {timeout:10000});
+  await lina.page.waitForSelector('#view > *', {timeout:10000}); await lina.page.evaluate(()=>window.__modulesExposes);
   ok(await lina.page.evaluate(()=>currentUser()?.id==='u-lina'), 'Lina se reconnecte avec le nouveau mot de passe');
 
   console.log('\n— Lina change elle-même son mot de passe : son appareil reste connecté');

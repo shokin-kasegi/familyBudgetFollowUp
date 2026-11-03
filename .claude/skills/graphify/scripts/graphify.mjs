@@ -1,33 +1,45 @@
 #!/usr/bin/env node
-// Extrait le graphe d'appels des fonctions JS d'un fichier (HTML ou JS).
-// Usage : node graphify.mjs <fichier> [--focus nom] [--depth N] [--json] [--dead]
-import { readFileSync } from 'node:fs';
+// Extrait le graphe d'appels des fonctions JS de fichiers HTML ou JS (modules ES compris).
+// Usage : node graphify.mjs [fichier|dossier …] [--focus nom] [--depth N] [--json] [--dead]
+// Sans chemin : le dossier js/ (les modules de l'application).
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import path from 'node:path';
 
 const args = process.argv.slice(2);
-const file = args.find(a => !a.startsWith('--') && !/^\d+$/.test(a)) || 'index.html';
 const opt = k => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : undefined; };
+const valeurs = new Set(['--focus', '--depth'].map(opt));
+const chemins = args.filter(a => !a.startsWith('--') && !valeurs.has(a));
+if (!chemins.length) chemins.push('js');
+const file = chemins.join(' ');
+// Un dossier : tous ses .js et .html, triés, sous-dossiers compris.
+const lister = p => statSync(p).isDirectory()
+  ? readdirSync(p).sort().flatMap(e => lister(path.join(p, e))).filter(f => /\.(m?js|html?)$/i.test(f))
+  : [p];
+const fichiers = chemins.flatMap(lister);
 const focus = opt('--focus');
 const depth = Number(opt('--depth') ?? 1);
 const asJson = args.includes('--json');
 
-const raw = readFileSync(file, 'utf8');
-// Segments de code : { at: position dans le fichier d'origine, code }. Les numéros de
+// Segments de code : { f: fichier, at: position dans ce fichier, code }. Les numéros de
 // ligne sont recalculés dans le fichier d'origine (et non dans la concaténation des scripts).
-let segs = [{ at: 0, code: raw }];
-if (/\.html?$/i.test(file)) {
-  segs = [...raw.matchAll(/(<script(?![^>]*\bsrc=)[^>]*>)([\s\S]*?)<\/script>/gi)]
-    .map(m => ({ at: m.index + m[1].length, code: m[2] }));
+const segs = [], sources = new Map();
+for (const f of fichiers) {
+  const raw = readFileSync(f, 'utf8');
+  const starts = [0]; for (let i = 0; i < raw.length; i++) if (raw[i] === '\n') starts.push(i + 1);
+  sources.set(f, starts);
+  if (/\.html?$/i.test(f)) {
+    for (const m of raw.matchAll(/(<script(?![^>]*\bsrc=)[^>]*>)([\s\S]*?)<\/script>/gi)) segs.push({ f, at: m.index + m[1].length, code: m[2] });
+  } else segs.push({ f, at: 0, code: raw });
 }
 const SEP = '\n;\n';
 let src = '', segStarts = [];
-for (const g of segs) { if (src) src += SEP; segStarts.push({ joined: src.length, at: g.at }); src += g.code; }
-const lineStarts = [0]; for (let i = 0; i < raw.length; i++) if (raw[i] === '\n') lineStarts.push(i + 1);
-function lineOf(pos) {
+for (const g of segs) { if (src) src += SEP; segStarts.push({ joined: src.length, at: g.at, f: g.f }); src += g.code; }
+function posOf(pos) {
   let seg = segStarts[0]; for (const g of segStarts) if (g.joined <= pos) seg = g; else break;
-  const abs = seg.at + (pos - seg.joined);
+  const abs = seg.at + (pos - seg.joined), lineStarts = sources.get(seg.f);
   let lo = 0, hi = lineStarts.length - 1;
   while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (lineStarts[mid] <= abs) lo = mid; else hi = mid - 1; }
-  return lo + 1;
+  return { file: seg.f, line: lo + 1 };
 }
 
 // Masque chaînes et commentaires (même longueur) pour fiabiliser l'appariement des accolades.
@@ -73,7 +85,9 @@ function regexCanStart(prev) {
   if (/(?:^|[^\w$])(?:return|typeof|case|do|else|in|of|void|yield|await)$/.test(t)) return true;
   return /[(,=:[!&|?{};+\-*%<>~^]$/.test(t);
 }
-const m = mask(src);
+// `import { a, b } from './x.js';` et `export { a };` ne sont ni des appels ni des
+// références : masqués, sinon toute fonction importée paraîtrait utilisée.
+const m = mask(src).replace(/^[ \t]*(?:import\b[^;]*?\bfrom\s*['"][^'"\n]*['"]|import\s*['"][^'"\n]*['"]|export\s*\{[^}]*\}(?:\s*from\s*['"][^'"\n]*['"])?)\s*;?/gm, x => x.replace(/[^\n]/g, ' '));
 
 const defRe = /(?:^|[^\w$.])(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)\s*\(|(?:^|[^\w$.])(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function\b|\([^()]*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/g;
 function blockEnd(open) {
@@ -98,18 +112,17 @@ for (const d of m.matchAll(defRe)) {
   // `function f(a, {b}={})` : le corps commence après la parenthèse fermante des paramètres.
   let from = d.index + d[0].length - 1;
   if (d[1]) { let lvl = 0; for (; from < m.length; from++) { if (m[from] === '(') lvl++; else if (m[from] === ')' && --lvl === 0) break; } }
-  const open = m.indexOf('{', from);
-  if (open < 0 || fns.has(name)) continue;
-  // corps sans accolades (arrow expression `x => expr`) : jusqu'à la fin de l'expression
+  if (fns.has(name)) continue;
+  // corps sans accolades (arrow expression `x => expr`) : jusqu'à la fin de l'expression,
+  // même s'il n'y a plus aucune accolade après (fin d'un module).
   const after = d.index + d[0].length;
-  const between = m.slice(after, open);
   let end;
-  if (/=>\s*$/.test(d[0]) && /\S/.test(between)) end = exprEnd(after);
-  else end = blockEnd(open);
+  if (/=>\s*$/.test(d[0]) && !/^\s*\{/.test(m.slice(after))) end = exprEnd(after);
+  else { const open = m.indexOf('{', from); if (open < 0) continue; end = blockEnd(open); }
   // IIFE nommée `(async function init(){…})()` : appelée sur place par le code global.
   const iife = /^\s*\)\s*\(/.test(m.slice(end + 1, end + 40));
   const lead = /^[^\w$]/.test(d[0]) ? 1 : 0; // caractère consommé avant `function`/`const`
-  fns.set(name, { name, line: lineOf(d.index + lead), start: d.index, end, kind: 'function', iife });
+  fns.set(name, { name, ...posOf(d.index + lead), start: d.index, end, kind: 'function', iife });
 }
 const names = [...fns.keys()];
 
@@ -128,8 +141,8 @@ for (const l of m.matchAll(lisRe)) {
   if (!fn) continue; // écouteur nommé : `addEventListener('x', handler)` → simple référence
   let k = m.indexOf('(', l.index), lvl = 0;       // fin = parenthèse fermante d'addEventListener
   for (; k < m.length; k++) { if (m[k] === '(') lvl++; else if (m[k] === ')' && --lvl === 0) break; }
-  const line = lineOf(l.index);
-  synth.push({ name: `@${evt}:${line}`, line, start: l.index, end: k, kind: 'listener' });
+  const { file: lf, line } = posOf(l.index);
+  synth.push({ name: `@${evt}:${line}`, file: lf, line, start: l.index, end: k, kind: 'listener' });
 }
 // Le reste du code de premier niveau (initialisation, `init()`, tables, setInterval…).
 const covered = [...fns.values(), ...synth].filter(f => !inNamed(f.start) || f.kind === 'function');
@@ -141,7 +154,8 @@ const isGlobalPos = pos => !covered.some(f => f.start <= pos && pos <= f.end);
 // Occurrences d'un nom de fonction : appel `nom(` ou référence sans parenthèses
 // (`onclick = nom`, `setInterval(nom, …)`, `{ dashboard: nom }`, `[nom]`…).
 // `.nom` est un accès de propriété, mais `...nom()` (spread) est un vrai appel.
-const tokRe = new RegExp(`(?<![\\w$])(?:(?<=\\.\\.\\.)|(?<!\\.))(${names.map(n => n.replace(/\$/g, '\\$')).join('|')})(?![\\w$])`, 'g');
+// Sans aucune fonction, l'alternative vide reconnaîtrait la chaîne vide partout.
+const tokRe = !names.length ? /(?!)/g : new RegExp(`(?<![\\w$])(?:(?<=\\.\\.\\.)|(?<!\\.))(${names.map(n => n.replace(/\$/g, '\\$')).join('|')})(?![\\w$])`, 'g');
 function classify(pos, len) {
   let a = pos + len; while (/\s/.test(m[a])) a++;
   let b = pos - 1; while (b >= 0 && /\s/.test(m[b])) b--;
@@ -180,9 +194,9 @@ const sorted = s => [...s].sort();
 if (args.includes('--dead')) {
   // Candidats au code mort : ni appelés ni référencés (hors nœuds synthétiques).
   const dead = names.filter(n => !callers.get(n).length && !referrers.get(n).length)
-    .map(n => ({ name: n, line: fns.get(n).line }));
+    .map(n => ({ name: n, file: fns.get(n).file, line: fns.get(n).line }));
   if (asJson) console.log(JSON.stringify({ file, dead }, null, 2));
-  else console.log(dead.length ? dead.map(d => `${file}:${d.line}\t${d.name}`).join('\n') : 'Aucun candidat.');
+  else console.log(dead.length ? dead.map(d => `${d.file}:${d.line}\t${d.name}`).join('\n') : 'Aucun candidat.');
   process.exit(0);
 }
 
@@ -200,7 +214,7 @@ if (focus) {
 
 if (asJson) {
   const k = a => sorted(a).filter(x => keep.has(x));
-  const out = [...keep].map(n => ({ name: n, line: nodes.get(n).line, kind: nodes.get(n).kind, calls: k(edges.get(n)), refs: k(refs.get(n)), calledBy: k(callers.get(n)), referencedBy: k(referrers.get(n)) }));
+  const out = [...keep].map(n => ({ name: n, file: nodes.get(n).file, line: nodes.get(n).line, kind: nodes.get(n).kind, calls: k(edges.get(n)), refs: k(refs.get(n)), calledBy: k(callers.get(n)), referencedBy: k(referrers.get(n)) }));
   console.log(JSON.stringify({ file, functions: out.length, nodes: out }, null, 2));
 } else {
   const id = n => n.replace(/\$/g, '_S_').replace(/[^\w]/g, '_');

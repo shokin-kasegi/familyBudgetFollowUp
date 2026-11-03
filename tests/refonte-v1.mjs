@@ -17,6 +17,8 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { exposerModules } from './outils/exposer-modules.mjs';
+import { toutesSources, css } from './outils/sources.mjs';
 
 // Playwright est installé globalement (pas de package.json) : require le trouve via NODE_PATH.
 const { chromium } = createRequire(import.meta.url)('playwright');
@@ -44,6 +46,7 @@ const num = s => { const t = String(s).replace(/[\s  €]/g,'').replace('−'
 
 async function openApp(browser, {width, height, hash='#dashboard/2026-09', reducedMotion='no-preference', seed=true}){
   const ctx = await browser.newContext({viewport:{width, height}, reducedMotion});
+  await exposerModules(ctx);
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e=>errors.push('pageerror: '+e.message));
@@ -59,7 +62,7 @@ async function openApp(browser, {width, height, hash='#dashboard/2026-09', reduc
       sessionStorage.setItem('seeded','1');
     }`);
   await page.goto(BASE + '/index.html' + hash);
-  await page.waitForSelector('#view > *', {timeout:10000}).catch(()=>{});
+  await page.waitForSelector('#view > *', {timeout:10000}).catch(()=>{}); await page.evaluate(()=>window.__modulesExposes);
   await page.waitForTimeout(400);
   return {ctx, page, errors};
 }
@@ -152,8 +155,8 @@ try{
 
   console.log('\n— Système de design');
   {
-    const html = fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
-    const style = html.slice(html.indexOf('<style>'), html.indexOf('</style>'));
+    const html = toutesSources(); // index.html, css/app.css et js/**/*.js
+    const style = css();
     // Verre liquide : le flou est réservé aux surfaces de verre déclarées par les jetons
     // (--blur), à l'île et aux couches flottantes ; les radial-gradient ne servent qu'au
     // champ de couleur derrière le verre et au reflet de l'île.
@@ -224,6 +227,7 @@ try{
   {
     // Sans View Transitions : tout fonctionne quand même.
     const ctx = await browser.newContext({viewport:{width:1440,height:900}});
+    await exposerModules(ctx);
     await ctx.addInitScript(()=>{ delete Document.prototype.startViewTransition; });
     const page = await ctx.newPage(); const errors = [];
     page.on('pageerror', e=>errors.push(e.message));
@@ -246,6 +250,7 @@ try{
   {
     // Écran de connexion (sans session).
     const ctx = await browser.newContext({viewport:{width:390,height:844}});
+    await exposerModules(ctx);
     const page = await ctx.newPage(); const errors = [];
     page.on('pageerror', e=>errors.push(e.message));
     await page.addInitScript(`${fixture};

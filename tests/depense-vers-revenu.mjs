@@ -10,6 +10,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { exposerModules } from './outils/exposer-modules.mjs';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -33,6 +34,7 @@ const ok = (cond, msg) => { if(cond){ passes++; } else { failures++; console.log
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({viewport:{width:1280, height:900}, reducedMotion:'reduce'});
+await exposerModules(ctx);
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', e=>errors.push('pageerror: '+e.message));
@@ -75,7 +77,7 @@ async function basculer(depId, avantSubmit){
 
 try{
   await page.goto(BASE + '/index.html#depenses/2026-10');
-  await page.waitForSelector('#view > *', {timeout:10000});
+  await page.waitForSelector('#view > *', {timeout:10000}); await page.evaluate(()=>window.__modulesExposes);
   await page.waitForTimeout(300);
 
   console.log('\n— Dépense basculée en revenu');

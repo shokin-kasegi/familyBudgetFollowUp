@@ -11,6 +11,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { exposerModules } from './outils/exposer-modules.mjs';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -35,6 +36,7 @@ const ok = (cond, msg) => { if(cond){ passes++; } else { failures++; console.log
 
 async function openApp(browser, {width, height}){
   const ctx = await browser.newContext({viewport:{width, height}});
+  await exposerModules(ctx);
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e=>errors.push('pageerror: '+e.message));
@@ -49,7 +51,7 @@ async function openApp(browser, {width, height}){
       sessionStorage.setItem('seeded','1');
     }`);
   await page.goto(BASE + '/index.html#releve');
-  await page.waitForSelector('#view > *', {timeout:10000});
+  await page.waitForSelector('#view > *', {timeout:10000}); await page.evaluate(()=>window.__modulesExposes);
   await page.waitForTimeout(300);
   return {ctx, page, errors};
 }
@@ -78,7 +80,7 @@ const importes = page => page.evaluate(()=>{
 });
 // L'utilisateur force chaque ligne en dépense ou en rentrée (il passe outre « Déjà saisie »).
 const toutForcer = page => page.evaluate(()=>{ releveSession.lignes.forEach(l=>{ if(l.etat==='attente'){ l.v.type = l.montant<0 ? 'depense' : 'revenu'; l.suivi = false; } }); });
-const recharger = async page => { await page.reload(); await page.waitForSelector('#view > *'); await page.waitForTimeout(300); };
+const recharger = async page => { await page.reload(); await page.waitForSelector('#view > *'); await page.evaluate(()=>window.__modulesExposes); await page.waitForTimeout(300); };
 
 const browser = await chromium.launch();
 try{

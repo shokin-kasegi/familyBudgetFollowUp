@@ -1,26 +1,21 @@
 /* Tests de la lecture d'un relevé — Node seul, sans navigateur ni dépendance.
    Usage : node tests/releve-lecture.mjs
-   Charge uniquement le bloc <script id="releve-lecture"> d'index.html dans un
-   contexte vide (rien de l'application : ni state, ni document, ni window) ;
-   s'il se mettait à dépendre du reste de l'application, ces tests échoueraient.
+   Importe js/releve-lecture.js sous Node, sans navigateur : le module ne doit
+   dépendre que d'utils.js (fonctions pures). S'il se mettait à importer le reste
+   de l'application (state, document, window), ces tests échoueraient.
    Les relevés de tests/fixtures/releves/ sont de vrais formats d'export bancaire,
    anonymisés : préambule avant le tableau, Windows-1252, Débit / Crédit séparés,
    « 1 234,56 » (espace ou espace insécable), montants signés, date de valeur,
    dates ISO, jj/mm/aa, mois/jour américain, colonne de solde, tabulations. */
 import fs from 'node:fs';
 import path from 'node:path';
-import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
+import * as R from '../js/releve-lecture.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIX = path.join(ROOT, 'tests/fixtures/releves');
-const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
-const bloc = /<script id="releve-lecture">([\s\S]*?)<\/script>/.exec(html);
-if(!bloc){ console.log('✗ bloc <script id="releve-lecture"> introuvable dans index.html'); process.exit(1); }
-
-const ctx = vm.createContext({TextDecoder});
-vm.runInContext(bloc[1] + `;this.R = {releveMontant, releveDate, releveOrdre, releveCle, releveDecoder, releveAnalyserTexte};`, ctx);
-const R = ctx.R;
+const importsLecture = [...fs.readFileSync(path.join(ROOT, 'js/releve-lecture.js'), 'utf8').matchAll(/^import .* from '([^']+)';$/gm)].map(m=>m[1]);
+if(importsLecture.some(f=>f!=='./utils.js')){ console.log(`✗ js/releve-lecture.js ne doit importer que ./utils.js (importe : ${importsLecture.join(', ')})`); process.exit(1); }
 const SANS_MODELE = {formats:{}};
 const lire = nom => R.releveAnalyserTexte(R.releveDecoder(fs.readFileSync(path.join(FIX, nom))), SANS_MODELE);
 // Copie hors du contexte vm, pour comparer en JSON.
