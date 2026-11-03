@@ -14,21 +14,41 @@ questions d'architecture et d'impact sans tout relire.
 ## Outil
 
 ```bash
-node .claude/skills/graphify/scripts/graphify.mjs index.html [--focus <fonction>] [--depth N] [--json]
+node .claude/skills/graphify/scripts/graphify.mjs index.html [--focus <fonction>] [--depth N] [--json] [--dead]
 ```
 
 - Sans `--focus` : graphe complet (gros — à réserver à l'analyse en JSON).
 - `--focus persist --depth 1` : la fonction, ses appelés et ses appelants directs.
-- `--json` : `{ name, line, calls, calledBy }` par fonction (numéro de ligne dans `index.html`).
-- Sans `--json` : diagramme Mermaid `flowchart LR`, fonction ciblée surlignée.
+- `--json` : `{ name, line, kind, calls, refs, calledBy, referencedBy }` par nœud
+  (numéro de ligne dans `index.html` lui-même).
+- `--dead` : candidats au code mort (ni appelés ni référencés), `index.html:ligne`.
+- Sans `--json` : diagramme Mermaid `flowchart LR`, fonction ciblée surlignée ;
+  `-->` = appel, `-.->` = référence sans parenthèses.
 
 Détection : `function nom(…)`, `const|let|var nom = (…) => …` et `= function`.
 Chaînes, commentaires, templates et regex sont masqués avant l'appariement des
-accolades. Les tables d'actions (`const actionsXxx = { 'nom': actionNom, … }`)
-sont lues : `handleAction` y est relié à chaque fonction `actionXxx`, et
-`--focus actionPpfTotal` montre ce qu'une action appelle. Limites : les autres
-appels dynamiques (`obj[nom]()`, callbacks passés par référence sans
-parenthèses) ne sont pas vus — le signaler dans la réponse si c'est pertinent.
+accolades. Deux sortes de liens :
+
+- **appel** `nom(…)`, y compris `...nom()` et `nom?.()` ;
+- **référence** : le nom cité sans parenthèses — `onclick = renderX`,
+  `setInterval(pollNow, …)`, `{ dashboard: renderDashboard }`, `[nom]`,
+  `.map(nom)`, `requestAnimationFrame(step)`. Une référence compte comme une
+  utilisation.
+
+Nœuds synthétiques, pour le code qui n'est dans aucune fonction nommée :
+
+- `@click:2584` : écouteur anonyme `document|window|x.addEventListener('click', (e)=>…)`
+  de premier niveau (nom de l'événement + ligne) ;
+- `(global)` : le reste du code de premier niveau (initialisation, IIFE
+  `(async function init(){…})()`, constantes `const a = b`).
+
+Limites restantes : les appels réellement dynamiques (`obj[nom]()`) ne sont pas vus, sauf les tables d'actions
+(`const actionsXxx = { 'nom': actionNom, … }`) : `handleAction` y est relié à
+chaque fonction `actionXxx`, et `--focus actionPpfTotal` montre ce qu'une action
+appelle ; les fonctions locales
+sont indexées par leur nom, donc deux fonctions/variables locales homonymes
+(`first`, `step`) partagent un nœud — le graphe d'impact de ces noms est
+approximatif. `tests/graphify.mjs` vérifie tous les cas ci-dessus.
 
 ## Procédure
 
@@ -40,9 +60,10 @@ parenthèses) ne sont pas vus — le signaler dans la réponse si c'est pertinen
      `releve*`, `sync*`, `persist/load*`, utilitaires `fmt*`, `esc`…) ;
    - repérer les hubs (plus d'appelés : `handleAction` via ses tables, `render*`) et les
      fonctions les plus appelées (utilitaires critiques) ;
-   - lister les fonctions jamais appelées (`calledBy` vide) comme candidates au
-     code mort, en rappelant la limite des appels dynamiques (vérifier par
-     `grep` avant de conclure).
+   - lister les candidates au code mort avec `--dead` (et non `calledBy` vide,
+     qui ignore les références) ; **toujours confirmer chacune par
+     `grep -n '\bnom\b' index.html`** avant de la déclarer morte, et ne jamais
+     supprimer sur la seule foi du graphe.
    - produire un Mermaid **par domaines** (≤ 40 nœuds), pas le graphe brut.
 3. **Restitution** : un bloc ```mermaid``` + un court résumé (rôle des
    modules, points chauds, risques). Citer les fonctions en `index.html:ligne`.
