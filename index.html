@@ -43,16 +43,9 @@
   --cat-autre:#5c5c63;
   --font:"Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --ease-out:cubic-bezier(.23,1,.32,1);
-  --ease-io:cubic-bezier(.77,0,.175,1);
   --r-card:22px; --r-inner:14px; --r-ctl:999px;
   /* Seulement pour ce qui flotte : modales, toasts, panneaux. */
   --shadow-soft:0 20px 60px rgba(0,0,0,0.55);
-  /* Anciens noms, conservés comme alias pour ne rien casser */
-  --panel:var(--surface); --panel-2:var(--raised);
-  --border:var(--line); --border-strong:var(--line-strong);
-  --text-dim:var(--muted); --text-faint:var(--faint);
-  --teal:var(--c-reste); --coral:var(--c-over);
-  --radius-lg:var(--r-card); --radius-md:var(--r-inner); --radius-sm:10px;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;}
@@ -101,7 +94,6 @@ a{color:inherit;}
 .brand{display:flex;align-items:center;gap:10px;padding:0 10px 22px;}
 .mark{width:30px;height:30px;flex:none;display:block;}
 .brand-name{font-weight:700;font-size:19px;letter-spacing:-.01em;}
-.brand-sub{font-size:12px;color:var(--faint);margin-top:1px;}
 
 .nav-item{
   display:flex;align-items:center;gap:11px;height:38px;
@@ -162,14 +154,9 @@ main{flex:1;min-width:0;padding-block:32px 64px;padding-left:max(40px, env(safe-
 
 /* ---------- Cartes : un ton plus clair que le fond, ni bordure ni ombre ---------- */
 .card{background:var(--surface);border-radius:var(--r-card);padding:24px;min-width:0;}
-.card > h2,.card-title{margin:0 0 16px;font-size:15px;font-weight:600;color:var(--muted);display:flex;align-items:center;justify-content:space-between;gap:12px;}
-.card-title .side-note,.side-note{font-weight:500;color:var(--faint);font-size:13px;}
+.card > h2{margin:0 0 16px;font-size:15px;font-weight:600;color:var(--muted);display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.side-note{font-weight:500;color:var(--faint);font-size:13px;}
 .grid{display:grid;gap:16px;}
-.g2{grid-template-columns:repeat(2,minmax(0,1fr));}
-.g3{grid-template-columns:repeat(3,minmax(0,1fr));}
-.g4{grid-template-columns:repeat(4,minmax(0,1fr));}
-@media(max-width:1000px){.g4{grid-template-columns:repeat(2,minmax(0,1fr));}.g3{grid-template-columns:repeat(2,minmax(0,1fr));}}
-@media(max-width:640px){.g2,.g3,.g4{grid-template-columns:1fr;}}
 .mb16{margin-bottom:16px;}
 
 .chart-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px;}
@@ -204,7 +191,7 @@ main{flex:1;min-width:0;padding-block:32px 64px;padding-left:max(40px, env(safe-
 .seg[data-k="reste"]{background:color-mix(in srgb, var(--c-reste) 22%, var(--surface));flex:1 1 auto;width:auto;}
 .seg[data-k="avenir"]{background:repeating-linear-gradient(135deg,var(--muted) 0 6px,color-mix(in srgb,var(--muted) 45%,var(--surface)) 6px 12px);}
 /* Dépassement : hachures (un motif qui porte un sens, pas un effet). */
-.seg[data-k="reste"].over,.hatch-over{background:repeating-linear-gradient(135deg,var(--c-over) 0 6px,color-mix(in srgb,var(--c-over) 55%,var(--surface)) 6px 12px);}
+.seg[data-k="reste"].over{background:repeating-linear-gradient(135deg,var(--c-over) 0 6px,color-mix(in srgb,var(--c-over) 55%,var(--surface)) 6px 12px);}
 .flow.has-focus .seg:not(.hl):not([data-k="reste"]):not([data-k="avenir"]){filter:brightness(.55);}
 .seg.hl{filter:brightness(1.15);}
 
@@ -240,7 +227,6 @@ main{flex:1;min-width:0;padding-block:32px 64px;padding-left:max(40px, env(safe-
 .rl-abo[aria-pressed="true"]{border-style:solid;border-color:var(--text);color:var(--text);}
 .rl-abo:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(255,255,255,0.18);}
 
-.cats-card{display:flex;flex-direction:column;}
 .cats{display:grid;gap:12px;list-style:none;}
 .cat{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-items:baseline;}
 .cat .name{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -248,7 +234,6 @@ main{flex:1;min-width:0;padding-block:32px 64px;padding-left:max(40px, env(safe-
 .track{display:block;grid-column:1/-1;height:6px;border-radius:6px;background:var(--raised);overflow:hidden;}
 .track .fill{display:block;height:100%;border-radius:6px;transform-origin:left;transform:scaleX(0);transition:transform .7s var(--ease-out);}
 .cat .meta{grid-column:1/-1;font-size:12px;color:var(--faint);}
-.card-foot{padding-top:18px;margin-top:auto;}
 .empty-line{color:var(--muted);font-size:14px;padding:10px 0;}
 
 .kv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;font-size:14px;}
@@ -350,11 +335,9 @@ main{flex:1;min-width:0;padding-block:32px 64px;padding-left:max(40px, env(safe-
 @media (hover:hover){ .btn-ghost:hover{background:var(--raised);} }
 .btn-text{color:var(--text);padding:0 6px;height:32px;}
 @media (hover:hover){ .btn-text:hover{opacity:.75;} }
-.btn-danger,.btn-text.danger{color:var(--c-over);}
+.btn-text.danger{color:var(--c-over);}
 .btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2.2;}
 .btn-sm{height:34px;padding:0 14px;font-size:13px;}
-.btn-hint{display:block;font-size:12px;color:var(--faint);margin-top:4px;max-width:22ch;}
-.action-col{display:flex;flex-direction:column;align-items:flex-start;}
 
 /* ---------- Tableaux ---------- */
 .table-wrap{overflow-x:auto;}
@@ -373,8 +356,6 @@ td.wrap{white-space:normal;}
 td.dim,.cell-sub{color:var(--faint);}
 td.neg,.neg{color:var(--c-over);}
 td.num{font-weight:500;}
-@keyframes row-in{from{opacity:0;}}
-tbody tr.is-new{animation:row-in .2s ease;}
 @media (hover:hover){ tbody tr:hover{background:color-mix(in srgb,var(--raised) 50%,transparent);} }
 tr.is-current td{background:var(--raised);}
 tr.is-future td{color:var(--faint);}
@@ -390,11 +371,8 @@ tr.is-future td{color:var(--faint);}
 .cell-sub{display:block;font-size:13px;margin-top:2px;white-space:normal;}
 .pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;}
 .pill-teal{background:color-mix(in srgb,var(--c-reste) 16%,var(--surface));color:var(--c-reste);}
-.pill-coral{background:color-mix(in srgb,var(--c-over) 16%,var(--surface));color:var(--c-over);}
 .pill-amber{background:color-mix(in srgb,var(--c-echeances) 14%,var(--surface));color:var(--c-echeances);}
 .pill-dim{background:var(--raised);color:var(--muted);}
-.pill-del{width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:inherit;opacity:.7;flex-shrink:0;}
-.pill-del svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2.5;}
 /* Les actions de ligne restent une cellule de tableau : les traits courent sur toute la largeur. */
 td.row-actions{text-align:right;width:1%;}
 td.row-actions > *{display:inline-flex;vertical-align:middle;margin-left:4px;}
@@ -414,7 +392,6 @@ th.bulk-th{text-align:right;width:1%;}
 .bulk-bar .bulk-count{font-weight:600;margin-right:auto;}
 @media(max-width:640px){ .bulk-bar{border-radius:14px;gap:4px 12px;} .bulk-bar .bulk-count{flex-basis:100%;} .bulk-bar .btn{padding-left:0;padding-right:0;} .bulk-bar .danger{margin-left:auto;} }
 tfoot td{border-top:1px solid var(--line-strong);font-weight:600;color:var(--text);padding-top:14px;}
-.tot-split{display:block;font-size:13px;font-weight:400;color:var(--faint);margin-top:2px;white-space:normal;}
 
 /* Montants : centimes partout, sauf la Vue annuelle sur téléphone. */
 .amt-short{display:none;}
@@ -485,7 +462,6 @@ tfoot td{border-top:1px solid var(--line-strong);font-weight:600;color:var(--tex
 .field input:focus,.field select:focus{outline:none;border-color:var(--text);}
 /* Champ montant en grand, comme dans les apps de paiement. */
 .field.amount input{font-size:28px;font-weight:650;padding:10px 14px;font-variant-numeric:tabular-nums;letter-spacing:-.01em;}
-.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .field.has-error input,.field.has-error select,.field.has-error .cat-select-btn{border-color:var(--c-over);}
 .field-error-text{font-size:12px;color:var(--c-over);margin-top:5px;}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;}
@@ -543,8 +519,6 @@ tfoot td{border-top:1px solid var(--line-strong);font-weight:600;color:var(--tex
 .auth-title{font-size:22px;font-weight:650;letter-spacing:-.01em;margin-bottom:4px;}
 .auth-sub{font-size:14px;color:var(--muted);margin-bottom:22px;}
 .auth-error{background:color-mix(in srgb,var(--c-over) 12%,var(--surface));color:var(--c-over);font-size:13px;padding:10px 12px;border-radius:12px;margin-bottom:14px;}
-.auth-switch{text-align:center;font-size:13px;color:var(--muted);margin-top:16px;}
-.auth-switch button{color:var(--text);font-weight:600;text-decoration:underline;text-underline-offset:3px;}
 .auth-card .btn{width:100%;}
 .field-note{font-size:12px;color:var(--faint);margin-top:5px;}
 .temp-cred{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;letter-spacing:.5px;padding:9px 12px;border:1px solid var(--line-strong);border-radius:10px;user-select:all;overflow-wrap:anywhere;}
@@ -594,7 +568,6 @@ th.num .col-filter-panel{left:auto;right:0;}
 .settings-block{margin-bottom:16px;}
 .settings-block h3{font-size:17px;font-weight:650;margin-bottom:4px;}
 .settings-block .sub{font-size:14px;color:var(--muted);margin-bottom:16px;}
-.danger-zone{border-top:1px solid var(--line);margin-top:20px;padding-top:16px;}
 .user-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line);position:relative;}
 .user-row:first-of-type{border-top:none;}
 .avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;}
@@ -899,7 +872,7 @@ button,a,[role="button"]{touch-action:manipulation;-webkit-tap-highlight-color:t
 :root[data-theme="givre"] ::selection{background:rgba(10,111,224,0.2);}
 /* Lagon : titres condensés, en capitales d'affiche, contrôles carrés. */
 :root[data-theme="lagon"] .page-title{font-stretch:75%;font-weight:700;font-size:36px;letter-spacing:-.01em;}
-:root[data-theme="lagon"] .card > h2,:root[data-theme="lagon"] .card-title,:root[data-theme="lagon"] .chart-head h2{font-stretch:80%;font-size:16px;letter-spacing:.01em;color:var(--text);}
+:root[data-theme="lagon"] .card > h2,:root[data-theme="lagon"] .chart-head h2{font-stretch:80%;font-size:16px;letter-spacing:.01em;color:var(--text);}
 :root[data-theme="lagon"] .stepper button{border-radius:7px;}
 /* Givre : plus d'air, un poids plus léger pour les titres. */
 :root[data-theme="givre"] .page-title{font-weight:600;font-size:30px;}
@@ -1074,14 +1047,14 @@ main{padding-top:calc(88px + env(safe-area-inset-top,0px)) !important;}
 /* ---------- Mouvement réduit : plus de déplacement ni de défilement de
    chiffres ; seuls de brefs fondus restent. ---------- */
 @media (prefers-reduced-motion: reduce){
-  .enter,.ychart.first rect.b,.ring.done,.detail-in,tbody tr.is-new,.rl-row.is-maj,.auth-brand .mark.draw circle{animation:none !important;}
+  .enter,.ychart.first rect.b,.ring.done,.detail-in,.rl-row.is-maj,.auth-brand .mark.draw circle{animation:none !important;}
   .seg,.track .fill{transition-duration:0s !important;}
   .modal,.modal-overlay.closing .modal,.col-filter-panel,.user-actions,.cat-select.open .cat-dropdown{animation-name:fadein !important;animation-duration:.15s !important;}
   .modal-overlay.closing .modal{animation-name:fadeout !important;}
   #toast,#toast.show,#claude-panel,#notif-panel,#claude-panel.open,#notif-panel.open{transform:translateX(0);transition-duration:.15s;}
   #toast,#toast.show{transform:translateX(-50%);}
   .sidebar{transition:none;}
-  .btn:active,.poste:active,.nav-item:active,.icon-btn:active,.stepper button:active,.chip:active,.ring-tile:active,.link:active{transform:none;}
+  .btn:active,.poste:active,.nav-item:active,.icon-btn:active,.stepper button:active,.chip:active,.link:active{transform:none;}
   ::view-transition-old(month),::view-transition-new(month),::view-transition-old(main),::view-transition-new(main){animation:none;}
 }
 </style>
@@ -1797,7 +1770,6 @@ const r2 = x => Math.round((Number(x)||0)*100)/100;
 // depuis les parties telles qu'elles sont affichées.
 const sumR2 = (arr, f) => r2((arr||[]).reduce((s,x)=>s+r2(f ? f(x) : x),0));
 const fmtEUR = (n) => sp(NF_EUR2.format(r2(n)).replace('-','−'));
-const fmtEURPrecise = fmtEUR;
 const fmtEUR0 = (n) => sp(NF_EUR0.format(Math.round(Number(n)||0)).replace('-','−'));
 // Valeur absente (ancien enregistrement, import incomplet) : un tiret gris, jamais « undefined ».
 function dash(v){ return (v===undefined || v===null || (typeof v==='string' && !v.trim())) ? '<span class="nil">—</span>' : esc(v); }
@@ -2062,7 +2034,6 @@ function dashboardData(key, hors){
    catégorie) : elle sort alors du classement, et les catégories qui partagent
    exactement la même couleur sont réunies en un seul poste (« Restaurant + Courses »). */
 const CAT_AUTRES = 'Autres';
-const CAT_COULEURS = 6;
 // Mêmes teintes que --cat-1…6 (thème sombre), en clair pour pouvoir les comparer aux couleurs choisies.
 const CAT_DEFAUTS = ['#3987e5','#d95926','#199e70','#c98500','#d55181','#9085e9'];
 function catLabel(d){ return String(d.categorie||'').trim() || 'Sans catégorie'; }
@@ -2277,8 +2248,23 @@ function dateDansMois(key, jour){
   const dernier = new Date(y, m, 0).getDate();
   return `${key}-${String(Math.min(Math.max(1, Number(jour)||1), dernier)).padStart(2,'0')}`;
 }
-function aboPrevisions(){ return mine(state.depenses).filter(d=>d.prevu && d.aboId); }
-function aboPrevisionsDuMois(key){ return aboPrevisions().filter(d=>moisDe(d.date)===key).sort((a,b)=>a.date.localeCompare(b.date)); }
+/* Séries (abonnements, paiements en plusieurs fois, charges) : même mécanique,
+   chaque série étant repérée par son champ d'identifiant (aboId, ppfId, chgId). */
+function serieDe(champ, id){ return mine(state.depenses).filter(d=>d[champ]===id); }
+function previsionsDe(champ){ return mine(state.depenses).filter(d=>d.prevu && d[champ]); }
+function previsionsDuMoisDe(champ, key){ return previsionsDe(champ).filter(d=>moisDe(d.date)===key).sort((a,b)=>a.date.localeCompare(b.date)); }
+// Séries en cours (une par prévision), triées pour le choix du rattachement :
+// deux séries chez le même commerçant se distinguent par nom, montant et date.
+function seriesAuChoixDe(champ){ return previsionsDe(champ).sort((a,b)=>String(a.libelle||'').localeCompare(String(b.libelle||''),'fr') || a.montant-b.montant || a.date.localeCompare(b.date)); }
+// Arrête une série : ses prévisions disparaissent, les paiements validés restent.
+function arreterSerie(champ, id){
+  const avant = state.depenses.length;
+  const me = currentUser();
+  state.depenses = state.depenses.filter(d=>!(d.prevu && d[champ]===id && me && d.ownerId===me.id));
+  return avant - state.depenses.length;
+}
+function aboPrevisions(){ return previsionsDe('aboId'); }
+function aboPrevisionsDuMois(key){ return previsionsDuMoisDe('aboId', key); }
 // Annonce le prochain prélèvement d'une série : le mois qui suit celui de `dep`
 // (jamais un mois déjà passé, où elle serait aussitôt retirée).
 function aboPlanifier(dep){
@@ -2299,9 +2285,7 @@ function aboDemarrer(dep){
 // Abonnements en cours (un par série, via son prélèvement prévu), pour choisir
 // auquel rattacher une dépense : deux abonnements chez le même commerçant se
 // distinguent par leur nom, leur prix et leur date.
-function aboSeriesAuChoix(){
-  return aboPrevisions().sort((a,b)=>String(a.libelle||'').localeCompare(String(b.libelle||''),'fr') || a.montant-b.montant || a.date.localeCompare(b.date));
-}
+function aboSeriesAuChoix(){ return seriesAuChoixDe('aboId'); }
 function aboSerieLabel(p){ return `${p.libelle||'Sans nom'} · ${fmtEUR(p.montant)} · le ${Number(String(p.date).slice(8,10))}`; }
 function aboSerieOptions(){
   return [{value:'', label:'Nouvel abonnement'}, ...aboSeriesAuChoix().map(p=>({value:p.aboId, label:aboSerieLabel(p)}))];
@@ -2334,13 +2318,7 @@ function aboValider(prev, valeurs){
   aboPlanifier(prev);
   return prev;
 }
-// Arrête une série : ses prélèvements prévus disparaissent, les validés restent.
-function aboArreter(aboId){
-  const avant = state.depenses.length;
-  const me = currentUser();
-  state.depenses = state.depenses.filter(d=>!(d.prevu && d.aboId===aboId && me && d.ownerId===me.id));
-  return avant - state.depenses.length;
-}
+function aboArreter(aboId){ return arreterSerie('aboId', aboId); }
 // Le premier jour d'un mois, les prévisions des mois passés non validées sont
 // retirées avec toute leur série. Renvoie le nombre d'abonnements retirés.
 function aboPurger(){
@@ -2393,9 +2371,9 @@ function aboAlerteTitre(a){
    vérifier les montants (mensualité ou total). Une mensualité non validée à la fin
    de son mois n'est pas retirée (la somme reste due) : elle passe au mois courant. */
 const PPF_EPS = 0.005;
-function ppfSerie(ppfId){ return mine(state.depenses).filter(d=>d.ppfId===ppfId); }
-function ppfPrevisions(){ return mine(state.depenses).filter(d=>d.prevu && d.ppfId); }
-function ppfPrevisionsDuMois(key){ return ppfPrevisions().filter(d=>moisDe(d.date)===key).sort((a,b)=>a.date.localeCompare(b.date)); }
+function ppfSerie(ppfId){ return serieDe('ppfId', ppfId); }
+function ppfPrevisions(){ return previsionsDe('ppfId'); }
+function ppfPrevisionsDuMois(key){ return previsionsDuMoisDe('ppfId', key); }
 function ppfIds(){ return [...new Set(mine(state.depenses).filter(d=>d.ppfId).map(d=>d.ppfId))]; }
 function ppfEtat(ppfId){
   const serie = ppfSerie(ppfId);
@@ -2532,9 +2510,9 @@ const CHG_PERIODES = [
 ];
 function chgPeriode(x){ const n = Number(x && typeof x==='object' ? x.chgPeriode : x) || 1; return CHG_PERIODES.some(p=>Number(p.value)===n) ? n : 1; }
 function chgPeriodeInfo(x){ return CHG_PERIODES.find(p=>Number(p.value)===chgPeriode(x)); }
-function chgSerie(chgId){ return mine(state.depenses).filter(d=>d.chgId===chgId); }
-function chgPrevisions(){ return mine(state.depenses).filter(d=>d.prevu && d.chgId); }
-function chgPrevisionsDuMois(key){ return chgPrevisions().filter(d=>moisDe(d.date)===key).sort((a,b)=>a.date.localeCompare(b.date)); }
+function chgSerie(chgId){ return serieDe('chgId', chgId); }
+function chgPrevisions(){ return previsionsDe('chgId'); }
+function chgPrevisionsDuMois(key){ return previsionsDuMoisDe('chgId', key); }
 // Coût ramené au mois (une charge annuelle de 600 € pèse 50 € par mois).
 function chgParMois(p){ return r2(r2(p.montant) / chgPeriode(p)); }
 // Annonce la prochaine échéance d'une série : une période après `dep` (jamais
@@ -2560,9 +2538,7 @@ function chgDemarrer(dep, periode){
 // Charges en cours (une par série, via son échéance prévue), pour choisir à
 // laquelle rattacher une dépense : deux charges chez le même fournisseur se
 // distinguent par leur nom, leur montant et leur périodicité.
-function chgSeriesAuChoix(){
-  return chgPrevisions().sort((a,b)=>String(a.libelle||'').localeCompare(String(b.libelle||''),'fr') || a.montant-b.montant || a.date.localeCompare(b.date));
-}
+function chgSeriesAuChoix(){ return seriesAuChoixDe('chgId'); }
 function chgSerieLabel(p){ return `${p.libelle||'Sans nom'} · ${fmtEUR(p.montant)} ${chgPeriodeInfo(p).par}`; }
 function chgSerieOptions(){
   return [{value:'', label:'Nouvelle charge'}, ...chgSeriesAuChoix().map(p=>({value:p.chgId, label:chgSerieLabel(p)}))];
@@ -2591,13 +2567,7 @@ function chgValider(prev, valeurs){
   chgPlanifier(prev);
   return prev;
 }
-// Arrête une charge : son échéance prévue disparaît, les validées restent.
-function chgArreter(chgId){
-  const avant = state.depenses.length;
-  const me = currentUser();
-  state.depenses = state.depenses.filter(d=>!(d.prevu && d.chgId===chgId && me && d.ownerId===me.id));
-  return avant - state.depenses.length;
-}
+function chgArreter(chgId){ return arreterSerie('chgId', chgId); }
 // Nouveau montant annoncé : l'échéance en attente (et donc les suivantes) le prend.
 function chgChangerMontant(prev, montant){ prev.montant = r2(montant); }
 // Nouvelle périodicité : toute la série la prend, et l'échéance prévue est
@@ -2637,10 +2607,6 @@ function chgSeriesActives(){
 }
 
 /* ============================== SIDEBAR / NAV ============================== */
-const SPACES = [
-  { id:'finance', label:'Finance', icon:'wallet' },
-  { id:'groupes', label:'Groupes', icon:'users' },
-];
 var currentSpace = 'finance'; // espace actif, non persisté (comme currentView) — repart sur Finance à chaque connexion
 const NAV_FINANCE = [
   {id:'dashboard', label:'Tableau de bord', icon:'dashboard'},
@@ -5545,11 +5511,11 @@ function renderSetupScreen(){
       <div class="auth-sub">Ce budget n'a pas encore de compte sur cet appareil. Si tu fais partie de la famille, demande la création d'un compte ci-dessous.</div>
       <div id="auth-error-slot"></div>
       <button type="button" class="btn btn-primary" id="ask-account-btn" style="width:100%;justify-content:center;margin-bottom:10px;">${icon('plus')}Demander la création d'un compte</button>
-      <div style="display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--text-faint);font-size:11.5px;">
-        <div style="flex:1;height:1px;background:var(--border);"></div>OU<div style="flex:1;height:1px;background:var(--border);"></div>
+      <div style="display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--faint);font-size:11.5px;">
+        <div style="flex:1;height:1px;background:var(--line);"></div>OU<div style="flex:1;height:1px;background:var(--line);"></div>
       </div>
       ${syncOptionHTML}
-      <button type="button" id="admin-code-link" style="display:block;width:100%;text-align:center;margin-top:18px;font-size:11.5px;color:var(--text-faint);">J'ai un code d'accès administrateur</button>
+      <button type="button" id="admin-code-link" style="display:block;width:100%;text-align:center;margin-top:18px;font-size:11.5px;color:var(--faint);">J'ai un code d'accès administrateur</button>
     </div>`;
   document.getElementById('ask-account-btn').onclick = renderAccountRequestScreen;
   document.getElementById('admin-code-link').onclick = renderAdminCodeScreen;
@@ -5601,7 +5567,7 @@ function setupSyncTokenHandlers(){
     const btn = document.getElementById('sy-connect');
     btn.disabled = true; btn.innerHTML = 'Synchronisation…';
     try{
-      const found = await ghTestAndConnect(token);
+      await ghTestAndConnect(token);
       await ghPush(); // publie tout compte local pas encore connu du dépôt (ex. admin tout juste créé)
       if(authState.users && authState.users.length>0){
         toast('Comptes trouvés — connecte-toi.');
@@ -5685,8 +5651,8 @@ function renderLoginScreen(){
         <div class="field" style="display:flex;align-items:center;gap:9px;"><input id="li-remember" type="checkbox" style="width:16px;height:16px;accent-color:#FFFFFF;"><label style="margin:0;font-size:13px;color:var(--text);">Rester connecté (${REMEMBER_DAYS} jours)</label></div>
         <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;">${icon('check')}Se connecter</button>
       </form>
-      <div style="display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--text-faint);font-size:11.5px;">
-        <div style="flex:1;height:1px;background:var(--border);"></div>OU<div style="flex:1;height:1px;background:var(--border);"></div>
+      <div style="display:flex;align-items:center;gap:10px;margin:18px 0;color:var(--faint);font-size:11.5px;">
+        <div style="flex:1;height:1px;background:var(--line);"></div>OU<div style="flex:1;height:1px;background:var(--line);"></div>
       </div>
       <button type="button" class="btn btn-ghost" id="ask-account-btn" style="width:100%;justify-content:center;">${icon('plus')}Pas encore de compte ? Demander une création</button>
     </div>`;
@@ -6992,7 +6958,7 @@ function generateTempPassword(){
 }
 function showTempPasswordModal(u, tempPassword){
   openModal('Mot de passe à usage unique', [], {}, ()=>{}, `
-    <p style="color:var(--text-dim);font-size:13.5px;margin-bottom:12px;">Transmets ces informations à ${esc(u.displayName)}. Le mot de passe ne sera plus affiché ensuite ; il devra être changé à la première connexion.</p>
+    <p style="color:var(--muted);font-size:13.5px;margin-bottom:12px;">Transmets ces informations à ${esc(u.displayName)}. Le mot de passe ne sera plus affiché ensuite ; il devra être changé à la première connexion.</p>
     <div class="field"><label>Identifiant</label><div class="temp-cred">${esc(u.username)}</div></div>
     <div class="field"><label>Mot de passe à usage unique</label><div class="temp-cred">${esc(tempPassword)}</div></div>
     <div class="modal-actions"><button type="button" class="btn btn-ghost" id="temp-copy">Copier</button>
@@ -7023,7 +6989,7 @@ function renderMemberAccountRequests(me){
   const resetReq = myPendingAccountRequest('reset');
   const deleteReq = myPendingAccountRequest('delete');
   return `
-    <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:16px;">
+    <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:16px;">
       <div class="sub" style="margin-bottom:10px;">Pour vider tes données, utilise le menu « ⋯ » de ton compte ci-dessus. L’export et la suppression du compte passent par un administrateur — tu peux lui en faire la demande :</div>
       ${approvedExport ? `<div class="status-row" style="margin-bottom:12px;"><span class="status-dot" style="background:var(--c-reste);"></span>Ta demande d'export a été approuvée</div>
         <button class="btn btn-primary btn-sm" data-action="download-my-export" style="margin-bottom:14px;">${icon('arrowDown')}Télécharger mes données</button>
@@ -7035,7 +7001,7 @@ function renderMemberAccountRequests(me){
         ${resetReq ? `<span class="pill pill-amber">Reset demandé — en attente</span>` : ''}
         ${deleteReq
           ? `<span class="pill pill-amber">Suppression demandée — en attente</span>`
-          : `<button class="btn btn-ghost btn-sm" data-action="request-delete-account" style="color:var(--coral);">${icon('trash')}Demander la suppression de mon compte</button>`}
+          : `<button class="btn btn-ghost btn-sm" data-action="request-delete-account" style="color:var(--c-over);">${icon('trash')}Demander la suppression de mon compte</button>`}
       </div>
       <div class="field-note" style="margin-top:10px;">« Vider mes données » (menu « ⋯ ») garde ton compte et tes identifiants — seules tes saisies (revenus, dépenses…) sont remises à zéro. "Supprimer mon compte" retire aussi tes identifiants, définitivement.</div>
     </div>`;
@@ -7049,7 +7015,7 @@ function renderPendingAccountRequests(){
   const pending = pendingAccountRequests();
   if(pending.length===0) return '';
   return `
-    <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:16px;">
+    <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:16px;">
       <div class="sub" style="margin-bottom:10px;font-weight:600;color:var(--text);">Demandes en attente</div>
       ${pending.map(r=>{
         const from = authState.users.find(u=>u.id===r.fromId);
@@ -7184,7 +7150,7 @@ function ghConfig(){
 }
 function ghSaveToken(token){ localStorage.setItem('github_sync_config', JSON.stringify({token})); }
 function ghConfigured(){ return !!ghConfig().token; }
-let ghLastSync = null, ghLastError = null, ghErrorToastAt = 0, ghSha = null, ghAuthSha = null, ghSocialSha = null;
+let ghLastSync = null, ghLastError = null, ghErrorToastAt = 0;
 // Synchro réussie / ratée : l'échec n'est plus silencieux (avant, chaque appareil
 // gardait ses données dans son coin sans que personne ne le sache).
 function ghOk(){ ghLastSync = new Date(); ghLastError = null; }
@@ -7307,8 +7273,7 @@ async function ghPullBudget(merge){
   const cfg = ghConfig();
   if(!cfg.owner || !cfg.repo || !cfg.token) return false;
   try{
-    const { sha, remote } = await ghFetchBudget(cfg);
-    ghSha = sha;
+    const { remote } = await ghFetchBudget(cfg);
     if(!remote) return false;
     const before = state;
     state = merge ? mergeBudget(state, remote, loadBudgetBase()) : remote;
@@ -7359,8 +7324,7 @@ async function ghPullAuth(){
   const cfg = ghConfig();
   if(!cfg.owner || !cfg.repo || !cfg.token) return false;
   try{
-    const { sha, remote } = await ghFetchAuth(cfg);
-    ghAuthSha = sha;
+    const { remote } = await ghFetchAuth(cfg);
     if(!remote) return false;
     const before = authState;
     authState = mergeAuth(authState, remote, loadAuthBase());
@@ -7393,8 +7357,7 @@ async function ghPullSocial(merge){
   if(!cfg.owner || !cfg.repo || !cfg.token) return false;
   try{
     const f = await ghGetFile(cfg, cfg.socialPath||'social.json');
-    if(!f){ ghSocialSha = null; return false; }
-    ghSocialSha = f.sha;
+    if(!f) return false;
     const remote = JSON.parse(f.text);
     if(remote){
       socialState = merge ? mergeSocial(socialState, remote) : remote;
@@ -7444,14 +7407,12 @@ async function ghPushBudget(attempt){
       changedHere = budgetDiffers(state, merged);
       state = merged;
       localStorage.setItem('budget_store', JSON.stringify(state));
-      if(!budgetDiffers(state, remote)){ ghSha = sha; saveBudgetBase(remote); ghOk(); if(changedHere) await renderAfterRemoteChange(); return true; }
+      if(!budgetDiffers(state, remote)){ saveBudgetBase(remote); ghOk(); if(changedHere) await renderAfterRemoteChange(); return true; }
     }
     const snapshot = JSON.parse(JSON.stringify(state));
     const res = await fetch(ghUrl(cfg, cfg.path||'data.json'), { method:'PUT', headers:{...ghHeaders(cfg.token), 'Content-Type':'application/json'}, body: ghBody('Mise à jour budget', snapshot, sha) });
     if(res.status===409 && (attempt||0)<3) return ghPushBudget((attempt||0)+1); // écrit entre-temps ailleurs : on refusionne
     if(!res.ok) throw new Error('HTTP '+res.status);
-    const out = await res.json().catch(()=>null);
-    ghSha = (out && out.content && out.content.sha) || null;
     saveBudgetBase(snapshot);
     ghOk();
     if(changedHere) await renderAfterRemoteChange();
@@ -7468,14 +7429,12 @@ async function ghPushAuth(attempt){
     if(remote){
       authState = mergeAuth(authState, remote, loadAuthBase());
       localStorage.setItem('budget_auth', JSON.stringify(authState));
-      if(!authDiffers(authState, remote)){ ghAuthSha = sha; saveAuthBase(remote); ghOk(); return true; }
+      if(!authDiffers(authState, remote)){ saveAuthBase(remote); ghOk(); return true; }
     }
     const snapshot = JSON.parse(JSON.stringify(authState));
     const res = await fetch(ghUrl(cfg, cfg.authPath||'auth.json'), { method:'PUT', headers:{...ghHeaders(cfg.token), 'Content-Type':'application/json'}, body: ghBody('Mise à jour comptes', snapshot, sha) });
     if(res.status===409 && (attempt||0)<3) return ghPushAuth((attempt||0)+1);
     if(!res.ok) throw new Error('HTTP '+res.status);
-    const out = await res.json().catch(()=>null);
-    ghAuthSha = (out && out.content && out.content.sha) || null;
     saveAuthBase(snapshot);
     ghOk();
     return true;
@@ -7484,12 +7443,10 @@ async function ghPushAuth(attempt){
 async function ghPushSocial(){ return ghPutWithRetry(ghConfig().socialPath||'social.json', socialState, 'Mise à jour social'); }
 async function ghTestAndConnect(token){
   ghSaveToken(token);
-  const found = await ghPull();
-  return found;
+  await ghPull();
 }
 
 function renderGithubSection(){
-  const cfg = ghConfig();
   if(!ghConfigured()){
     return `
       <div class="field"><label for="gh-token">Jeton d'accès</label><div class="pw-wrap"><input id="gh-token" type="password" placeholder="github_pat_…"><button type="button" class="pw-toggle" data-toggle-pw="gh-token" aria-label="Afficher ou masquer la saisie">${icon('eye')}</button></div></div>
@@ -7507,7 +7464,7 @@ function renderGithubSection(){
 }
 function exportImportHTML(){
   return `
-    <div class="row-actions" style="justify-content:flex-start;gap:10px;border-top:1px solid var(--border);padding-top:14px;margin-top:14px;">
+    <div class="row-actions" style="justify-content:flex-start;gap:10px;border-top:1px solid var(--line);padding-top:14px;margin-top:14px;">
       <button class="btn btn-ghost btn-sm" data-action="export-data">${icon('arrowDown')}Exporter (.json)</button>
       <button class="btn btn-ghost btn-sm" data-action="import-data">${icon('arrowUp')}Importer un fichier</button>
       <input type="file" id="import-file-input" accept="application/json" style="display:none;">
@@ -7626,7 +7583,7 @@ function renderChatPanel(){
   panel.innerHTML = `
     <div class="cp-head"><span class="dot"></span><span class="t">Assistant budget</span><button class="icon-btn" data-action="close-chat" aria-label="Fermer">${icon('x')}</button></div>
     <div class="cp-body" id="cp-body">
-      ${chatHistory.length===0 ? `<div class="cp-empty">${icon('bot')}<br>Demande-moi des conseils sur ton budget, ou comment tu pourrais faire évoluer ce site.</div>` : chatHistory.map(m=>`<div class="cp-msg ${m.role}">${escapeHTML(m.content)}</div>`).join('')}
+      ${chatHistory.length===0 ? `<div class="cp-empty">${icon('bot')}<br>Demande-moi des conseils sur ton budget, ou comment tu pourrais faire évoluer ce site.</div>` : chatHistory.map(m=>`<div class="cp-msg ${m.role}">${esc(m.content)}</div>`).join('')}
     </div>
     <div class="cp-foot">
       <textarea id="cp-input" placeholder="Écris un message…" enterkeyhint="send"></textarea>
@@ -7638,7 +7595,6 @@ function renderChatPanel(){
   input.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendChatMessage(); } });
   input.focus();
 }
-function escapeHTML(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 function budgetContextSummary(){
   const key = state.selectedMonth;
   const d = dashboardData(key);
