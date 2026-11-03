@@ -1,0 +1,5 @@
+"Date","Payee","Account number","Transaction type","Payment reference","Amount (EUR)","Amount (Foreign Currency)","Type Foreign Currency","Exchange Rate"
+"2026-09-02","Grocery Store","","Presentment","","-45.20","","",""
+"2026-09-05","EMPLOYER LTD","FR7600000000000000000000000","Income","Salary September","2750.00","","",""
+"2026-09-11","Online Shop","","Presentment","","-1099.99","","",""
+"2026-09-20","Cafe Bar","","Presentment","","-3.50","-4.10","USD","1.17"
