@@ -42,8 +42,10 @@ Nœuds synthétiques, pour le code qui n'est dans aucune fonction nommée :
 - `(global)` : le reste du code de premier niveau (initialisation, IIFE
   `(async function init(){…})()`, constantes `const a = b`).
 
-Limites restantes : les appels réellement dynamiques (`obj[nom]()`,
-`data-action` dispatchés par chaîne) ne sont pas vus ; les fonctions locales
+Limites restantes : les appels réellement dynamiques (`obj[nom]()`) ne sont pas vus, sauf les tables d'actions
+(`const actionsXxx = { 'nom': actionNom, … }`) : `handleAction` y est relié à
+chaque fonction `actionXxx`, et `--focus actionPpfTotal` montre ce qu'une action
+appelle ; les fonctions locales
 sont indexées par leur nom, donc deux fonctions/variables locales homonymes
 (`first`, `step`) partagent un nœud — le graphe d'impact de ces noms est
 approximatif. `tests/graphify.mjs` vérifie tous les cas ci-dessus.
@@ -56,7 +58,7 @@ approximatif. `tests/graphify.mjs` vérifie tous les cas ci-dessus.
 2. **Sans argument** : vue d'ensemble. Lancer `--json`, puis :
    - regrouper les fonctions par préfixe/domaine (`render*`, `open*Modal`,
      `releve*`, `sync*`, `persist/load*`, utilitaires `fmt*`, `esc`…) ;
-   - repérer les hubs (plus d'appelés : `handleAction`, `render*`) et les
+   - repérer les hubs (plus d'appelés : `handleAction` via ses tables, `render*`) et les
      fonctions les plus appelées (utilitaires critiques) ;
    - lister les candidates au code mort avec `--dead` (et non `calledBy` vide,
      qui ignore les références) ; **toujours confirmer chacune par

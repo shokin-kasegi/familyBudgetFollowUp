@@ -4681,538 +4681,757 @@ document.addEventListener('click', async (e)=>{
 });
 function closeSidebarMobile(){ document.getElementById('sidebar').classList.remove('open'); document.getElementById('overlay-scrim').classList.remove('show'); }
 
-async function handleAction(action, id, el){
-  const find = (arr)=> arr.find(x=>x.id===id);
-  switch(action){
-    /* Revenus (entrées) */
-    case 'add-revexc': openModal('Ajouter un revenu', revexcFields(), {date:defaultDateForSelectedMonth(), categorie:(myCategories('revenus').find(c=>c.nom==='Autre')||myCategories('revenus')[0]||{}).nom||''}, async (data)=>{
-      if(Number(data.montant)<0){ markFieldError('montant','Un revenu ne peut pas être négatif'); toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense.'); return false; }
-      if(reportFieldErrors(fieldRequiredErrors(revexcFields(), data))) return false;
-      state.revenusExceptionnels.push({id:uid(), ownerId:currentUser().id, ...data}); await persist(); await render(); toast('Revenu ajouté'); }); break;
-    case 'edit-revexc': openModal('Modifier le revenu', revexcFields(), find(mine(state.revenusExceptionnels)), async (data)=>{
-      if(Number(data.montant)<0){ markFieldError('montant','Un revenu ne peut pas être négatif'); toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense.'); return false; }
-      if(reportFieldErrors(fieldRequiredErrors(revexcFields(), data))) return false;
-      Object.assign(find(mine(state.revenusExceptionnels)), data); await persist(); await render(); toast('Revenu mis à jour'); }); break;
-    /* Solde du compte : l'ancre du reste à vivre */
-    case 'solde-compte': {
-      const a = soldeAncre();
-      openModal('Solde du compte', [
-        {key:'date', label:'Date', type:'date'},
-        {key:'montant', label:'Solde à la fin de ce jour (€)', type:'number', step:'0.01'},
-      ], {date: a ? a.date : dateDuJour(), montant: a ? a.montant : ''}, async (data)=>{
-        const saisi = (document.getElementById('f_montant')?.value||'').trim();
-        if(reportFieldErrors([...(!data.date ? [['date','Renseigne une date']] : []), ...(!saisi || !Number.isFinite(data.montant) ? [['montant','Renseigne le solde (négatif si découvert)']] : [])])) return false;
-        soldeCompteFixer(data.date, data.montant, 'saisie');
-        await persist(); await render();
-        toast('Solde du compte enregistré');
-      }, `<p class="field-note">Le solde affiché par ta banque ce jour-là. Le reste à vivre s’aligne dessus, et le solde reporté des autres mois en découle. Le solde le plus récent fait foi ; un import de relevé retient aussi son solde de fin.</p>`);
-      break;
-    }
-    case 'toggle-hors-revenu': { const cat = mine(state.categoriesRevenus).find(c=>c.id===id); if(!cat) break;
-      if(cat.horsRevenu) delete cat.horsRevenu; else cat.horsRevenu = true;
-      await persist(); await render(); toast(cat.horsRevenu ? `${cat.nom} : exclu du revenu total` : `${cat.nom} : compté dans le revenu total`); break; }
-    case 'del-revexc': { const item=find(mine(state.revenusExceptionnels)); confirmDelete(item.libelle, async ()=>{ state.revenusExceptionnels = state.revenusExceptionnels.filter(x=>x.id!==id); await persist(); await render(); toast('Revenu supprimé'); }); break; }
+/* ---- Revenus (entrées) et solde du compte ---- */
+async function actionAddRevexc(){
+  openModal('Ajouter un revenu', revexcFields(), {date:defaultDateForSelectedMonth(), categorie:(myCategories('revenus').find(c=>c.nom==='Autre')||myCategories('revenus')[0]||{}).nom||''}, async (data)=>{
+    if(Number(data.montant)<0){ markFieldError('montant','Un revenu ne peut pas être négatif'); toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense.'); return false; }
+    if(reportFieldErrors(fieldRequiredErrors(revexcFields(), data))) return false;
+    state.revenusExceptionnels.push({id:uid(), ownerId:currentUser().id, ...data}); await persist(); await render(); toast('Revenu ajouté'); });
+}
+async function actionEditRevexc(id){
+  openModal('Modifier le revenu', revexcFields(), parId(mine(state.revenusExceptionnels), id), async (data)=>{
+    if(Number(data.montant)<0){ markFieldError('montant','Un revenu ne peut pas être négatif'); toast('Un revenu ne peut pas être négatif — utilise l\u2019onglet Dépenses pour une dépense.'); return false; }
+    if(reportFieldErrors(fieldRequiredErrors(revexcFields(), data))) return false;
+    Object.assign(parId(mine(state.revenusExceptionnels), id), data); await persist(); await render(); toast('Revenu mis à jour'); });
+}
+async function actionDelRevexc(id){
+  const item=parId(mine(state.revenusExceptionnels), id); confirmDelete(item.libelle, async ()=>{ state.revenusExceptionnels = state.revenusExceptionnels.filter(x=>x.id!==id); await persist(); await render(); toast('Revenu supprimé'); });
+}
+async function actionToggleHorsRevenu(id){
+  const cat = mine(state.categoriesRevenus).find(c=>c.id===id); if(!cat) return;
+  if(cat.horsRevenu) delete cat.horsRevenu; else cat.horsRevenu = true;
+  await persist(); await render(); toast(cat.horsRevenu ? `${cat.nom} : exclu du revenu total` : `${cat.nom} : compté dans le revenu total`);
+}
+async function actionSoldeCompte(){
+  const a = soldeAncre();
+  openModal('Solde du compte', [
+    {key:'date', label:'Date', type:'date'},
+    {key:'montant', label:'Solde à la fin de ce jour (€)', type:'number', step:'0.01'},
+  ], {date: a ? a.date : dateDuJour(), montant: a ? a.montant : ''}, async (data)=>{
+    const saisi = (document.getElementById('f_montant')?.value||'').trim();
+    if(reportFieldErrors([...(!data.date ? [['date','Renseigne une date']] : []), ...(!saisi || !Number.isFinite(data.montant) ? [['montant','Renseigne le solde (négatif si découvert)']] : [])])) return false;
+    soldeCompteFixer(data.date, data.montant, 'saisie');
+    await persist(); await render();
+    toast('Solde du compte enregistré');
+  }, `<p class="field-note">Le solde affiché par ta banque ce jour-là. Le reste à vivre s’aligne dessus, et le solde reporté des autres mois en découle. Le solde le plus récent fait foi ; un import de relevé retient aussi son solde de fin.</p>`);
+}
+const actionsRevenus = {
+  'add-revexc': actionAddRevexc,
+  'edit-revexc': actionEditRevexc,
+  'del-revexc': actionDelRevexc,
+  'toggle-hors-revenu': actionToggleHorsRevenu,
+  'solde-compte': actionSoldeCompte,
+};
 
-    /* Dépenses (sorties datées, payées en une fois) */
-    case 'add-depense': openModal('Ajouter une dépense', depense_fields(), {categorie:(myCategoriesDep()[0]||{}).nom||'', date:defaultDateForSelectedMonth()}, async (data)=>{
-      const errors = depenseValidationErrors(data);
-      if(errors.length){ errors.forEach(([key,msg])=>markFieldError(key,msg)); toast(errors[0][1]); return false; }
-      const dep = {id:uid(), ownerId:currentUser().id, libelle:data.libelle, categorie:data.categorie, montant:data.montant, modePaiement:'Unique', date:data.date, notes:(data.notes||'').trim()};
-      state.depenses.push(dep);
-      const mode = depenseMode(data);
-      const prev = mode==='abo' ? (data.aboSerie ? aboRattacher(dep, data.aboSerie) : aboDemarrer(dep)) : null;
-      const ppf = mode==='ppf' ? (data.ppfSerie ? ppfRattacher(dep, data.ppfSerie) : ppfDemarrer(dep, data.montantTotal)) : null;
-      const chg = mode==='chg' ? (data.chgSerie ? chgRattacher(dep, data.chgSerie) : chgDemarrer(dep, data.chgPeriode)) : null;
-      await persist(); await render();
-      toast(chg ? chgToast(chg, data.chgSerie ? 'Échéance validée' : 'Charge ajoutée') : mode==='chg' && data.chgSerie ? 'Rattachée à la charge' : ppf ? ppfToast(ppf, data.ppfSerie ? 'Mensualité ajoutée' : 'Paiement en plusieurs fois ajouté') : prev ? `${data.aboSerie ? 'Prélèvement validé' : 'Abonnement ajouté'} · prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}` : mode==='abo' && data.aboSerie ? 'Rattachée à l’abonnement' : 'Dépense ajoutée'); }); break;
-    case 'edit-depense': openDepenseEditModal(id); break;
-    case 'del-depense': { const item=find(mine(state.depenses)); confirmDelete(item.libelle, async ()=>{
-      state.depenses = state.depenses.filter(x=>x.id!==id);
-      await persist(); await render(); toast('Dépense supprimée'); }); break; }
-    case 'toggle-dep-group': { const g = el.dataset.group; if(depGroupsOpen.has(g)) depGroupsOpen.delete(g); else depGroupsOpen.add(g); await render(); break; }
-    case 'goto-depenses': currentView = 'depenses'; await render(); break;
+/* ---- Dépenses (sorties datées, payées en une fois) ---- */
+async function actionAddDepense(){
+  openModal('Ajouter une dépense', depense_fields(), {categorie:(myCategoriesDep()[0]||{}).nom||'', date:defaultDateForSelectedMonth()}, async (data)=>{
+    const errors = depenseValidationErrors(data);
+    if(errors.length){ errors.forEach(([key,msg])=>markFieldError(key,msg)); toast(errors[0][1]); return false; }
+    const dep = {id:uid(), ownerId:currentUser().id, libelle:data.libelle, categorie:data.categorie, montant:data.montant, modePaiement:'Unique', date:data.date, notes:(data.notes||'').trim()};
+    state.depenses.push(dep);
+    const mode = depenseMode(data);
+    const prev = mode==='abo' ? (data.aboSerie ? aboRattacher(dep, data.aboSerie) : aboDemarrer(dep)) : null;
+    const ppf = mode==='ppf' ? (data.ppfSerie ? ppfRattacher(dep, data.ppfSerie) : ppfDemarrer(dep, data.montantTotal)) : null;
+    const chg = mode==='chg' ? (data.chgSerie ? chgRattacher(dep, data.chgSerie) : chgDemarrer(dep, data.chgPeriode)) : null;
+    await persist(); await render();
+    toast(chg ? chgToast(chg, data.chgSerie ? 'Échéance validée' : 'Charge ajoutée') : mode==='chg' && data.chgSerie ? 'Rattachée à la charge' : ppf ? ppfToast(ppf, data.ppfSerie ? 'Mensualité ajoutée' : 'Paiement en plusieurs fois ajouté') : prev ? `${data.aboSerie ? 'Prélèvement validé' : 'Abonnement ajouté'} · prochain prélèvement prévu en ${monthLabel(moisDe(prev.date))}` : mode==='abo' && data.aboSerie ? 'Rattachée à l’abonnement' : 'Dépense ajoutée'); });
+}
+function actionEditDepense(id){
+  openDepenseEditModal(id);
+}
+async function actionDelDepense(id){
+  const item=parId(mine(state.depenses), id); confirmDelete(item.libelle, async ()=>{
+    state.depenses = state.depenses.filter(x=>x.id!==id);
+    await persist(); await render(); toast('Dépense supprimée'); });
+}
+async function actionToggleDepGroup(id, el){
+  const g = el.dataset.group; if(depGroupsOpen.has(g)) depGroupsOpen.delete(g); else depGroupsOpen.add(g); await render();
+}
+async function actionGotoDepenses(){
+  currentView = 'depenses'; await render();
+}
+const actionsDepenses = {
+  'add-depense': actionAddDepense,
+  'edit-depense': actionEditDepense,
+  'del-depense': actionDelDepense,
+  'toggle-dep-group': actionToggleDepGroup,
+  'goto-depenses': actionGotoDepenses,
+};
 
-    /* Abonnements */
-    case 'abo-valider': {
-      const prev = aboPrevisions().find(x=>x.id===id); if(!prev) break;
-      const champs = [{key:'date', label:'Date du prélèvement', type:'date'}, {key:'montant', label:'Montant prélevé (€)', type:'number', step:'0.01'}];
-      openModal(`Valider « ${esc(prev.libelle)} »`, champs, {date:prev.date, montant:prev.montant}, async (data)=>{
-        if(!data.date){ markFieldError('date','Renseigne une date'); return false; }
-        if(!(Number(data.montant)>0)){ markFieldError('montant','Renseigne un montant supérieur à 0'); return false; }
-        const ancien = r2(prev.montant);
-        aboValider(prev, {date:data.date, montant:Number(data.montant)});
-        const suivant = aboPrevisions().find(x=>x.aboId===prev.aboId);
-        await persist(); await render();
-        toast(`${Math.abs(r2(data.montant)-ancien)>=0.005 ? 'Validé avec le nouveau prix' : 'Prélèvement validé'}${suivant ? ` · suivant prévu en ${monthLabel(moisDe(suivant.date))}` : ''}`);
-      }, `<p class="field-note">Une fois validé, il compte dans tes dépenses de ${monthName(moisDe(prev.date))}.</p>`);
-      break; }
-    case 'abo-prix': {
-      const prev = aboPrevisions().find(x=>x.id===id); if(!prev) break;
-      openModal(`Nouveau prix : ${esc(prev.libelle)}`, [{key:'montant', label:'Nouveau montant mensuel (€)', type:'number', step:'0.01'}], {montant:prev.montant}, async (data)=>{
-        if(!(Number(data.montant)>0)){ markFieldError('montant','Renseigne un montant supérieur à 0'); return false; }
-        aboChangerPrix(prev, Number(data.montant));
-        await persist(); await render(); toast('Nouveau prix noté');
-      }, `<p class="field-note">Prix actuel : ${fmtEUR(prev.montant)}. Le prélèvement prévu et les suivants prennent le nouveau montant.</p>`);
-      break; }
-    case 'abo-arreter': {
-      const prev = aboPrevisions().find(x=>x.id===id); if(!prev) break;
-      confirmDelete('', async ()=>{ aboArreter(prev.aboId); await persist(); await render(); toast('Abonnement arrêté'); },
-        {title:`Arrêter « ${esc(prev.libelle)} » ?`, consequence:'Le prélèvement prévu est retiré et plus aucun ne sera annoncé. Ceux déjà validés restent dans tes dépenses.', confirmLabel:'Arrêter'});
-      break; }
-    /* Charges */
-    case 'chg-valider': {
-      const prev = chgPrevisions().find(x=>x.id===id); if(!prev) break;
-      const champs = [{key:'date', label:'Date du paiement', type:'date'}, {key:'montant', label:'Montant payé (€)', type:'number', step:'0.01'}];
-      openModal(`Valider « ${esc(prev.libelle)} »`, champs, {date:prev.date, montant:prev.montant}, async (data)=>{
-        if(!data.date){ markFieldError('date','Renseigne une date'); return false; }
-        if(!(Number(data.montant)>0)){ markFieldError('montant','Renseigne un montant supérieur à 0'); return false; }
-        chgValider(prev, {date:data.date, montant:Number(data.montant)});
-        const suivant = chgPrevisions().find(x=>x.chgId===prev.chgId);
-        await persist(); await render();
-        toast(suivant ? chgToast(suivant, 'Échéance validée') : 'Échéance validée');
-      }, `<p class="field-note">Une fois validée, elle compte dans tes dépenses du mois du paiement.</p>`);
-      break; }
-    case 'chg-montant': {
-      const prev = chgPrevisions().find(x=>x.id===id); if(!prev) break;
-      openModal(`Nouveau montant : ${esc(prev.libelle)}`, [{key:'montant', label:`Nouveau montant ${chgPeriodeInfo(prev).par} (€)`, type:'number', step:'0.01'}], {montant:prev.montant}, async (data)=>{
-        if(!(Number(data.montant)>0)){ markFieldError('montant','Renseigne un montant supérieur à 0'); return false; }
-        chgChangerMontant(prev, Number(data.montant));
-        await persist(); await render(); toast('Nouveau montant noté');
-      }, `<p class="field-note">Montant actuel : ${fmtEUR(prev.montant)}. L’échéance prévue et les suivantes prennent le nouveau montant.</p>`);
-      break; }
-    case 'chg-arreter': {
-      const prev = chgPrevisions().find(x=>x.id===id); if(!prev) break;
-      confirmDelete('', async ()=>{ chgArreter(prev.chgId); await persist(); await render(); toast('Charge arrêtée'); },
-        {title:`Arrêter « ${esc(prev.libelle)} » ?`, consequence:'L’échéance prévue est retirée et plus aucune ne sera annoncée. Celles déjà validées restent dans tes dépenses.', confirmLabel:'Arrêter'});
-      break; }
-    /* Paiements en plusieurs fois */
-    case 'ppf-valider': {
-      const prev = ppfPrevisions().find(x=>x.id===id); if(!prev) break;
-      const e = ppfEtat(prev.ppfId);
-      const champs = [{key:'date', label:'Date de la mensualité', type:'date'}, {key:'montant', label:'Montant payé (€)', type:'number', step:'0.01'}, {key:'montantTotal', label:'Montant total à payer (€)', type:'number', step:'0.01'}];
-      openModal(`Valider « ${esc(prev.libelle)} »`, champs, {date:prev.date, montant:prev.montant, montantTotal:e.total}, async (data)=>{
-        if(!data.date){ markFieldError('date','Renseigne une date'); return false; }
-        if(!(Number(data.montant)>0)){ markFieldError('montant','Renseigne un montant supérieur à 0'); return false; }
-        if(!(Number(data.montantTotal)>0)){ markFieldError('montantTotal','Renseigne le montant total à payer'); return false; }
-        const dep = ppfDepassement(prev.ppfId, data.montant, data.montantTotal);
-        if(dep){ const m = ppfMessageDepassement(dep, data.montantTotal); markFieldError('montant', m); markFieldError('montantTotal', m); toast(m); return false; }
-        ppfFixerTotal(prev.ppfId, data.montantTotal);
-        const fin = ppfValider(prev, {date:data.date, montant:Number(data.montant)});
-        await persist(); await render();
-        toast(ppfToast(fin, 'Mensualité validée'));
-      }, `<p class="field-note">Déjà payé : ${fmtEUR(e.paye)} · reste ${fmtEUR(e.reste)}. Une fois validée, la mensualité compte dans tes dépenses de ${monthName(moisDe(prev.date))}.</p>`);
-      break; }
-    case 'ppf-total': {
-      const e = ppfEtat(id); if(!e.versees.length) break;
-      openModal(`Montant total : ${esc(e.libelle)}`, [{key:'montantTotal', label:'Montant total à payer (€)', type:'number', step:'0.01'}], {montantTotal:e.total}, async (data)=>{
-        const t = r2(Number(data.montantTotal)||0);
-        if(t<=0){ markFieldError('montantTotal','Renseigne le montant total à payer'); return false; }
-        if(t < r2(e.paye - PPF_EPS)){ const m = ppfMessageDepassement(r2(e.paye - t), t); markFieldError('montantTotal', m); toast(m); return false; }
-        ppfFixerTotal(id, t); ppfRecaler(id);
-        await persist(); await render(); toast(ppfToast(ppfEtat(id), 'Montant total mis à jour'));
-      }, `<p class="field-note">Déjà payé : ${fmtEUR(e.paye)} en ${fmtCount(e.versees.length,'mensualité','mensualités')}.</p>`);
-      break; }
-    case 'ppf-arreter': {
-      const e = ppfEtat(id); if(!e.versees.length) break;
-      confirmDelete('', async ()=>{ ppfArreter(id); await persist(); await render(); toast('Paiement en plusieurs fois arrêté'); },
-        {title:`Arrêter « ${esc(e.libelle)} » ?`, consequence:`La mensualité prévue est retirée et plus aucune ne sera annoncée (reste ${fmtEUR(e.reste)}). Celles déjà validées restent dans tes dépenses.`, confirmLabel:'Arrêter'});
-      break; }
-    case 'abo-alerte-vue': {
-      const a = mine(state.abonnementsAlertes).find(x=>x.id===id);
-      if(a){ a.vue = true; await persist(); renderSidebar(); renderNotifPanel(); }
-      break; }
-    case 'switch-space': currentSpace = el.dataset.space; currentView = defaultViewForSpace(currentSpace); await render(); break;
-    case 'bulk-delete': bulkDelete(el.dataset.bulk); break;
-    case 'bulk-clear': bulkSet(el.dataset.bulk).clear(); syncBulkUI(); break;
-    case 'bulk-select-all': { const sel = bulkSet(el.dataset.bulk); bulkIdsShown(el.dataset.bulk).forEach(id=>sel.add(id)); syncBulkUI(); break; }
-    case 'clear-table-filter': state.tableFilters[el.dataset.table] = { sortCol:null, sortDir:'asc', selected:{} }; await persist(); await render(); break;
-    case 'toggle-col-filter': {
-      const table = el.dataset.table, col = el.dataset.col;
-      if(colFilterOpen && colFilterOpen.table===table && colFilterOpen.col===col){ colFilterOpen = null; }
-      else{
-        colFilterOpen = { table, col };
-        colFilterSearch = '';
-        const spec = tableSpec(table);
-        const f = tableFilterState(table);
-        const arr = spec.getArray();
-        const all = colDistinctValues(table, spec.columns, col, arr);
-        colFilterPending = new Set(f.selected[col] || all);
-      }
-      await render(); break; }
-    case 'col-sort': {
-      const f = tableFilterState(el.dataset.table);
-      f.sortCol = el.dataset.col; f.sortDir = el.dataset.dir;
-      colFilterOpen = null;
-      await persist(); await render(); break; }
-    case 'col-filter-toggle-all': {
-      const { table, col } = colFilterOpen;
-      const spec = tableSpec(table);
-      const arr = spec.getArray();
-      const shown = colFilterSearch ? colDistinctValues(table, spec.columns, col, arr).filter(v=>v.toLowerCase().includes(colFilterSearch.toLowerCase())) : colDistinctValues(table, spec.columns, col, arr);
-      const allChecked = shown.every(v=>colFilterPending.has(v));
-      shown.forEach(v=>{ if(allChecked) colFilterPending.delete(v); else colFilterPending.add(v); });
-      await render(); break; }
-    case 'col-filter-toggle-value': {
-      const v = el.dataset.value;
-      if(colFilterPending.has(v)) colFilterPending.delete(v); else colFilterPending.add(v);
-      await render(); break; }
-    case 'col-filter-ok': {
-      const { table, col } = colFilterOpen;
-      const spec = tableSpec(table);
-      const arr = spec.getArray();
-      const all = colDistinctValues(table, spec.columns, col, arr);
-      const f = tableFilterState(table);
-      // Si tout est coché, ça revient à "pas de filtre" sur cette colonne.
-      f.selected[col] = (colFilterPending.size===all.length) ? null : Array.from(colFilterPending);
-      colFilterOpen = null; colFilterPending = null; colFilterSearch = '';
-      await persist(); await render(); break; }
-    case 'col-filter-cancel':
-      colFilterOpen = null; colFilterPending = null; colFilterSearch = '';
-      await render(); break;
+/* ---- Abonnements ---- */
+async function actionAboValider(id){
+  const prev = aboPrevisions().find(x=>x.id===id); if(!prev) return;
+  const champs = [{key:'date', label:'Date du prélèvement', type:'date'}, {key:'montant', label:'Montant prélevé (€)', type:'number', step:'0.01'}];
+  openModal(`Valider « ${esc(prev.libelle)} »`, champs, {date:prev.date, montant:prev.montant}, async (data)=>{
+    if(!data.date){ markFieldError('date','Renseigne une date'); return false; }
+    if(!(Number(data.montant)>0)){ markFieldError('montant','Renseigne un montant supérieur à 0'); return false; }
+    const ancien = r2(prev.montant);
+    aboValider(prev, {date:data.date, montant:Number(data.montant)});
+    const suivant = aboPrevisions().find(x=>x.aboId===prev.aboId);
+    await persist(); await render();
+    toast(`${Math.abs(r2(data.montant)-ancien)>=0.005 ? 'Validé avec le nouveau prix' : 'Prélèvement validé'}${suivant ? ` · suivant prévu en ${monthLabel(moisDe(suivant.date))}` : ''}`);
+  }, `<p class="field-note">Une fois validé, il compte dans tes dépenses de ${monthName(moisDe(prev.date))}.</p>`);
+}
+async function actionAboPrix(id){
+  const prev = aboPrevisions().find(x=>x.id===id); if(!prev) return;
+  openModal(`Nouveau prix : ${esc(prev.libelle)}`, [{key:'montant', label:'Nouveau montant mensuel (€)', type:'number', step:'0.01'}], {montant:prev.montant}, async (data)=>{
+    if(!(Number(data.montant)>0)){ markFieldError('montant','Renseigne un montant supérieur à 0'); return false; }
+    aboChangerPrix(prev, Number(data.montant));
+    await persist(); await render(); toast('Nouveau prix noté');
+  }, `<p class="field-note">Prix actuel : ${fmtEUR(prev.montant)}. Le prélèvement prévu et les suivants prennent le nouveau montant.</p>`);
+}
+async function actionAboArreter(id){
+  const prev = aboPrevisions().find(x=>x.id===id); if(!prev) return;
+  confirmDelete('', async ()=>{ aboArreter(prev.aboId); await persist(); await render(); toast('Abonnement arrêté'); },
+    {title:`Arrêter « ${esc(prev.libelle)} » ?`, consequence:'Le prélèvement prévu est retiré et plus aucun ne sera annoncé. Ceux déjà validés restent dans tes dépenses.', confirmLabel:'Arrêter'});
+}
+async function actionAboAlerteVue(id){
+  const a = mine(state.abonnementsAlertes).find(x=>x.id===id);
+  if(a){ a.vue = true; await persist(); renderSidebar(); renderNotifPanel(); }
+}
+const actionsAbo = {
+  'abo-valider': actionAboValider,
+  'abo-prix': actionAboPrix,
+  'abo-arreter': actionAboArreter,
+  'abo-alerte-vue': actionAboAlerteVue,
+};
 
-    /* Filtre des graphiques du tableau de bord (dimension + exclusion de valeurs) */
-    case 'toggle-chart-filter': {
-      const chartKey = el.dataset.chart;
-      if(chartFilterOpen === chartKey){ chartFilterOpen = null; }
-      else{
-        chartFilterOpen = chartKey;
-        colFilterSearch = '';
-        const f = chartFilterState(chartKey);
-        chartFilterPendingDim = f.dim;
-        const all = chartDistinctValuesForDim(chartItemsFor(chartKey), f.dim);
-        const excluded = new Set(f.excluded[f.dim] || []);
-        chartFilterPendingChecked = new Set(all.filter(v=>!excluded.has(v)));
-      }
-      await render(); break; }
-    case 'chart-filter-set-dim': {
-      const chartKey = el.dataset.chart, dim = el.dataset.dim;
-      chartFilterPendingDim = dim;
-      colFilterSearch = '';
-      const f = chartFilterState(chartKey);
-      const all = chartDistinctValuesForDim(chartItemsFor(chartKey), dim);
-      const excluded = new Set(f.excluded[dim] || []);
-      chartFilterPendingChecked = new Set(all.filter(v=>!excluded.has(v)));
-      await render(); break; }
-    case 'chart-filter-toggle-all': {
-      const chartKey = el.dataset.chart;
-      const all = chartDistinctValuesForDim(chartItemsFor(chartKey), chartFilterPendingDim);
-      const shown = colFilterSearch ? all.filter(v=>v.toLowerCase().includes(colFilterSearch.toLowerCase())) : all;
-      const allChecked = shown.every(v=>chartFilterPendingChecked.has(v));
-      shown.forEach(v=>{ if(allChecked) chartFilterPendingChecked.delete(v); else chartFilterPendingChecked.add(v); });
-      await render(); break; }
-    case 'chart-filter-toggle-value': {
-      const v = el.dataset.value;
-      if(chartFilterPendingChecked.has(v)) chartFilterPendingChecked.delete(v); else chartFilterPendingChecked.add(v);
-      await render(); break; }
-    case 'chart-filter-ok': {
-      const chartKey = el.dataset.chart;
-      const dim = chartFilterPendingDim;
-      const all = chartDistinctValuesForDim(chartItemsFor(chartKey), dim);
-      const f = chartFilterState(chartKey);
-      f.dim = dim;
-      f.excluded[dim] = (chartFilterPendingChecked.size===all.length) ? [] : all.filter(v=>!chartFilterPendingChecked.has(v));
-      chartFilterOpen = null; chartFilterPendingDim = null; chartFilterPendingChecked = null; colFilterSearch = '';
-      await persist(); await render(); break; }
-    case 'chart-filter-cancel':
-      chartFilterOpen = null; chartFilterPendingDim = null; chartFilterPendingChecked = null; colFilterSearch = '';
-      await render(); break;
-    case 'clear-chart-filter': {
-      const f = chartFilterState(el.dataset.chart);
-      f.excluded = {categorie:[], libelle:[]};
-      await persist(); await render(); break; }
+/* ---- Charges ---- */
+async function actionChgValider(id){
+  const prev = chgPrevisions().find(x=>x.id===id); if(!prev) return;
+  const champs = [{key:'date', label:'Date du paiement', type:'date'}, {key:'montant', label:'Montant payé (€)', type:'number', step:'0.01'}];
+  openModal(`Valider « ${esc(prev.libelle)} »`, champs, {date:prev.date, montant:prev.montant}, async (data)=>{
+    if(!data.date){ markFieldError('date','Renseigne une date'); return false; }
+    if(!(Number(data.montant)>0)){ markFieldError('montant','Renseigne un montant supérieur à 0'); return false; }
+    chgValider(prev, {date:data.date, montant:Number(data.montant)});
+    const suivant = chgPrevisions().find(x=>x.chgId===prev.chgId);
+    await persist(); await render();
+    toast(suivant ? chgToast(suivant, 'Échéance validée') : 'Échéance validée');
+  }, `<p class="field-note">Une fois validée, elle compte dans tes dépenses du mois du paiement.</p>`);
+}
+async function actionChgMontant(id){
+  const prev = chgPrevisions().find(x=>x.id===id); if(!prev) return;
+  openModal(`Nouveau montant : ${esc(prev.libelle)}`, [{key:'montant', label:`Nouveau montant ${chgPeriodeInfo(prev).par} (€)`, type:'number', step:'0.01'}], {montant:prev.montant}, async (data)=>{
+    if(!(Number(data.montant)>0)){ markFieldError('montant','Renseigne un montant supérieur à 0'); return false; }
+    chgChangerMontant(prev, Number(data.montant));
+    await persist(); await render(); toast('Nouveau montant noté');
+  }, `<p class="field-note">Montant actuel : ${fmtEUR(prev.montant)}. L’échéance prévue et les suivantes prennent le nouveau montant.</p>`);
+}
+async function actionChgArreter(id){
+  const prev = chgPrevisions().find(x=>x.id===id); if(!prev) return;
+  confirmDelete('', async ()=>{ chgArreter(prev.chgId); await persist(); await render(); toast('Charge arrêtée'); },
+    {title:`Arrêter « ${esc(prev.libelle)} » ?`, consequence:'L’échéance prévue est retirée et plus aucune ne sera annoncée. Celles déjà validées restent dans tes dépenses.', confirmLabel:'Arrêter'});
+}
+const actionsChg = {
+  'chg-valider': actionChgValider,
+  'chg-montant': actionChgMontant,
+  'chg-arreter': actionChgArreter,
+};
 
-    case 'run-analyse': {
-      const val = document.getElementById('analyse-search').value;
-      state.analyseTerm = val; state.analyseCats = []; await persist(); await render(); break; }
-    case 'analyse-pick': state.analyseTerm = el.dataset.term; state.analyseCats = []; await persist(); await render(); break;
-    case 'analyse-clear-cat': state.analyseCats = []; state.analyseCatLabel = ''; await persist(); await render(); break;
+/* ---- Paiements en plusieurs fois ---- */
+async function actionPpfValider(id){
+  const prev = ppfPrevisions().find(x=>x.id===id); if(!prev) return;
+  const e = ppfEtat(prev.ppfId);
+  const champs = [{key:'date', label:'Date de la mensualité', type:'date'}, {key:'montant', label:'Montant payé (€)', type:'number', step:'0.01'}, {key:'montantTotal', label:'Montant total à payer (€)', type:'number', step:'0.01'}];
+  openModal(`Valider « ${esc(prev.libelle)} »`, champs, {date:prev.date, montant:prev.montant, montantTotal:e.total}, async (data)=>{
+    if(!data.date){ markFieldError('date','Renseigne une date'); return false; }
+    if(!(Number(data.montant)>0)){ markFieldError('montant','Renseigne un montant supérieur à 0'); return false; }
+    if(!(Number(data.montantTotal)>0)){ markFieldError('montantTotal','Renseigne le montant total à payer'); return false; }
+    const dep = ppfDepassement(prev.ppfId, data.montant, data.montantTotal);
+    if(dep){ const m = ppfMessageDepassement(dep, data.montantTotal); markFieldError('montant', m); markFieldError('montantTotal', m); toast(m); return false; }
+    ppfFixerTotal(prev.ppfId, data.montantTotal);
+    const fin = ppfValider(prev, {date:data.date, montant:Number(data.montant)});
+    await persist(); await render();
+    toast(ppfToast(fin, 'Mensualité validée'));
+  }, `<p class="field-note">Déjà payé : ${fmtEUR(e.paye)} · reste ${fmtEUR(e.reste)}. Une fois validée, la mensualité compte dans tes dépenses de ${monthName(moisDe(prev.date))}.</p>`);
+}
+async function actionPpfTotal(id){
+  const e = ppfEtat(id); if(!e.versees.length) return;
+  openModal(`Montant total : ${esc(e.libelle)}`, [{key:'montantTotal', label:'Montant total à payer (€)', type:'number', step:'0.01'}], {montantTotal:e.total}, async (data)=>{
+    const t = r2(Number(data.montantTotal)||0);
+    if(t<=0){ markFieldError('montantTotal','Renseigne le montant total à payer'); return false; }
+    if(t < r2(e.paye - PPF_EPS)){ const m = ppfMessageDepassement(r2(e.paye - t), t); markFieldError('montantTotal', m); toast(m); return false; }
+    ppfFixerTotal(id, t); ppfRecaler(id);
+    await persist(); await render(); toast(ppfToast(ppfEtat(id), 'Montant total mis à jour'));
+  }, `<p class="field-note">Déjà payé : ${fmtEUR(e.paye)} en ${fmtCount(e.versees.length,'mensualité','mensualités')}.</p>`);
+}
+async function actionPpfArreter(id){
+  const e = ppfEtat(id); if(!e.versees.length) return;
+  confirmDelete('', async ()=>{ ppfArreter(id); await persist(); await render(); toast('Paiement en plusieurs fois arrêté'); },
+    {title:`Arrêter « ${esc(e.libelle)} » ?`, consequence:`La mensualité prévue est retirée et plus aucune ne sera annoncée (reste ${fmtEUR(e.reste)}). Celles déjà validées restent dans tes dépenses.`, confirmLabel:'Arrêter'});
+}
+const actionsPpf = {
+  'ppf-valider': actionPpfValider,
+  'ppf-total': actionPpfTotal,
+  'ppf-arreter': actionPpfArreter,
+};
 
-    /* Tableau de bord */
-    case 'cat-couleur': {
-      const pal = catPalette(Number(el.dataset.year) || dashYear());
-      const noms = new Set(myCategoriesDep().map(c=>c.nom));
-      const cats = pal.categoriesDe(el.dataset.g).filter(c=>noms.has(c));
-      if(!cats.length){ toast('Cette catégorie n’existe plus : crée-la pour lui donner une couleur'); break; }
-      openCatCouleur(cats);
-      break; }
-    case 'focus-poste': {
-      // Met en avant le segment du poste, sans redessiner la vue.
-      dashFocusPoste = dashFocusPoste===el.dataset.k ? null : el.dataset.k;
-      document.querySelectorAll('#view .poste').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.k===dashFocusPoste)));
-      const flow = document.querySelector('#view .flow');
-      if(flow){ flow.classList.toggle('has-focus', !!dashFocusPoste); flow.querySelectorAll('.seg').forEach(sg=>sg.classList.toggle('hl', sg.dataset.k===dashFocusPoste)); }
-      break; }
-    case 'goto-month': {
-      // Colonne de l'année : affiche ce mois (depuis la Vue annuelle, ouvre son tableau de bord).
-      if(currentView==='annuelle'){ state.selectedMonth = el.dataset.k; persist(); await navigateTo('dashboard'); }
-      else await changeMonth(el.dataset.k);
-      break; }
-    case 'param-section': paramSection = el.dataset.sec; await withTransition('view', 0, ()=>render()); break;
-
-    /* Import de relevé */
-    case 'releve-valider': releveFocusApres = releveIndexLigne(id); await releveValider([id]); break;
-    case 'releve-ignorer': {
-      const l = releveSession && releveSession.lignes.find(x=>x.id===id);
-      if(l){ l.v.type = 'ignorer'; releveFocusApres = releveIndexLigne(id); await releveValider([id]); }
-      break;
-    }
-    case 'releve-abo': {
-      const l = releveSession && releveSession.lignes.find(x=>x.id===id);
-      if(l && l.v.type==='depense'){
-        l.v.abo = !l.v.abo;
-        if(l.v.abo){
-          l.v.ppf = false; l.v.chg = false;
-          // Un prélèvement attendu chez ce commerçant est proposé d'office ; le menu permet d'en choisir un autre.
-          if(!l.aboSerieId && !l.aboChoisi){
-            const pris = new Set(releveSession.lignes.filter(x=>x!==l && x.etat==='attente' && x.aboPrevId).map(x=>x.aboPrevId));
-            const attendu = releveAboAttendu({montant:-Math.abs(l.montant), date:l.date}, l.cle, l.v.libelle, pris);
-            if(attendu) releveChoisirAbo(l, attendu.aboId);
-          }
-        }
-        releveSauverSession(); await render(); document.querySelector(`[data-action="releve-abo"][data-id="${id}"]`)?.focus();
-      }
-      break;
-    }
-    case 'releve-chg': {
-      const l = releveSession && releveSession.lignes.find(x=>x.id===id);
-      if(l && l.v.type==='depense'){
-        l.v.chg = !l.v.chg;
-        if(l.v.chg){
-          l.v.abo = false; l.v.ppf = false; delete l.erreur;
-          // Une échéance attendue chez ce fournisseur est proposée d'office ; le menu permet d'en choisir une autre.
-          if(!l.chgSerieId && !l.chgChoisi){
-            const pris = new Set(releveSession.lignes.filter(x=>x!==l && x.etat==='attente' && x.chgPrevId).map(x=>x.chgPrevId));
-            const attendue = releveChgAttendu({montant:-Math.abs(l.montant), date:l.date}, l.cle, l.v.libelle, pris);
-            if(attendue) releveChoisirChg(l, attendue.chgId);
-          }
-        }
-        releveSauverSession(); await render(); document.querySelector(`[data-action="releve-chg"][data-id="${id}"]`)?.focus();
-      }
-      break;
-    }
-    case 'releve-ppf': {
-      // « En plusieurs fois » : le montant total est demandé aussitôt.
-      const l = releveSession && releveSession.lignes.find(x=>x.id===id);
-      if(l && l.v.type==='depense'){
-        l.v.ppf = !l.v.ppf; if(l.v.ppf){ l.v.abo = false; l.v.chg = false; } delete l.erreur;
-        // Une mensualité attendue chez ce commerçant est proposée d'office ; le menu permet d'en choisir une autre.
-        if(l.v.ppf && !l.ppfSerieId && !l.ppfChoisi){
-          const pris = new Set(releveSession.lignes.filter(x=>x!==l && x.etat==='attente' && x.ppfPrevId).map(x=>x.ppfPrevId));
-          const attendue = relevePpfAttendu({montant:-Math.abs(l.montant), date:l.date}, l.cle, l.v.libelle, pris);
-          if(attendue) releveChoisirPpf(l, attendue.ppfId);
-        }
-        releveSauverSession(); await render();
-        document.querySelector(l.v.ppf && !l.v.ppfTotal ? `.rl-row[data-rl-row="${id}"] [data-rl-champ="ppfTotal"]` : `[data-action="releve-ppf"][data-id="${id}"]`)?.focus();
-      }
-      break;
-    }
-    case 'releve-signe': if(releveInverserSigne(id)){
-      const n = releveApprendreColonne(id);
-      releveFocusApres = null; await render(); document.querySelector(`[data-action="releve-signe"][data-id="${id}"]`)?.focus();
-      if(n) toast(`Colonne corrigée · ${fmtCount(n, 'autre ligne inversée', 'autres lignes inversées')}`);
-    } break;
-    case 'releve-filtre':
-      releveFiltre.conf = releveFiltre.conf===el.dataset.conf ? '' : el.dataset.conf;
-      releveAffichees = RELEVE_TRANCHE;
-      await render();
-      document.querySelector(`[data-action="releve-filtre"][data-conf="${releveFiltre.conf}"]`)?.focus();
-      break;
-    case 'releve-tri':
-      releveFiltre.tri = el.dataset.tri;
-      releveAffichees = RELEVE_TRANCHE;
-      await render();
-      document.querySelector(`[data-action="releve-tri"][data-tri="${releveFiltre.tri}"]`)?.focus();
-      break;
-    case 'releve-filtre-effacer':
-      releveFiltre = {...releveFiltre, q:'', conf:''}; releveAffichees = RELEVE_TRANCHE;
-      await render(); document.getElementById('releve-recherche')?.focus();
-      break;
-    case 'releve-valider-affichees': await releveValider(releveLignesFiltrees((releveSession?.lignes||[]).filter(l=>l.etat==='attente')).map(l=>l.id)); break;
-    case 'releve-valider-groupe': await releveValider(releveLignesFiltrees((releveSession?.lignes||[]).filter(l=>l.etat==='attente')).filter(l=>releveGroupeDe(l)===el.dataset.groupe).map(l=>l.id)); break;
-    case 'releve-valider-surs': await releveValider((releveSession?.lignes||[]).filter(l=>l.etat==='attente' && l.confiance==='sur').map(l=>l.id)); break;
-    case 'releve-valider-tout': await releveValider((releveSession?.lignes||[]).filter(l=>l.etat==='attente').map(l=>l.id)); break;
-    case 'releve-plus': {
-      releveAffichees += RELEVE_TRANCHE;
-      releveFocusApres = releveAffichees - RELEVE_TRANCHE; // le focus va sur la première ligne ajoutée
-      await render(); break;
-    }
-    case 'releve-fermer': {
-      const reste = releveSession ? releveSession.lignes.filter(l=>l.etat==='attente').length : 0;
-      const fermer = async ()=>{ releveSession = null; releveSauverSession(); await render(); };
-      if(reste) confirmDelete('', fermer, {title:'Abandonner cet import ?', consequence:`${fmtCount(reste, 'ligne non validée est', 'lignes non validées sont')} laissée${reste>1?'s':''} de côté. Les opérations déjà validées restent dans ton budget.`, confirmLabel:'Abandonner'});
-      else await fermer();
-      break;
-    }
-    case 'releve-coller': {
-      const texte = (document.getElementById('releve-texte')?.value||'').trim();
-      if(!texte){ toast('Colle d’abord le texte du relevé'); break; }
-      await releveDemarrer('Texte collé', releveAnalyserTexte(texte, releveModele(false)));
-      break;
-    }
-    case 'releve-oublier': {
-      const m = releveModele(false), cle = el.dataset.cle;
-      if(m.regles && m.regles[cle]){ delete m.regles[cle]; await persist(); await render(); toast('Règle oubliée'); }
-      break;
-    }
-    case 'releve-oublier-tout': confirmDelete('', async ()=>{
-      const me = currentUser();
-      state.importApprentissage = (state.importApprentissage||[]).filter(x=>x.ownerId!==me.id);
-      await persist(); await render(); toast('Apprentissage remis à zéro');
-    }, {title:'Tout oublier ?', consequence:'Les formats de fichier, commerçants et catégories appris pour l’import de relevé seront effacés. Tes saisies ne changent pas.', confirmLabel:'Tout oublier'}); break;
-
-    /* Auth / users */
-    case 'logout': stopPolling(); clearSession(); await boot(); toast('Déconnecté'); break;
-    case 'toggle-sidebar-collapse': state.navCollapsed = !state.navCollapsed; await persist(); await render(); break;
-    case 'nav-move': {
-      const ids = orderedNavItems().map(n=>n.id), i = ids.indexOf(id), j = i + Number(el.dataset.dir);
-      if(i<0 || j<0 || j>=ids.length) break;
-      await moveNavItem(id, ids[j], Number(el.dataset.dir)>0 ? 'after' : 'before');
-      document.querySelector(`[data-action="nav-move"][data-id="${id}"][data-dir="${el.dataset.dir}"]:not(:disabled)`)?.focus();
-      break;
-    }
-    case 'reset-nav-order': if(state.navOrder) state.navOrder[el.dataset.space||currentSpace] = null; await persist(); await render(); break;
-    case 'toggle-user-actions': {
-      const row = el.closest('.user-row');
-      const open = !row.classList.contains('actions-open');
-      closeUserActionMenus(row);
-      row.classList.toggle('actions-open', open);
-      el.setAttribute('aria-expanded', String(open));
-      break; }
-    case 'add-user': {
-      const addUserFields = userFieldsAdmin(null).concat(passwordFields('Mot de passe', true));
-      openModal('Ajouter un compte', addUserFields, {role:'membre'}, async (data)=>{
-      if(reportFieldErrors(fieldRequiredErrors(addUserFields, data).concat(userFieldErrors(data)))) return false;
-      if(authState.users.some(u=>u.username===data.username.trim().toLowerCase())){ markFieldError('username','Cet identifiant existe déjà'); toast('Cet identifiant existe déjà'); return false; }
-      const salt = randomSalt();
-      const passwordHash = await hashPassword(data.password, salt);
-      const newUser = {id:uid(), username:data.username.trim().toLowerCase(), displayName:data.displayName.trim(), role:data.role, salt, passwordHash};
-      authState.users.push(newUser);
-      seedDefaultCategoriesDep(newUser.id);
-      seedDefaultCategoriesRev(newUser.id);
-      await Promise.all([persistAuth(), persist()]); await render(); toast('Compte créé — pense à transmettre le jeton d\u2019accès à cette personne par email, il lui sera demandé à sa première connexion.'); }); break; }
-    case 'edit-user': {
-      const u = find(authState.users);
-      // Identifiant à l'ancien format (antérieur au motif actuel) : l'admin doit le
-      // remplacer. Comme l'identifiant de connexion change, la personne reçoit un
-      // mot de passe à usage unique, à changer à sa première connexion.
-      const legacy = isAdmin() && !isValidUsername(u.username);
-      const resetPassword = legacy && u.id!==currentUser().id;
-      const baseFields = isAdmin() ? userFieldsAdmin(u.id) : userFieldsSelf(u.id);
-      const fields = resetPassword ? baseFields : baseFields.concat(passwordFields('Nouveau mot de passe (optionnel)', false));
-      const legacyNote = legacy ? `<div class="field-note" style="margin:-4px 0 14px;">L'identifiant « @${esc(u.username)} » n'est plus au format accepté (2 à 32 caractères : lettres, chiffres, . _ -). Un nouvel identifiant est proposé ci-dessus, modifiable.${resetPassword ? ` À l'enregistrement, un mot de passe à usage unique sera généré : ${esc(u.displayName)} devra le changer à sa première connexion.` : ''}</div>` : '';
-      openModal('Modifier le compte', fields, legacy ? {...u, username:suggestUsername(u)} : u, async (data)=>{
-        if(reportFieldErrors(fieldRequiredErrors(fields, data).concat(userFieldErrors(data)))) return false;
-        const newUsername = (data.username||u.username).trim().toLowerCase();
-        if(isAdmin()){
-          if(authState.users.some(x=>x.id!==u.id && x.username===newUsername)){
-            markFieldError('username','Cet identifiant existe déjà'); toast('Cet identifiant existe déjà'); return false;
-          }
-          if(u.role==='admin' && data.role!=='admin' && authState.users.filter(x=>x.role==='admin').length<=1){
-            markFieldError('role','Il doit rester au moins un administrateur'); toast('Impossible de rétrograder le dernier admin'); return false;
-          }
-        }
-        u.displayName = data.displayName.trim();
-        if(isAdmin()){ u.username = newUsername; u.role = data.role||u.role; }
-        const tempPassword = resetPassword ? generateTempPassword() : null;
-        const newPassword = tempPassword || data.password;
-        if(newPassword){ u.salt = randomSalt(); u.passwordHash = await hashPassword(newPassword, u.salt); }
-        if(tempPassword) u.mustChangePassword = true;
-        // Son propre mot de passe : cet appareil reste connecté, les autres non.
-        if(newPassword && u.id===getSession()?.userId) refreshSessionStamp();
-        await persistAuth(); await render();
-        // Affiché après la fermeture de ce formulaire (closeModal suit le retour de onSave).
-        if(tempPassword) setTimeout(()=>showTempPasswordModal(u, tempPassword), 0);
-        else toast('Compte mis à jour'); }, legacyNote); break; }
-    case 'del-user': { const u=find(authState.users); if(u.role==='admin' && authState.users.filter(x=>x.role==='admin').length<=1) return toast('Impossible de supprimer le dernier admin');
-      confirmDelete(u.displayName, async ()=>{
-        supprimerCompte(id);
-        await Promise.all([persistAuth(), persistSocial(), persist()]); await render(); toast('Compte et données supprimés'); }); break; }
-
-    /* Comptes : export ciblé et purge de données par l'admin */
-    case 'export-user-data': exportUserData(id); toast('Export téléchargé'); break;
-    case 'wipe-user-data': { const u=find(authState.users); const soi = u.id===currentUser().id;
-      if(!soi && !isAdmin()) break;
-      confirmDelete(soi ? 'mes données' : `les données de ${u.displayName}`, async ()=>{
-        wipeUserData(id);
-        if(soi){ releveSession = null; releveSauverSession(); }
-        await persist(); await render(); toast('Données vidées'); },
-        soi ? {title:'Vider mes données ?', consequence:'Tes revenus et dépenses seront effacés. Ton compte et tes identifiants sont conservés. Cette action est définitive.', confirmLabel:'Vider mes données'} : undefined); break; }
-
-    /* Comptes : demandes des membres (export / suppression) */
-    case 'request-export': {
-      const me = currentUser();
-      if(myPendingAccountRequest('export')) return toast('Déjà demandé, en attente.');
-      socialState.accountRequests.push({id:uid(), fromId:me.id, type:'export', status:'pending', createdAt:new Date().toISOString()});
-      await persistSocial(); await render(); toast('Demande envoyée à un administrateur'); break; }
-    case 'request-reset-data': {
-      const me = currentUser();
-      if(myPendingAccountRequest('reset')) return toast('Déjà demandé, en attente.');
-      socialState.accountRequests.push({id:uid(), fromId:me.id, type:'reset', status:'pending', createdAt:new Date().toISOString()});
-      await persistSocial(); await render(); toast('Demande envoyée à un administrateur'); break; }
-    case 'request-delete-account': {
-      const me = currentUser();
-      if(myPendingAccountRequest('delete')) return toast('Déjà demandé, en attente.');
-      socialState.accountRequests.push({id:uid(), fromId:me.id, type:'delete', status:'pending', createdAt:new Date().toISOString()});
-      await persistSocial(); await render(); toast('Demande envoyée à un administrateur'); break; }
-    case 'approve-account-request': {
-      const req = socialState.accountRequests.find(r=>r.id===id);
-      if(!req) break;
-      const u = authState.users.find(x=>x.id===req.fromId);
-      if(req.type==='export'){
-        // On n'exporte plus directement côté admin : on approuve, et c'est la
-        // personne concernée qui télécharge elle-même, une seule fois.
-        req.status='approved'; await persistSocial(); await render(); renderNotifPanel(); toast('Demande approuvée — la personne peut maintenant télécharger ses données.'); break;
-      }
-      if(req.type==='reset'){
-        // "Reset" : on vide les données mais on garde le compte (identifiants intacts).
-        confirmDelete(u ? `les données de ${u.displayName} (demande approuvée)` : 'ces données', async ()=>{
-          if(u) wipeUserData(u.id);
-          req.status='done';
-          socialState.accountRequests = socialState.accountRequests.filter(r=>r.id!==req.id);
-          await Promise.all([persistSocial(), persist()]); await render(); renderNotifPanel(); toast('Données réinitialisées'); });
-        break;
-      }
-      // type 'delete' : on redemande une confirmation explicite avant d'agir, c'est irréversible
-      confirmDelete(u ? `le compte de ${u.displayName} (demande approuvée)` : 'ce compte', async ()=>{
-        if(u) supprimerCompte(u.id);
-        req.status='done';
-        socialState.accountRequests = socialState.accountRequests.filter(r=>r.id!==req.id);
-        await Promise.all([persistAuth(), persistSocial(), persist()]); await render(); renderNotifPanel(); toast('Compte supprimé'); });
-      break; }
-    case 'decline-account-request': {
-      const req = socialState.accountRequests.find(r=>r.id===id);
-      if(req) req.status='declined';
-      await persistSocial(); await render(); renderNotifPanel(); toast('Demande refusée'); break; }
-    case 'download-my-export': {
-      const req = myApprovedExportRequest();
-      if(!req) break;
-      exportUserData(currentUser().id);
-      socialState.accountRequests = socialState.accountRequests.filter(r=>r.id!==req.id); // usage unique : la demande disparaît après téléchargement
-      await persistSocial(); await render(); renderNotifPanel(); toast('Téléchargement effectué'); break; }
-
-    /* Notifications */
-    case 'toggle-notif-panel': toggleNotifPanel(); break;
-    case 'enable-browser-notif': await enableBrowserNotifications(); await render(); break;
-
-    /* Synchronisation GitHub */
-    case 'gh-connect': {
-      const token = document.getElementById('gh-token').value.trim();
-      if(!token) return toast('Renseigne le jeton d\u2019accès');
-      if(!(await isValidGhToken(token))) return toast('Ce jeton ne correspond pas au jeton attendu pour ce budget');
-      try{
-        await ghTestAndConnect(token);
-        await ghPush(); // crée le fichier avec les données actuelles si le dépôt était vide
-        await render(); toast('GitHub connecté');
-      }catch(e){ toast('Connexion impossible — vérifie le jeton'); }
-      break; }
-    case 'gh-sync-now': { await ghPull(); await ghPush(); await render(); toast(ghLastError || 'Synchronisé'); break; }
-    case 'export-data': exportData(); break;
-    case 'import-data': document.getElementById('import-file-input').click(); break;
-
-    /* Assistant Claude */
-    case 'save-claude-key': { const v = document.getElementById('claude-key-input').value.trim(); if(!v) return; localStorage.setItem('claude_api_key', v); updateFab(); await render(); toast('Assistant activé'); break; }
-    case 'remove-claude-key': localStorage.removeItem('claude_api_key'); updateFab(); await render(); toast('Clé retirée'); break;
+/* ---- Tableaux : sélection multiple, tri et filtres de colonne ---- */
+function actionBulkDelete(id, el){
+  bulkDelete(el.dataset.bulk);
+}
+function actionBulkClear(id, el){
+  bulkSet(el.dataset.bulk).clear(); syncBulkUI();
+}
+function actionBulkSelectAll(id, el){
+  const sel = bulkSet(el.dataset.bulk); bulkIdsShown(el.dataset.bulk).forEach(id=>sel.add(id)); syncBulkUI();
+}
+async function actionClearTableFilter(id, el){
+  state.tableFilters[el.dataset.table] = { sortCol:null, sortDir:'asc', selected:{} }; await persist(); await render();
+}
+async function actionToggleColFilter(id, el){
+  const table = el.dataset.table, col = el.dataset.col;
+  if(colFilterOpen && colFilterOpen.table===table && colFilterOpen.col===col){ colFilterOpen = null; }
+  else{
+    colFilterOpen = { table, col };
+    colFilterSearch = '';
+    const spec = tableSpec(table);
+    const f = tableFilterState(table);
+    const arr = spec.getArray();
+    const all = colDistinctValues(table, spec.columns, col, arr);
+    colFilterPending = new Set(f.selected[col] || all);
   }
+  await render();
+}
+async function actionColSort(id, el){
+  const f = tableFilterState(el.dataset.table);
+  f.sortCol = el.dataset.col; f.sortDir = el.dataset.dir;
+  colFilterOpen = null;
+  await persist(); await render();
+}
+async function actionColFilterToggleAll(){
+  const { table, col } = colFilterOpen;
+  const spec = tableSpec(table);
+  const arr = spec.getArray();
+  const shown = colFilterSearch ? colDistinctValues(table, spec.columns, col, arr).filter(v=>v.toLowerCase().includes(colFilterSearch.toLowerCase())) : colDistinctValues(table, spec.columns, col, arr);
+  const allChecked = shown.every(v=>colFilterPending.has(v));
+  shown.forEach(v=>{ if(allChecked) colFilterPending.delete(v); else colFilterPending.add(v); });
+  await render();
+}
+async function actionColFilterToggleValue(id, el){
+  const v = el.dataset.value;
+  if(colFilterPending.has(v)) colFilterPending.delete(v); else colFilterPending.add(v);
+  await render();
+}
+async function actionColFilterOk(){
+  const { table, col } = colFilterOpen;
+  const spec = tableSpec(table);
+  const arr = spec.getArray();
+  const all = colDistinctValues(table, spec.columns, col, arr);
+  const f = tableFilterState(table);
+  // Si tout est coché, ça revient à "pas de filtre" sur cette colonne.
+  f.selected[col] = (colFilterPending.size===all.length) ? null : Array.from(colFilterPending);
+  colFilterOpen = null; colFilterPending = null; colFilterSearch = '';
+  await persist(); await render();
+}
+async function actionColFilterCancel(){
+  colFilterOpen = null; colFilterPending = null; colFilterSearch = '';
+  await render();
+}
+const actionsTableaux = {
+  'bulk-delete': actionBulkDelete,
+  'bulk-clear': actionBulkClear,
+  'bulk-select-all': actionBulkSelectAll,
+  'clear-table-filter': actionClearTableFilter,
+  'toggle-col-filter': actionToggleColFilter,
+  'col-sort': actionColSort,
+  'col-filter-toggle-all': actionColFilterToggleAll,
+  'col-filter-toggle-value': actionColFilterToggleValue,
+  'col-filter-ok': actionColFilterOk,
+  'col-filter-cancel': actionColFilterCancel,
+};
+
+/* ---- Filtre des graphiques du tableau de bord (dimension + exclusion de valeurs) ---- */
+async function actionToggleChartFilter(id, el){
+  const chartKey = el.dataset.chart;
+  if(chartFilterOpen === chartKey){ chartFilterOpen = null; }
+  else{
+    chartFilterOpen = chartKey;
+    colFilterSearch = '';
+    const f = chartFilterState(chartKey);
+    chartFilterPendingDim = f.dim;
+    const all = chartDistinctValuesForDim(chartItemsFor(chartKey), f.dim);
+    const excluded = new Set(f.excluded[f.dim] || []);
+    chartFilterPendingChecked = new Set(all.filter(v=>!excluded.has(v)));
+  }
+  await render();
+}
+async function actionChartFilterSetDim(id, el){
+  const chartKey = el.dataset.chart, dim = el.dataset.dim;
+  chartFilterPendingDim = dim;
+  colFilterSearch = '';
+  const f = chartFilterState(chartKey);
+  const all = chartDistinctValuesForDim(chartItemsFor(chartKey), dim);
+  const excluded = new Set(f.excluded[dim] || []);
+  chartFilterPendingChecked = new Set(all.filter(v=>!excluded.has(v)));
+  await render();
+}
+async function actionChartFilterToggleAll(id, el){
+  const chartKey = el.dataset.chart;
+  const all = chartDistinctValuesForDim(chartItemsFor(chartKey), chartFilterPendingDim);
+  const shown = colFilterSearch ? all.filter(v=>v.toLowerCase().includes(colFilterSearch.toLowerCase())) : all;
+  const allChecked = shown.every(v=>chartFilterPendingChecked.has(v));
+  shown.forEach(v=>{ if(allChecked) chartFilterPendingChecked.delete(v); else chartFilterPendingChecked.add(v); });
+  await render();
+}
+async function actionChartFilterToggleValue(id, el){
+  const v = el.dataset.value;
+  if(chartFilterPendingChecked.has(v)) chartFilterPendingChecked.delete(v); else chartFilterPendingChecked.add(v);
+  await render();
+}
+async function actionChartFilterOk(id, el){
+  const chartKey = el.dataset.chart;
+  const dim = chartFilterPendingDim;
+  const all = chartDistinctValuesForDim(chartItemsFor(chartKey), dim);
+  const f = chartFilterState(chartKey);
+  f.dim = dim;
+  f.excluded[dim] = (chartFilterPendingChecked.size===all.length) ? [] : all.filter(v=>!chartFilterPendingChecked.has(v));
+  chartFilterOpen = null; chartFilterPendingDim = null; chartFilterPendingChecked = null; colFilterSearch = '';
+  await persist(); await render();
+}
+async function actionChartFilterCancel(){
+  chartFilterOpen = null; chartFilterPendingDim = null; chartFilterPendingChecked = null; colFilterSearch = '';
+  await render();
+}
+async function actionClearChartFilter(id, el){
+  const f = chartFilterState(el.dataset.chart);
+  f.excluded = {categorie:[], libelle:[]};
+  await persist(); await render();
+}
+const actionsGraphiques = {
+  'toggle-chart-filter': actionToggleChartFilter,
+  'chart-filter-set-dim': actionChartFilterSetDim,
+  'chart-filter-toggle-all': actionChartFilterToggleAll,
+  'chart-filter-toggle-value': actionChartFilterToggleValue,
+  'chart-filter-ok': actionChartFilterOk,
+  'chart-filter-cancel': actionChartFilterCancel,
+  'clear-chart-filter': actionClearChartFilter,
+};
+
+/* ---- Analyse ---- */
+async function actionRunAnalyse(){
+  const val = document.getElementById('analyse-search').value;
+  state.analyseTerm = val; state.analyseCats = []; await persist(); await render();
+}
+async function actionAnalysePick(id, el){
+  state.analyseTerm = el.dataset.term; state.analyseCats = []; await persist(); await render();
+}
+async function actionAnalyseClearCat(){
+  state.analyseCats = []; state.analyseCatLabel = ''; await persist(); await render();
+}
+const actionsAnalyse = {
+  'run-analyse': actionRunAnalyse,
+  'analyse-pick': actionAnalysePick,
+  'analyse-clear-cat': actionAnalyseClearCat,
+};
+
+/* ---- Tableau de bord ---- */
+function actionCatCouleur(id, el){
+  const pal = catPalette(Number(el.dataset.year) || dashYear());
+  const noms = new Set(myCategoriesDep().map(c=>c.nom));
+  const cats = pal.categoriesDe(el.dataset.g).filter(c=>noms.has(c));
+  if(!cats.length){ toast('Cette catégorie n’existe plus : crée-la pour lui donner une couleur'); return; }
+  openCatCouleur(cats);
+}
+function actionFocusPoste(id, el){
+  // Met en avant le segment du poste, sans redessiner la vue.
+  dashFocusPoste = dashFocusPoste===el.dataset.k ? null : el.dataset.k;
+  document.querySelectorAll('#view .poste').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.k===dashFocusPoste)));
+  const flow = document.querySelector('#view .flow');
+  if(flow){ flow.classList.toggle('has-focus', !!dashFocusPoste); flow.querySelectorAll('.seg').forEach(sg=>sg.classList.toggle('hl', sg.dataset.k===dashFocusPoste)); }
+}
+async function actionGotoMonth(id, el){
+  // Colonne de l'année : affiche ce mois (depuis la Vue annuelle, ouvre son tableau de bord).
+  if(currentView==='annuelle'){ state.selectedMonth = el.dataset.k; persist(); await navigateTo('dashboard'); }
+  else await changeMonth(el.dataset.k);
+}
+const actionsDashboard = {
+  'cat-couleur': actionCatCouleur,
+  'focus-poste': actionFocusPoste,
+  'goto-month': actionGotoMonth,
+};
+
+/* ---- Navigation : espaces, menu latéral, sections des paramètres ---- */
+async function actionSwitchSpace(id, el){
+  currentSpace = el.dataset.space; currentView = defaultViewForSpace(currentSpace); await render();
+}
+async function actionParamSection(id, el){
+  paramSection = el.dataset.sec; await withTransition('view', 0, ()=>render());
+}
+async function actionToggleSidebarCollapse(){
+  state.navCollapsed = !state.navCollapsed; await persist(); await render();
+}
+async function actionNavMove(id, el){
+  const ids = orderedNavItems().map(n=>n.id), i = ids.indexOf(id), j = i + Number(el.dataset.dir);
+  if(i<0 || j<0 || j>=ids.length) return;
+  await moveNavItem(id, ids[j], Number(el.dataset.dir)>0 ? 'after' : 'before');
+  document.querySelector(`[data-action="nav-move"][data-id="${id}"][data-dir="${el.dataset.dir}"]:not(:disabled)`)?.focus();
+}
+async function actionResetNavOrder(id, el){
+  if(state.navOrder) state.navOrder[el.dataset.space||currentSpace] = null; await persist(); await render();
+}
+const actionsNavigation = {
+  'switch-space': actionSwitchSpace,
+  'param-section': actionParamSection,
+  'toggle-sidebar-collapse': actionToggleSidebarCollapse,
+  'nav-move': actionNavMove,
+  'reset-nav-order': actionResetNavOrder,
+};
+
+/* ---- Import de relevé ---- */
+async function actionReleveValider(id){
+  releveFocusApres = releveIndexLigne(id); await releveValider([id]);
+}
+async function actionReleveIgnorer(id){
+  const l = releveSession && releveSession.lignes.find(x=>x.id===id);
+  if(l){ l.v.type = 'ignorer'; releveFocusApres = releveIndexLigne(id); await releveValider([id]); }
+}
+async function actionReleveAbo(id){
+  const l = releveSession && releveSession.lignes.find(x=>x.id===id);
+  if(l && l.v.type==='depense'){
+    l.v.abo = !l.v.abo;
+    if(l.v.abo){
+      l.v.ppf = false; l.v.chg = false;
+      // Un prélèvement attendu chez ce commerçant est proposé d'office ; le menu permet d'en choisir un autre.
+      if(!l.aboSerieId && !l.aboChoisi){
+        const pris = new Set(releveSession.lignes.filter(x=>x!==l && x.etat==='attente' && x.aboPrevId).map(x=>x.aboPrevId));
+        const attendu = releveAboAttendu({montant:-Math.abs(l.montant), date:l.date}, l.cle, l.v.libelle, pris);
+        if(attendu) releveChoisirAbo(l, attendu.aboId);
+      }
+    }
+    releveSauverSession(); await render(); document.querySelector(`[data-action="releve-abo"][data-id="${id}"]`)?.focus();
+  }
+}
+async function actionReleveChg(id){
+  const l = releveSession && releveSession.lignes.find(x=>x.id===id);
+  if(l && l.v.type==='depense'){
+    l.v.chg = !l.v.chg;
+    if(l.v.chg){
+      l.v.abo = false; l.v.ppf = false; delete l.erreur;
+      // Une échéance attendue chez ce fournisseur est proposée d'office ; le menu permet d'en choisir une autre.
+      if(!l.chgSerieId && !l.chgChoisi){
+        const pris = new Set(releveSession.lignes.filter(x=>x!==l && x.etat==='attente' && x.chgPrevId).map(x=>x.chgPrevId));
+        const attendue = releveChgAttendu({montant:-Math.abs(l.montant), date:l.date}, l.cle, l.v.libelle, pris);
+        if(attendue) releveChoisirChg(l, attendue.chgId);
+      }
+    }
+    releveSauverSession(); await render(); document.querySelector(`[data-action="releve-chg"][data-id="${id}"]`)?.focus();
+  }
+}
+async function actionRelevePpf(id){
+  // « En plusieurs fois » : le montant total est demandé aussitôt.
+  const l = releveSession && releveSession.lignes.find(x=>x.id===id);
+  if(l && l.v.type==='depense'){
+    l.v.ppf = !l.v.ppf; if(l.v.ppf){ l.v.abo = false; l.v.chg = false; } delete l.erreur;
+    // Une mensualité attendue chez ce commerçant est proposée d'office ; le menu permet d'en choisir une autre.
+    if(l.v.ppf && !l.ppfSerieId && !l.ppfChoisi){
+      const pris = new Set(releveSession.lignes.filter(x=>x!==l && x.etat==='attente' && x.ppfPrevId).map(x=>x.ppfPrevId));
+      const attendue = relevePpfAttendu({montant:-Math.abs(l.montant), date:l.date}, l.cle, l.v.libelle, pris);
+      if(attendue) releveChoisirPpf(l, attendue.ppfId);
+    }
+    releveSauverSession(); await render();
+    document.querySelector(l.v.ppf && !l.v.ppfTotal ? `.rl-row[data-rl-row="${id}"] [data-rl-champ="ppfTotal"]` : `[data-action="releve-ppf"][data-id="${id}"]`)?.focus();
+  }
+}
+async function actionReleveSigne(id){
+  if(releveInverserSigne(id)){
+    const n = releveApprendreColonne(id);
+    releveFocusApres = null; await render(); document.querySelector(`[data-action="releve-signe"][data-id="${id}"]`)?.focus();
+    if(n) toast(`Colonne corrigée · ${fmtCount(n, 'autre ligne inversée', 'autres lignes inversées')}`);
+  }
+}
+async function actionReleveFiltre(id, el){
+  releveFiltre.conf = releveFiltre.conf===el.dataset.conf ? '' : el.dataset.conf;
+  releveAffichees = RELEVE_TRANCHE;
+  await render();
+  document.querySelector(`[data-action="releve-filtre"][data-conf="${releveFiltre.conf}"]`)?.focus();
+}
+async function actionReleveTri(id, el){
+  releveFiltre.tri = el.dataset.tri;
+  releveAffichees = RELEVE_TRANCHE;
+  await render();
+  document.querySelector(`[data-action="releve-tri"][data-tri="${releveFiltre.tri}"]`)?.focus();
+}
+async function actionReleveFiltreEffacer(){
+  releveFiltre = {...releveFiltre, q:'', conf:''}; releveAffichees = RELEVE_TRANCHE;
+  await render(); document.getElementById('releve-recherche')?.focus();
+}
+async function actionReleveValiderAffichees(){
+  await releveValider(releveLignesFiltrees((releveSession?.lignes||[]).filter(l=>l.etat==='attente')).map(l=>l.id));
+}
+async function actionReleveValiderGroupe(id, el){
+  await releveValider(releveLignesFiltrees((releveSession?.lignes||[]).filter(l=>l.etat==='attente')).filter(l=>releveGroupeDe(l)===el.dataset.groupe).map(l=>l.id));
+}
+async function actionReleveValiderSurs(){
+  await releveValider((releveSession?.lignes||[]).filter(l=>l.etat==='attente' && l.confiance==='sur').map(l=>l.id));
+}
+async function actionReleveValiderTout(){
+  await releveValider((releveSession?.lignes||[]).filter(l=>l.etat==='attente').map(l=>l.id));
+}
+async function actionRelevePlus(){
+  releveAffichees += RELEVE_TRANCHE;
+  releveFocusApres = releveAffichees - RELEVE_TRANCHE; // le focus va sur la première ligne ajoutée
+  await render();
+}
+async function actionReleveFermer(){
+  const reste = releveSession ? releveSession.lignes.filter(l=>l.etat==='attente').length : 0;
+  const fermer = async ()=>{ releveSession = null; releveSauverSession(); await render(); };
+  if(reste) confirmDelete('', fermer, {title:'Abandonner cet import ?', consequence:`${fmtCount(reste, 'ligne non validée est', 'lignes non validées sont')} laissée${reste>1?'s':''} de côté. Les opérations déjà validées restent dans ton budget.`, confirmLabel:'Abandonner'});
+  else await fermer();
+}
+async function actionReleveColler(){
+  const texte = (document.getElementById('releve-texte')?.value||'').trim();
+  if(!texte){ toast('Colle d’abord le texte du relevé'); return; }
+  await releveDemarrer('Texte collé', releveAnalyserTexte(texte, releveModele(false)));
+}
+async function actionReleveOublier(id, el){
+  const m = releveModele(false), cle = el.dataset.cle;
+  if(m.regles && m.regles[cle]){ delete m.regles[cle]; await persist(); await render(); toast('Règle oubliée'); }
+}
+async function actionReleveOublierTout(){
+  confirmDelete('', async ()=>{
+    const me = currentUser();
+    state.importApprentissage = (state.importApprentissage||[]).filter(x=>x.ownerId!==me.id);
+    await persist(); await render(); toast('Apprentissage remis à zéro');
+  }, {title:'Tout oublier ?', consequence:'Les formats de fichier, commerçants et catégories appris pour l’import de relevé seront effacés. Tes saisies ne changent pas.', confirmLabel:'Tout oublier'});
+}
+const actionsReleve = {
+  'releve-valider': actionReleveValider,
+  'releve-ignorer': actionReleveIgnorer,
+  'releve-abo': actionReleveAbo,
+  'releve-chg': actionReleveChg,
+  'releve-ppf': actionRelevePpf,
+  'releve-signe': actionReleveSigne,
+  'releve-filtre': actionReleveFiltre,
+  'releve-tri': actionReleveTri,
+  'releve-filtre-effacer': actionReleveFiltreEffacer,
+  'releve-valider-affichees': actionReleveValiderAffichees,
+  'releve-valider-groupe': actionReleveValiderGroupe,
+  'releve-valider-surs': actionReleveValiderSurs,
+  'releve-valider-tout': actionReleveValiderTout,
+  'releve-plus': actionRelevePlus,
+  'releve-fermer': actionReleveFermer,
+  'releve-coller': actionReleveColler,
+  'releve-oublier': actionReleveOublier,
+  'releve-oublier-tout': actionReleveOublierTout,
+};
+
+/* ---- Comptes : connexion, gestion, export et purge, demandes des membres ---- */
+async function actionLogout(){
+  stopPolling(); clearSession(); await boot(); toast('Déconnecté');
+}
+function actionToggleUserActions(id, el){
+  const row = el.closest('.user-row');
+  const open = !row.classList.contains('actions-open');
+  closeUserActionMenus(row);
+  row.classList.toggle('actions-open', open);
+  el.setAttribute('aria-expanded', String(open));
+}
+async function actionAddUser(){
+  const addUserFields = userFieldsAdmin(null).concat(passwordFields('Mot de passe', true));
+    openModal('Ajouter un compte', addUserFields, {role:'membre'}, async (data)=>{
+    if(reportFieldErrors(fieldRequiredErrors(addUserFields, data).concat(userFieldErrors(data)))) return false;
+    if(authState.users.some(u=>u.username===data.username.trim().toLowerCase())){ markFieldError('username','Cet identifiant existe déjà'); toast('Cet identifiant existe déjà'); return false; }
+    const salt = randomSalt();
+    const passwordHash = await hashPassword(data.password, salt);
+    const newUser = {id:uid(), username:data.username.trim().toLowerCase(), displayName:data.displayName.trim(), role:data.role, salt, passwordHash};
+    authState.users.push(newUser);
+    seedDefaultCategoriesDep(newUser.id);
+    seedDefaultCategoriesRev(newUser.id);
+    await Promise.all([persistAuth(), persist()]); await render(); toast('Compte créé — pense à transmettre le jeton d\u2019accès à cette personne par email, il lui sera demandé à sa première connexion.'); });
+}
+async function actionEditUser(id){
+  const u = parId(authState.users, id);
+  // Identifiant à l'ancien format (antérieur au motif actuel) : l'admin doit le
+  // remplacer. Comme l'identifiant de connexion change, la personne reçoit un
+  // mot de passe à usage unique, à changer à sa première connexion.
+  const legacy = isAdmin() && !isValidUsername(u.username);
+  const resetPassword = legacy && u.id!==currentUser().id;
+  const baseFields = isAdmin() ? userFieldsAdmin(u.id) : userFieldsSelf(u.id);
+  const fields = resetPassword ? baseFields : baseFields.concat(passwordFields('Nouveau mot de passe (optionnel)', false));
+  const legacyNote = legacy ? `<div class="field-note" style="margin:-4px 0 14px;">L'identifiant « @${esc(u.username)} » n'est plus au format accepté (2 à 32 caractères : lettres, chiffres, . _ -). Un nouvel identifiant est proposé ci-dessus, modifiable.${resetPassword ? ` À l'enregistrement, un mot de passe à usage unique sera généré : ${esc(u.displayName)} devra le changer à sa première connexion.` : ''}</div>` : '';
+  openModal('Modifier le compte', fields, legacy ? {...u, username:suggestUsername(u)} : u, async (data)=>{
+    if(reportFieldErrors(fieldRequiredErrors(fields, data).concat(userFieldErrors(data)))) return false;
+    const newUsername = (data.username||u.username).trim().toLowerCase();
+    if(isAdmin()){
+      if(authState.users.some(x=>x.id!==u.id && x.username===newUsername)){
+        markFieldError('username','Cet identifiant existe déjà'); toast('Cet identifiant existe déjà'); return false;
+      }
+      if(u.role==='admin' && data.role!=='admin' && authState.users.filter(x=>x.role==='admin').length<=1){
+        markFieldError('role','Il doit rester au moins un administrateur'); toast('Impossible de rétrograder le dernier admin'); return false;
+      }
+    }
+    u.displayName = data.displayName.trim();
+    if(isAdmin()){ u.username = newUsername; u.role = data.role||u.role; }
+    const tempPassword = resetPassword ? generateTempPassword() : null;
+    const newPassword = tempPassword || data.password;
+    if(newPassword){ u.salt = randomSalt(); u.passwordHash = await hashPassword(newPassword, u.salt); }
+    if(tempPassword) u.mustChangePassword = true;
+    // Son propre mot de passe : cet appareil reste connecté, les autres non.
+    if(newPassword && u.id===getSession()?.userId) refreshSessionStamp();
+    await persistAuth(); await render();
+    // Affiché après la fermeture de ce formulaire (closeModal suit le retour de onSave).
+    if(tempPassword) setTimeout(()=>showTempPasswordModal(u, tempPassword), 0);
+    else toast('Compte mis à jour'); }, legacyNote);
+}
+async function actionDelUser(id){
+  const u=parId(authState.users, id); if(u.role==='admin' && authState.users.filter(x=>x.role==='admin').length<=1) return toast('Impossible de supprimer le dernier admin');
+  confirmDelete(u.displayName, async ()=>{
+    supprimerCompte(id);
+    await Promise.all([persistAuth(), persistSocial(), persist()]); await render(); toast('Compte et données supprimés'); });
+}
+function actionExportUserData(id){
+  exportUserData(id); toast('Export téléchargé');
+}
+async function actionWipeUserData(id){
+  const u=parId(authState.users, id); const soi = u.id===currentUser().id;
+  if(!soi && !isAdmin()) return;
+  confirmDelete(soi ? 'mes données' : `les données de ${u.displayName}`, async ()=>{
+    wipeUserData(id);
+    if(soi){ releveSession = null; releveSauverSession(); }
+    await persist(); await render(); toast('Données vidées'); },
+    soi ? {title:'Vider mes données ?', consequence:'Tes revenus et dépenses seront effacés. Ton compte et tes identifiants sont conservés. Cette action est définitive.', confirmLabel:'Vider mes données'} : undefined);
+}
+async function actionRequestExport(){
+  const me = currentUser();
+  if(myPendingAccountRequest('export')) return toast('Déjà demandé, en attente.');
+  socialState.accountRequests.push({id:uid(), fromId:me.id, type:'export', status:'pending', createdAt:new Date().toISOString()});
+  await persistSocial(); await render(); toast('Demande envoyée à un administrateur');
+}
+async function actionRequestResetData(){
+  const me = currentUser();
+  if(myPendingAccountRequest('reset')) return toast('Déjà demandé, en attente.');
+  socialState.accountRequests.push({id:uid(), fromId:me.id, type:'reset', status:'pending', createdAt:new Date().toISOString()});
+  await persistSocial(); await render(); toast('Demande envoyée à un administrateur');
+}
+async function actionRequestDeleteAccount(){
+  const me = currentUser();
+  if(myPendingAccountRequest('delete')) return toast('Déjà demandé, en attente.');
+  socialState.accountRequests.push({id:uid(), fromId:me.id, type:'delete', status:'pending', createdAt:new Date().toISOString()});
+  await persistSocial(); await render(); toast('Demande envoyée à un administrateur');
+}
+async function actionApproveAccountRequest(id){
+  const req = socialState.accountRequests.find(r=>r.id===id);
+  if(!req) return;
+  const u = authState.users.find(x=>x.id===req.fromId);
+  if(req.type==='export'){
+    // On n'exporte plus directement côté admin : on approuve, et c'est la
+    // personne concernée qui télécharge elle-même, une seule fois.
+    req.status='approved'; await persistSocial(); await render(); renderNotifPanel(); toast('Demande approuvée — la personne peut maintenant télécharger ses données.'); return;
+  }
+  if(req.type==='reset'){
+    // "Reset" : on vide les données mais on garde le compte (identifiants intacts).
+    confirmDelete(u ? `les données de ${u.displayName} (demande approuvée)` : 'ces données', async ()=>{
+      if(u) wipeUserData(u.id);
+      req.status='done';
+      socialState.accountRequests = socialState.accountRequests.filter(r=>r.id!==req.id);
+      await Promise.all([persistSocial(), persist()]); await render(); renderNotifPanel(); toast('Données réinitialisées'); });
+    return;
+  }
+  // type 'delete' : on redemande une confirmation explicite avant d'agir, c'est irréversible
+  confirmDelete(u ? `le compte de ${u.displayName} (demande approuvée)` : 'ce compte', async ()=>{
+    if(u) supprimerCompte(u.id);
+    req.status='done';
+    socialState.accountRequests = socialState.accountRequests.filter(r=>r.id!==req.id);
+    await Promise.all([persistAuth(), persistSocial(), persist()]); await render(); renderNotifPanel(); toast('Compte supprimé'); });
+}
+async function actionDeclineAccountRequest(id){
+  const req = socialState.accountRequests.find(r=>r.id===id);
+  if(req) req.status='declined';
+  await persistSocial(); await render(); renderNotifPanel(); toast('Demande refusée');
+}
+async function actionDownloadMyExport(id){
+  const req = myApprovedExportRequest();
+  if(!req) return;
+  exportUserData(currentUser().id);
+  socialState.accountRequests = socialState.accountRequests.filter(r=>r.id!==req.id); // usage unique : la demande disparaît après téléchargement
+  await persistSocial(); await render(); renderNotifPanel(); toast('Téléchargement effectué');
+}
+const actionsComptes = {
+  'logout': actionLogout,
+  'toggle-user-actions': actionToggleUserActions,
+  'add-user': actionAddUser,
+  'edit-user': actionEditUser,
+  'del-user': actionDelUser,
+  'export-user-data': actionExportUserData,
+  'wipe-user-data': actionWipeUserData,
+  'request-export': actionRequestExport,
+  'request-reset-data': actionRequestResetData,
+  'request-delete-account': actionRequestDeleteAccount,
+  'approve-account-request': actionApproveAccountRequest,
+  'decline-account-request': actionDeclineAccountRequest,
+  'download-my-export': actionDownloadMyExport,
+};
+
+/* ---- Notifications ---- */
+function actionToggleNotifPanel(){
+  toggleNotifPanel();
+}
+async function actionEnableBrowserNotif(){
+  await enableBrowserNotifications(); await render();
+}
+const actionsNotif = {
+  'toggle-notif-panel': actionToggleNotifPanel,
+  'enable-browser-notif': actionEnableBrowserNotif,
+};
+
+/* ---- Stockage : synchronisation GitHub, export et import de fichier ---- */
+async function actionGhConnect(){
+  const token = document.getElementById('gh-token').value.trim();
+  if(!token) return toast('Renseigne le jeton d\u2019accès');
+  if(!(await isValidGhToken(token))) return toast('Ce jeton ne correspond pas au jeton attendu pour ce budget');
+  try{
+    await ghTestAndConnect(token);
+    await ghPush(); // crée le fichier avec les données actuelles si le dépôt était vide
+    await render(); toast('GitHub connecté');
+  }catch(e){ toast('Connexion impossible — vérifie le jeton'); }
+}
+async function actionGhSyncNow(){
+  await ghPull(); await ghPush(); await render(); toast(ghLastError || 'Synchronisé');
+}
+function actionExportData(){
+  exportData();
+}
+function actionImportData(){
+  document.getElementById('import-file-input').click();
+}
+const actionsStockage = {
+  'gh-connect': actionGhConnect,
+  'gh-sync-now': actionGhSyncNow,
+  'export-data': actionExportData,
+  'import-data': actionImportData,
+};
+
+/* ---- Assistant Claude ---- */
+async function actionSaveClaudeKey(){
+  const v = document.getElementById('claude-key-input').value.trim(); if(!v) return; localStorage.setItem('claude_api_key', v); updateFab(); await render(); toast('Assistant activé');
+}
+async function actionRemoveClaudeKey(){
+  localStorage.removeItem('claude_api_key'); updateFab(); await render(); toast('Clé retirée');
+}
+const actionsAssistant = {
+  'save-claude-key': actionSaveClaudeKey,
+  'remove-claude-key': actionRemoveClaudeKey,
+};
+
+/* ---- Aiguillage des data-action ----
+   Chaque data-action est servie par une fonction `actionXxx(id, el)` inscrite dans la
+   table de son domaine ci-dessus. Ajouter une action = écrire sa fonction avec celles
+   du domaine et l'inscrire dans la table : handleAction ne change pas. */
+function parId(arr, id){ return arr.find(x=>x.id===id); }
+const ACTION_DOMAINES = {actionsRevenus, actionsDepenses, actionsAbo, actionsChg, actionsPpf, actionsTableaux, actionsGraphiques,
+  actionsAnalyse, actionsDashboard, actionsNavigation, actionsReleve, actionsComptes, actionsNotif, actionsStockage, actionsAssistant};
+const ACTIONS = Object.create(null); // sans prototype : data-action="toString" ne trouve rien
+for(const [domaine, table] of Object.entries(ACTION_DOMAINES)){
+  for(const [nom, fn] of Object.entries(table)){
+    if(ACTIONS[nom]) console.error(`data-action « ${nom} » déclarée deux fois (dont dans ${domaine})`);
+    ACTIONS[nom] = fn;
+  }
+}
+async function handleAction(action, id, el){
+  const fn = ACTIONS[action];
+  if(fn) return fn(id, el);
 }
 
 /* ============================== AUTH ============================== */

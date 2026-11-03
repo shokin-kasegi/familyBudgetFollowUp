@@ -165,6 +165,11 @@ for (const t of m.matchAll(tokRe)) {
   for (const o of owners) if (o.name !== t[1]) (kind === 'call' ? edges : refs).get(o.name).add(t[1]);
 }
 for (const f of fns.values()) if (f.iife) edges.get(GLOBAL).add(f.name);
+// Tables d'actions (`const actionsXxx = { 'nom': fonction, … }`) : handleAction appelle
+// leurs fonctions via ACTIONS[nom]. On le relie à chacune par une arête d'appel.
+if (edges.has('handleAction'))
+  for (const t of m.matchAll(/(?:const|let|var)\s+actions\w*\s*=\s*\{([^{}]*)\}/g))
+    for (const r of t[1].matchAll(/:\s*([A-Za-z_$][\w$]*)/g)) if (fns.has(r[1])) edges.get('handleAction').add(r[1]);
 for (const [n, s] of refs) for (const x of edges.get(n)) s.delete(x); // un appel prime sur une référence
 const all = [...nodes.keys()];
 const callers = new Map(all.map(n => [n, []])), referrers = new Map(all.map(n => [n, []]));
