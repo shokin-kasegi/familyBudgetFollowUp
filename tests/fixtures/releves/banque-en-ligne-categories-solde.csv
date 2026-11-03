@@ -1,0 +1,5 @@
+dateOp;dateVal;label;category;categoryParent;supplierFound;amount;comment;accountNum;accountLabel;accountbalance
+2026-10-28;2026-10-28;"CARTE 27/10/26 STATION SERVICE CB*1234";"Carburant";"Auto & Transports";"station service";-58,40;;00000000001;"COMPTE";1 540,10
+2026-10-25;2026-10-25;"VIR INST DE MME MARTIN";"Virements reçus";"Virements";"";150,00;;00000000001;"COMPTE";1 598,50
+2026-10-20;2026-10-21;"PRLV SEPA OPERATEUR MOBILE";"Téléphone";"Abonnements";"operateur";-19,99;;00000000001;"COMPTE";1 448,50
+2026-10-18;2026-10-18;"CARTE 17/10/26 LIBRAIRIE CB*1234";"Livres";"Loisirs";"librairie";-23,00;;00000000001;"COMPTE";1 468,49
