@@ -1,0 +1,30 @@
+<!doctype html>
+<script>try{localStorage.getItem('x')}catch(e){}</script>
+<p>texte entre deux scripts</p>
+<script>
+const $ = id => document.getElementById(id);
+function viaTable(){ return 'a'; }
+function viaOnclick(){}
+function viaInterval(){}
+function viaListener(){}
+function viaListenerExpr(){}
+function viaSpread(){ return []; }
+function viaCallback(x){ return x; }
+function viaDestructure(a, {b=1}={}){ viaDestructureCible(); }
+function viaDestructureCible(){}
+const viaArrowLigne = c => !!viaArrowCible(c);
+const viaArrowCible = c => c;
+function vraimentMorte(){ return `${$('x')}`; }
+function render(){
+  const renderers = { table: viaTable };
+  $('b').onclick = viaOnclick;
+  setInterval(viaInterval, 1000);
+  [1].map(viaCallback);
+  viaDestructure(1);
+  viaArrowLigne(1);
+  return [...viaSpread()];
+}
+document.addEventListener('click', (e)=>{ if(e) viaListener(); });
+document.addEventListener('pointerup', ()=>viaListenerExpr());
+(async function init(){ render(); })();
+</script>
