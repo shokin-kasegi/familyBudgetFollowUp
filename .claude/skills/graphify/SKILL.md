@@ -24,9 +24,11 @@ node .claude/skills/graphify/scripts/graphify.mjs index.html [--focus <fonction>
 
 Détection : `function nom(…)`, `const|let|var nom = (…) => …` et `= function`.
 Chaînes, commentaires, templates et regex sont masqués avant l'appariement des
-accolades. Limites : les appels dynamiques (`obj[nom]()`, callbacks passés
-par référence sans parenthèses, `data-action` dispatchés par `handleAction`)
-ne sont pas vus — le signaler dans la réponse si c'est pertinent.
+accolades. Les tables d'actions (`const actionsXxx = { 'nom': actionNom, … }`)
+sont lues : `handleAction` y est relié à chaque fonction `actionXxx`, et
+`--focus actionPpfTotal` montre ce qu'une action appelle. Limites : les autres
+appels dynamiques (`obj[nom]()`, callbacks passés par référence sans
+parenthèses) ne sont pas vus — le signaler dans la réponse si c'est pertinent.
 
 ## Procédure
 
@@ -36,7 +38,7 @@ ne sont pas vus — le signaler dans la réponse si c'est pertinent.
 2. **Sans argument** : vue d'ensemble. Lancer `--json`, puis :
    - regrouper les fonctions par préfixe/domaine (`render*`, `open*Modal`,
      `releve*`, `sync*`, `persist/load*`, utilitaires `fmt*`, `esc`…) ;
-   - repérer les hubs (plus d'appelés : `handleAction`, `render*`) et les
+   - repérer les hubs (plus d'appelés : `handleAction` via ses tables, `render*`) et les
      fonctions les plus appelées (utilitaires critiques) ;
    - lister les fonctions jamais appelées (`calledBy` vide) comme candidates au
      code mort, en rappelant la limite des appels dynamiques (vérifier par

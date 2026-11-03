@@ -91,6 +91,14 @@ for (const f of fns.values()) {
   // exclut les fonctions imbriquées appelées uniquement dans leur propre définition
   edges.set(f.name, [...callees].sort());
 }
+// Tables d'actions (`const actionsXxx = { 'nom': fonction, … }`) : handleAction appelle
+// leurs fonctions par référence, ce que callRe ne voit pas. On ajoute ces arêtes.
+if (edges.has('handleAction')) {
+  const viaTables = new Set(edges.get('handleAction'));
+  for (const t of m.matchAll(/(?:const|let|var)\s+actions\w*\s*=\s*\{([^{}]*)\}/g))
+    for (const r of t[1].matchAll(/:\s*([A-Za-z_$][\w$]*)/g)) if (fns.has(r[1])) viaTables.add(r[1]);
+  edges.set('handleAction', [...viaTables].sort());
+}
 const callers = new Map(names.map(n => [n, []]));
 for (const [a, bs] of edges) for (const b of bs) callers.get(b).push(a);
 
