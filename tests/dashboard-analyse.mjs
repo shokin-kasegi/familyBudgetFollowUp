@@ -19,6 +19,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { exposerModules } from './outils/exposer-modules.mjs';
 
 // Playwright est installé globalement (pas de package.json) : require le trouve via NODE_PATH.
 const { chromium } = createRequire(import.meta.url)('playwright');
@@ -46,6 +47,7 @@ const num = s => { const t = String(s).replace(/[\s  €]/g,'').replace('−'
 
 async function openApp(browser, {width, height, hash='#dashboard/2026-09', reducedMotion='no-preference', seed=true}){
   const ctx = await browser.newContext({viewport:{width, height}, reducedMotion});
+  await exposerModules(ctx);
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e=>errors.push('pageerror: '+e.message));
@@ -61,7 +63,7 @@ async function openApp(browser, {width, height, hash='#dashboard/2026-09', reduc
       sessionStorage.setItem('seeded','1');
     }`);
   await page.goto(BASE + '/index.html' + hash);
-  await page.waitForSelector('#view > *', {timeout:10000}).catch(()=>{});
+  await page.waitForSelector('#view > *', {timeout:10000}).catch(()=>{}); await page.evaluate(()=>window.__modulesExposes);
   await page.waitForTimeout(400);
   return {ctx, page, errors};
 }

@@ -11,6 +11,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { exposerModules } from './outils/exposer-modules.mjs';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -34,6 +35,7 @@ const ok = (cond, msg) => { if(cond){ passes++; } else { failures++; console.log
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({viewport:{width:1280, height:900}, reducedMotion:'reduce'});
+await exposerModules(ctx);
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', e=>errors.push('pageerror: '+e.message));
@@ -58,7 +60,7 @@ const postes = () => page.$$eval('#view .poste .lbl', els=>els.map(e=>e.innerTex
 
 try {
   await page.goto(BASE+'/index.html#dashboard/2026-09');
-    await page.waitForSelector('#view .poste');
+    await page.waitForSelector('#view .poste'); await page.evaluate(()=>window.__modulesExposes);
 
   console.log('— Ouvrir le choix de couleur depuis le point d’un poste');
   const avant = await postes();

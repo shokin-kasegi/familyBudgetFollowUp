@@ -13,6 +13,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { exposerModules } from './outils/exposer-modules.mjs';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -37,6 +38,7 @@ const num = s => Number(String(s).replace(/[\s  €]/g,'').replace('−','-').re
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({viewport:{width:1280, height:900}, reducedMotion:'reduce'});
+await exposerModules(ctx);
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', e=>errors.push('pageerror: '+e.message));
@@ -55,7 +57,7 @@ await page.addInitScript(`${fixture};
 async function ouvrir(jour, hash){
   await page.clock.setFixedTime(new Date(jour+'T10:00:00'));
   await page.goto(BASE + '/index.html' + hash);
-  await page.waitForSelector('#view > *', {timeout:10000});
+  await page.waitForSelector('#view > *', {timeout:10000}); await page.evaluate(()=>window.__modulesExposes);
   await page.waitForTimeout(300);
 }
 async function aller(hash){ await page.evaluate(h=>{ location.hash = h; }, hash); await page.waitForTimeout(350); }

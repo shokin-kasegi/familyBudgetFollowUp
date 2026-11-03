@@ -1,7 +1,7 @@
 /* Tests de l'aiguillage des data-action — Playwright (Chromium), sans dépendance à installer.
    Usage : node tests/aiguillage-actions.mjs
    handleAction passe par des tables { nomAction: fonction } rangées par domaine :
-   - chaque data-action écrite dans index.html est servie par une table (sauf celles
+   - chaque data-action écrite dans les sources (index.html, js/) est servie par une table (sauf celles
      traitées ailleurs, listées ici) et chaque entrée pointe vers une fonction ;
    - aucune action n'est déclarée dans deux domaines (erreur console au chargement) ;
    - une action inconnue, ou un nom hérité d'Object (toString), ne fait rien ;
@@ -12,6 +12,8 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { exposerModules } from './outils/exposer-modules.mjs';
+import { toutesSources } from './outils/sources.mjs';
 
 const { chromium } = createRequire(import.meta.url)('playwright');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -25,7 +27,7 @@ const server = http.createServer((req,res)=>{
 await new Promise(r=>server.listen(0, r));
 const BASE = `http://127.0.0.1:${server.address().port}`;
 const fixture = fs.readFileSync(path.join(ROOT,'tests/fixtures/demo-solde.js'),'utf8');
-const SRC = fs.readFileSync(path.join(ROOT,'index.html'),'utf8');
+const SRC = toutesSources(); // index.html, css/app.css et js/**/*.js
 
 // data-action traitées avant handleAction (écouteur de clic) ou par l'écouteur de saisie.
 const HORS_TABLE = new Set(['close-chat', 'close-notif', 'open-parametres', 'col-filter-search']);
@@ -35,6 +37,7 @@ const ok = (cond, msg) => { if(cond){ passes++; } else { failures++; console.log
 
 async function openApp(browser, {width=1440, height=900, hash}){
   const ctx = await browser.newContext({viewport:{width, height}, reducedMotion:'reduce'});
+  await exposerModules(ctx);
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e=>errors.push('pageerror: '+e.message));
@@ -49,7 +52,7 @@ async function openApp(browser, {width=1440, height=900, hash}){
       sessionStorage.setItem('seeded','1');
     }`);
   await page.goto(BASE + '/index.html' + hash);
-  await page.waitForSelector('#view > *', {timeout:10000}).catch(()=>{});
+  await page.waitForSelector('#view > *', {timeout:10000}).catch(()=>{}); await page.evaluate(()=>window.__modulesExposes);
   await page.waitForTimeout(300);
   return {ctx, page, errors};
 }

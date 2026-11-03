@@ -1,33 +1,12 @@
-/* Filet de sécurité des fonctions utilitaires appelées partout dans index.html :
+/* Filet de sécurité des fonctions utilitaires appelées partout dans l'application :
    échappement HTML (esc, attrEsc), arrondi des montants (r2, sumR2), format
    des euros (fmtEUR) et des mois (moisDe, addMonths, monthKey).
-   Sans dépendance ni navigateur : les définitions sont lues telles quelles dans
-   index.html (pas de copie qui pourrait diverger), puis évaluées dans un bac à
-   sable Node.
+   Sans dépendance ni navigateur : js/utils.js est importé tel quel (pas de copie
+   qui pourrait diverger). Il ne doit donc toucher ni au DOM ni à l'état.
    Usage : node --test tests/*.test.mjs   (environ 0,2 s) */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import vm from 'node:vm';
-import { fileURLToPath } from 'node:url';
-
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SRC = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').split('\n');
-
-// Chaque définition visée tient sur une ligne : on la retrouve par son nom.
-// Si elle disparaît ou change de forme, le test échoue franchement au lieu de
-// tester une copie périmée.
-function definition(nom){
-  const re = new RegExp(`^\\s*(?:function\\s+${nom}\\s*\\(|const\\s+${nom}\\s*=)`);
-  const lignes = SRC.filter(l => re.test(l));
-  assert.equal(lignes.length, 1, `définition de « ${nom} » introuvable ou en double dans index.html`);
-  return lignes[0];
-}
-const NOMS = ['NF_EUR2','sp','r2','sumR2','fmtEUR','monthKey','addMonths','moisDe','attrEsc','ESC_MAP','esc'];
-const ctx = vm.createContext({});
-const F = vm.runInContext(NOMS.map(definition).join('\n') + `\n;({${NOMS.join(',')}})`, ctx);
-const { esc, attrEsc, r2, sumR2, fmtEUR, moisDe, addMonths, monthKey } = F;
+import { esc, attrEsc, r2, sumR2, fmtEUR, moisDe, addMonths, monthKey } from '../js/utils.js';
 
 const NBSP = ' ';
 
